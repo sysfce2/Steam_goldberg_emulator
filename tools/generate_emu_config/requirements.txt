@@ -2,3 +2,7 @@ steam[client]
 pyinstaller
 requests
 certifi
+configobj
+
+
+

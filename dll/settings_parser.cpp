@@ -963,7 +963,7 @@ static std::string get_mod_preview_url(const std::string &previewFileName, const
     } else {
         auto settings_folder = std::string(Local_Storage::get_game_settings_path());
         std::replace(settings_folder.begin(), settings_folder.end(), '\\', '/');
-        return "file://" + settings_folder + "mod_images/" + mod_id + "/" + previewFileName;
+        return "file://" + settings_folder + "mods_img/" + mod_id + "/" + previewFileName;
     }
     
 }
@@ -972,7 +972,7 @@ static void try_parse_mods_file(class Settings *settings_client, Settings *setti
 {
     for (auto mod = mod_items.begin(); mod != mod_items.end(); ++mod) {
         try {
-            std::string mod_images_fullpath = Local_Storage::get_game_settings_path() + "mod_images" + PATH_SEPARATOR + std::string(mod.key());
+            std::string mod_images_fullpath = Local_Storage::get_game_settings_path() + "mods_img" + PATH_SEPARATOR + std::string(mod.key());
             Mod_entry newMod;
             newMod.id = std::stoull(mod.key());
             newMod.title = mod.value().value("title", std::string(mod.key()));
@@ -1063,7 +1063,7 @@ static void try_detect_mods_folder(class Settings *settings_client, Settings *se
 {
     std::vector<std::string> all_mods = Local_Storage::get_folders_path(mods_folder);
     for (auto & mod_folder: all_mods) {
-        std::string mod_images_fullpath = Local_Storage::get_game_settings_path() + "mod_images" + PATH_SEPARATOR + mod_folder;
+        std::string mod_images_fullpath = Local_Storage::get_game_settings_path() + "mods_img" + PATH_SEPARATOR + mod_folder;
         try {
             Mod_entry newMod;
             newMod.id = std::stoull(mod_folder);

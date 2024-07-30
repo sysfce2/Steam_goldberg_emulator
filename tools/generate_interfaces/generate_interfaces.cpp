@@ -9,36 +9,44 @@
 // static char old_xxx[128] = ...
 
 const static std::vector<std::string> interface_patterns = {
+    R"(STEAMAPPLIST_INTERFACE_VERSION\d+)",
+    R"(STEAMAPPS_INTERFACE_VERSION\d+)",
+    R"(STEAMAPPTICKET_INTERFACE_VERSION\d+)",
     R"(SteamClient\d+)",
-    
+    R"(SteamController\d+)",
+    R"(SteamFriends\d+)",
+    R"(SteamGameCoordinator\d+)",
     R"(SteamGameServerStats\d+)",
     R"(SteamGameServer\d+)",
-
+    R"(SteamGameStats\d+)",
+    R"(STEAMHTMLSURFACE_INTERFACE_VERSION_\d+)",
+    R"(STEAMHTTP_INTERFACE_VERSION\d+)",
+    R"(SteamInput\d+)",
+    R"(STEAMINVENTORY_INTERFACE_V\d+)",
+    R"(SteamMasterServerUpdater\d+)",
+    R"(SteamMatchGameSearch\d+)",
     R"(SteamMatchMakingServers\d+)",
     R"(SteamMatchMaking\d+)",
-
-    R"(SteamUser\d+)",
-    R"(SteamFriends\d+)",
-    R"(SteamUtils\d+)",
-    R"(STEAMUSERSTATS_INTERFACE_VERSION\d+)",
-    R"(STEAMAPPS_INTERFACE_VERSION\d+)",
-    R"(SteamNetworking\d+)",
-    R"(STEAMREMOTESTORAGE_INTERFACE_VERSION\d+)",
-    R"(STEAMSCREENSHOTS_INTERFACE_VERSION\d+)",
-    R"(STEAMHTTP_INTERFACE_VERSION\d+)",
-    R"(STEAMUNIFIEDMESSAGES_INTERFACE_VERSION\d+)",
-    
-    R"(STEAMCONTROLLER_INTERFACE_VERSION\d+)",
-    R"(SteamController\d+)",
-    
-    R"(STEAMUGC_INTERFACE_VERSION\d+)",
-    R"(STEAMAPPLIST_INTERFACE_VERSION\d+)",
     R"(STEAMMUSIC_INTERFACE_VERSION\d+)",
     R"(STEAMMUSICREMOTE_INTERFACE_VERSION\d+)",
-    R"(STEAMHTMLSURFACE_INTERFACE_VERSION_\d+)",
-    R"(STEAMINVENTORY_INTERFACE_V\d+)",
-    R"(STEAMVIDEO_INTERFACE_V\d+)",
-    R"(SteamMasterServerUpdater\d+)",
+    R"(SteamNetworkingMessages\d+)",
+    R"(SteamNetworkingSocketsSerialized\d+)",
+    R"(SteamNetworkingSockets\d+)",
+    R"(SteamNetworkingUtils\d+)",
+    R"(SteamNetworking\d+)",
+    R"(STEAMPARENTALSETTINGS_INTERFACE_VERSION\d+)",
+    R"(SteamParties\d+)",
+    R"(STEAMREMOTEPLAY_INTERFACE_VERSION\d+)",
+    R"(STEAMREMOTESTORAGE_INTERFACE_VERSION\d+)",
+    R"(STEAMSCREENSHOTS_INTERFACE_VERSION\d+)",
+    R"(STEAMTIMELINE_INTERFACE_V\d+)",
+    R"(STEAMTV_INTERFACE_V\d+)",
+    R"(STEAMUGC_INTERFACE_VERSION\d+)",
+    R"(STEAMUNIFIEDMESSAGES_INTERFACE_VERSION\d+)",
+    R"(STEAMUSERSTATS_INTERFACE_VERSION\d+)",
+    R"(SteamUser\d+)",
+    R"(SteamUtils\d+)",
+    R"(STEAMVIDEO_INTERFACE_V\d+)"
 };
 
 unsigned int findinterface(
@@ -63,8 +71,10 @@ unsigned int findinterface(
 
 int main (int argc, char *argv[])
 {
+    std::cout << "Generate_Interfaces.exe for Goldberg Steam Emulator " << std::endl << std::endl;
+
     if (argc < 2) {
-        std::cerr << "usage: " << argv[0] << " <path to steam_api .dll or .so>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <path to steam_api .dll or .so>" << std::endl;
         return 1;
     }
 
@@ -84,6 +94,8 @@ int main (int argc, char *argv[])
         return 1;
     }
 
+    std::cout << "Please wait... Generating steam_interfaces.txt" << std::endl << std::endl;
+
     unsigned int total_matches = 0;
     std::ofstream out_file(std::filesystem::u8path("steam_interfaces.txt"));
     if (!out_file.is_open()) {
@@ -93,6 +105,7 @@ int main (int argc, char *argv[])
 
     for (const auto &patt : interface_patterns) {
         total_matches += findinterface(out_file, steam_api_contents, patt);
+        std::cout << "Searching for '" + patt + "'..." << std::endl;
     }
     out_file.close();
 

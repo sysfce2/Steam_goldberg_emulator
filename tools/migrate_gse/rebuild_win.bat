@@ -36,6 +36,9 @@ pyinstaller "main.py" --distpath "%out_dir%" -y --clean --onedir --name "migrate
 )
 call "%signer_tool%" "%out_dir%\migrate_gse\migrate_gse.exe"
 
+xcopy /s /y /e "post_build" "%out_dir%\migrate_gse\"
+xcopy /s /y /e "_DEFAULT" "%out_dir%\migrate_gse\_DEFAULT"
+
 copy /y README.md "%out_dir%\migrate_gse\"
 
 echo:

@@ -45,10 +45,10 @@ int main() {
     
     //Set appid to: LOBBY_CONNECT_APPID
     SteamAPI_RestartAppIfNecessary(LOBBY_CONNECT_APPID);
-    std::cout << "This is a program to find lobbies and run the game with lobby connect parameters" << std::endl;
-    std::cout << "Api initialized, ";
+    std::cout << "Lobby_Connect.exe for Goldberg Steam Emulator " << std::endl << std::endl;
+    std::cout << "Steam Emulator API initialized" << std::endl;
 top:
-    std::cout << "waiting a few seconds for connections:" << std::endl;
+    std::cout << "Waiting a few seconds for connections" << std::endl << std::endl;
     for (int i = 0; i < 10; ++i) {
         SteamAPI_RunCallbacks();
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -65,7 +65,7 @@ top:
         std::cout << name << " is playing: " << friend_info.m_gameID.AppID() << std::endl;
     }
 
-    std::cout << std::endl << "--------------Menu-------------" << std::endl << "\tappid\tname\tcommand line" << std::endl;
+    std::cout << std::endl << "----------------------Menu---------------------" << std::endl << "   \tappid\t\tname\t\tcmdline" << std::endl << std::endl;
 
     std::vector<std::pair<std::string, uint32>> arguments;
     for (int i = 0; i < friend_count; ++i) {
@@ -77,19 +77,19 @@ top:
         auto appid = friend_info.m_gameID.AppID();
 
         if (strlen(connect) > 0) {
-            std::cout << arguments.size() << "\t" << appid << "\t" << name << "\t" << connect << std::endl;
+            std::cout << arguments.size() << ": \t" << appid << "\t\t" << name << "\t\t" << connect << std::endl;
             arguments.emplace_back(connect, appid);
         } else {
             if (friend_info.m_steamIDLobby != k_steamIDNil) {
                 std::string connect = "+connect_lobby " + std::to_string(friend_info.m_steamIDLobby.ConvertToUint64());
-                std::cout << arguments.size() << "\t" << appid << "\t" << name << "\t" << connect << std::endl;
+                std::cout << arguments.size() << ": \t" << appid << "\t\t" << name << "\t\t" << connect << std::endl;
                 arguments.emplace_back(connect, appid);
             }
         }
     }
 
-    std::cout << arguments.size() << ": Retry." << std::endl;
-    std::cout << std::endl << "Enter the number corresponding to your choice then press Enter." << std::endl;
+    std::cout << arguments.size() << ": \tRetry" << std::endl;
+    std::cout << std::endl << "Enter the number corresponding to your choice then press Enter" << std::endl;
     unsigned int choice;
     std::cin >> choice;
 
@@ -98,7 +98,7 @@ top:
     auto connect = arguments[choice].first;
 #ifdef _WIN32
     auto appid = arguments[choice].second;
-    std::cout << "starting the game with: " << connect << std::endl;
+    std::cout << "Starting the game with: " << connect << std::endl;
 
     char szBaseDirectory[MAX_PATH] = "";
     GetModuleFileNameA(0, szBaseDirectory, MAX_PATH);
@@ -150,7 +150,7 @@ top:
 
     std::string filename = readLobbyFile();
     if (filename.empty() || !fileExists(filename) || !joinLobby(filename)) {
-        std::cout << "Please select the game exe" << std::endl;
+        std::cout << "Please browse for game exe" << std::endl;
 
         OPENFILENAMEA ofn;
         char szFileName[MAX_PATH] = "";

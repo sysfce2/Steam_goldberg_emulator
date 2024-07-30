@@ -52,12 +52,15 @@ pyinstaller "stats_schema_achievement_gen\achievements_gen.py" --distpath "%out_
 )
 call "%signer_tool%" "%out_dir%\parse_achievements_schema\parse_achievements_schema.exe"
 
+xcopy /s /y /e "post_build" "%out_dir%\generate_emu_config\"
+xcopy /s /y /e "_DEFAULT" "%out_dir%\generate_emu_config\_DEFAULT\"
+
 copy /y "steam_default_icon_locked.jpg" "%out_dir%\generate_emu_config\"
 copy /y "steam_default_icon_unlocked.jpg" "%out_dir%\generate_emu_config\"
 copy /y "README.md" "%out_dir%\generate_emu_config\"
-1>"%out_dir%\generate_emu_config\my_login.EXAMPLE.txt" echo Check the README
-1>"%out_dir%\generate_emu_config\top_owners_ids.EXAMPLE.txt" echo Check the README
-1>>"%out_dir%\generate_emu_config\top_owners_ids.EXAMPLE.txt" echo You can use a website like: https://steamladder.com/games/
+if exist "top_owners_ids.txt" (
+	copy /y "top_owners_ids.txt" "%out_dir%\generate_emu_config\"
+)
 
 echo:
 echo =============
@@ -69,6 +72,6 @@ if exist "%build_temp_dir%" (
     rmdir /s /q "%build_temp_dir%"
 )
 popd
-endlocal & (
+endlocal & (pause
     exit /b %last_code%
 )

@@ -1,6 +1,4 @@
-
 import re
-
 
 ALLOWED_CHARS = set([
     '`', '~', '!', '@',
@@ -19,4 +17,3 @@ def create_safe_name(app_name : str):
         .replace('\t', ' ')
     safe_name = re.sub('\s\s+', ' ', safe_name)
     return safe_name
-

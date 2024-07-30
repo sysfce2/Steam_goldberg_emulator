@@ -1,9 +1,7 @@
-## :large_orange_diamond: **This is a fork**
+## :large_orange_diamond: **Goldberg Steam Emu**
 Fork of https://gitlab.com/Mr_Goldberg/goldberg_emulator  
 
-Fork originally make by wizark952.
-
-This is a latest version of his work.
+Fork originally make by wizark952. This is a latest version of his work.
 
 ### Feel free to make a PR.
 
@@ -41,10 +39,6 @@ You can find helper guides, scripts, and tools here in this wiki: https://github
 You can also find instructions here in [README.release.md](./post_build/README.release.md)  
 
 ---
----
-
-<br/>
-
 # **Compiling**
 ## One time setup
 ### **Cloning the repo**
@@ -80,7 +74,7 @@ You can also find instructions here in [README.release.md](./post_build/README.r
 * Using `MSYS2` **this is currently experimental and will not work due to ABI differences**: https://www.msys2.org/  
   <details>
     <summary>steps</summary>
-    
+  
     * To build 64-bit binaries use either the [environment](https://www.msys2.org/docs/environments/) `UCRT64` or `MINGW64` then install the GCC toolchain  
       `UCRT64`  
       ```shell
@@ -93,8 +87,8 @@ You can also find instructions here in [README.release.md](./post_build/README.r
     * To build 32-bit binaries use the environment `MINGW32` then install the GCC toolchain  
       ```shell
       pacman -S mingw-w64-i686-gcc
-      ``` 
-    
+      ```
+  
   </details> 
 * Python 3.10 or above: https://www.python.org/downloads/windows/  
    After installation, make sure it works
@@ -154,7 +148,7 @@ Open CMD in the repo folder, then run the following
 * To build using `MSYS2` **this is currently experimental and will not work due to ABI differences**  
   <details>
     <summary>steps</summary>
-    
+  
     *(Optional)* In both cases below, you can use `Clang` compiler instead of `GCC` by running these 2 commands in the same terminal instance
     ```shell
     export CC="clang"
@@ -170,7 +164,7 @@ Open CMD in the repo folder, then run the following
     export CMAKE_GENERATOR="MSYS Makefiles"
     ./third-party/common/win/premake/premake5.exe --file=premake5-deps.lua --32-build --all-ext --all-build --verbose   --os=windows gmake2
     ```
-    
+  
   </details> 
 
 This will:
@@ -201,29 +195,29 @@ Open CMD in the repo folder, then run the following
 * For `Visual Studio 2022`
   ```batch
   third-party\common\win\premake\premake5.exe --file=premake5.lua --genproto --os=windows vs2022
-  ```  
+  ```
   You can then go to the folder `build\project\vs2022\win` and open the produced `.sln` file in Visual Studio.  
   Or, if you prefer to do it from command line, open the `Developer Command Prompt for VS 2022` inside the above folder, then:  
   ```batch
   msbuild /nologo /v:n /p:Configuration=release,Platform=Win32 gbe.sln
-
+  
   msbuild /nologo /v:n /p:Configuration=release,Platform=x64 gbe.sln
   ```
   
 * For `MSYS2` **this is currently experimental and will not work due to ABI differences**  
   <details>
     <summary>steps</summary>
-    
+  
     ```shell
     ./third-party/common/win/premake/premake5.exe --file=premake5.lua --genproto --os=windows gmake2
-
+  
     cd ./build/project/gmake2/win
     ```
     *(Optional)* You can use `Clang` compiler instead of `GCC` by running these 2 commands in the current terminal instance
     ```shell
     export CC="clang"
     export CXX="clang++"
-    ```  
+    ```
     * 64-bit build (`UCRT64` or `MINGW64`)
       ```shell
       make config=release_x64 -j 8 all
@@ -232,11 +226,11 @@ Open CMD in the repo folder, then run the following
       ```shell
       make config=release_x32 -j 8 all
       ```
-    To see all possible build targets
+      To see all possible build targets
     ```shell
     make help
     ```
-    
+  
   </details> 
 
 This will build a release version of the emu in the folder `build\win\<toolchain>\release`  
@@ -249,22 +243,22 @@ Open a terminal in the repo folder, then run the following
 ```shell
 ./third-party/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake2
 cd ./build/project/gmake2/linux
-```  
+```
 *(Optional)* You can use `Clang` compiler instead of `GCC` by running these 2 commands in the current terminal instance
 ```shell
 export CC="clang"
 export CXX="clang++"
-```  
+```
 Then run the following
 ```shell
 make config=release_x32 -j 8 all
 make config=release_x64 -j 8 all
-```  
+```
 
 To see all possible build targets
 ```shell
 make help
-```  
+```
 
 This will build a release version of the emu in the folder `build/linux/<toolchain>/release`  
 An example script `build_linux_premake.sh` is available, check it out  
@@ -292,12 +286,12 @@ Open bash terminal then:
 1. Create python virtual environemnt and install the required packages/dependencies
    ```shell
    sudo ./recreate_venv_linux.sh
-   ```  
+   ```
    You might need to edit this script to use a different python version.  
    Find this line and change it:
    ```shell
    python_package="python3.12"
-   ``` 
+   ```
 2. Build the tool using `pyinstaller`  
    ```shell
    ./rebuild_linux.sh
