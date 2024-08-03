@@ -16,7 +16,7 @@ https://gitlab.com/Mr_Goldberg/goldberg_emulator
 5. Copy the the example files `.\steam_settings.EXAMPLE\configs.xxx.EXAMPLE.ini` and paste them inside your own `steam_settings` folder, then remove `.EXAMPLE`  from their name 
 
 
-Mr.Goldberg's note:
+Mr_Goldberg's note:
 > If the game has DRM (other than Steamworks) you need to remove it first
 
 ---

@@ -6,7 +6,7 @@ This experimental build of the emulator:
 
 * Can load extra dlls in memory via `LoadLibraryW()`
 
-Mr.Goldberg's note:
+Mr_Goldberg's note:
 > In this folder is an experimental build of the emulator with code that hooks a few windows socket functions. It should block all connections from the game to non-LAN IPs. This means the game should work without any problems for LAN play (even with VPN LAN as long as you use standard LAN IPs 10.x.x.x, 192.168.x.x, etc...)  
 
 > It likely doesn't work for some games but it should work for most of them  
@@ -14,7 +14,7 @@ Mr.Goldberg's note:
 > Since this blocks all non LAN connections doing things like hosting a cracked server for people on the internet will not work or connecting to a cracked server that's hosted on an internet IP will not work  
 
 ## Why ?
-Mr.Goldberg's note:
+Mr_Goldberg's note:
 > Lots of games seem to connect to analytics services and other crap  
 > Blocking the game from communicating with online IPs without affecting the LAN functionality of this emu is a pain if you try to use a firewall
 
