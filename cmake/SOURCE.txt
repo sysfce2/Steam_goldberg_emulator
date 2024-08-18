@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://gitlab.kitware.com/cmake/cmake
 
 VERSION: https://github.com/Kitware/CMake/releases/tag/v3.30.2
 
-============================================================================ LICENSE
+#### LICENSE
+
                    GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

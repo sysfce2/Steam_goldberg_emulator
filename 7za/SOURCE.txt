@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://www.7-zip.org/
 
 VERSION: https://sourceforge.net/projects/sevenzip/files/7-Zip/24.08/
 
-============================================================================ LICENSE
+#### LICENSE
+
   7-Zip
   ~~~~~
   License for use and distribution
