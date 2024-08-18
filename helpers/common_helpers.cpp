@@ -133,28 +133,6 @@ void common_helpers::write(std::ofstream &file, std::string_view data)
     file << data << std::endl;
 }
 
-std::wstring common_helpers::str_to_w(std::string_view str)
-{
-    if (str.empty()) return std::wstring();
-    auto cvt_state = std::mbstate_t();
-    const char* src = &str[0];
-    size_t conversion_bytes = std::mbsrtowcs(nullptr, &src, 0, &cvt_state);
-    std::wstring res(conversion_bytes + 1, L'\0');
-    std::mbsrtowcs(&res[0], &src, res.size(), &cvt_state);
-    return res.substr(0, conversion_bytes);
-}
-
-std::string common_helpers::wstr_to_a(std::wstring_view wstr)
-{
-    if (wstr.empty()) return std::string();
-    auto cvt_state = std::mbstate_t();
-    const wchar_t* src = &wstr[0];
-    size_t conversion_bytes = std::wcsrtombs(nullptr, &src, 0, &cvt_state);
-    std::string res(conversion_bytes + 1, '\0');
-    std::wcsrtombs(&res[0], &src, res.size(), &cvt_state);
-    return res.substr(0, conversion_bytes);
-}
-
 bool common_helpers::starts_with_i(std::string_view target, std::string_view query)
 {
     if (target.size() < query.size()) {
@@ -498,4 +476,32 @@ std::string common_helpers::to_str(std::wstring_view wstr)
     } catch(...) { }
 
     return {};
+}
+
+std::string common_helpers::str_replace_all(std::string_view source, std::string_view substr, std::string_view replace)
+{
+    if (source.empty() || substr.empty()) return std::string(source);
+
+    std::string out{};
+    out.reserve(source.size() / 4); // out could be bigger or smaller than source, start small
+
+    size_t start_offset = 0;
+    auto f_idx = source.find(substr);
+    while (std::string::npos != f_idx) {
+        // copy the chars before the match
+        auto chars_count_until_match = f_idx - start_offset;
+        out.append(source, start_offset, chars_count_until_match);
+        // copy the replace str
+        out.append(replace);
+
+        // adjust the start offset to point at the char after this match
+        start_offset = f_idx + substr.size();
+        // search for next match
+        f_idx = source.find(substr, start_offset);
+    }
+
+    // copy last remaining part
+    out.append(source, start_offset, std::string::npos);
+
+    return out;
 }
