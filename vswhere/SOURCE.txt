@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://github.com/microsoft/vswhere
 
 VERSION: https://github.com/microsoft/vswhere/releases/tag/3.1.7
 
-============================================================================ LICENSE
+#### LICENSE
+
 The MIT License (MIT)
 Copyright (C) Microsoft Corporation. All rights reserved.
 
