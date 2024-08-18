@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://github.com/Nemirtingas/ingame_overlay
 
 VERSION: https://github.com/Nemirtingas/ingame_overlay/tree/16260d812154d6f8a4ecdbaf78449c0b7d2fd098
 
-============================================================================ LICENSE
+#### LICENSE
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

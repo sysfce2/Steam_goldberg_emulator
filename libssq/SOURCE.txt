@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://github.com/BinaryAlien/libssq
 
 VERSION: https://github.com/BinaryAlien/libssq/releases/tag/v3.0.0
 
-============================================================================ LICENSE
+#### LICENSE
+
 MIT License
 Copyright (c) 2023 BinaryAlien
 

@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://github.com/Mbed-TLS/mbedtls
 
 VERSION: https://github.com/Mbed-TLS/mbedtls/releases/tag/v3.6.0
 
-============================================================================ LICENSE
+#### LICENSE
+
 Mbed TLS files are provided under a dual [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html)
 OR [GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html) license.
 This means that users may choose which of these licenses they take the code

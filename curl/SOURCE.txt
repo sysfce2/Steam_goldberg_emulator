@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://github.com/curl/curl
 
 VERSION: https://github.com/curl/curl/releases/tag/curl-8_9_1
 
-============================================================================ LICENSE
+#### LICENSE
+
 COPYRIGHT AND PERMISSION NOTICE
 
 Copyright (c) 1996 - 2024, Daniel Stenberg, <daniel@haxx.se>, and many

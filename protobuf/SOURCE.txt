@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://github.com/protocolbuffers/protobuf
 
 VERSION: https://github.com/protocolbuffers/protobuf/releases/tag/v27.3
 
-============================================================================ LICENSE
+#### LICENSE
+
 Copyright 2008 Google Inc.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
