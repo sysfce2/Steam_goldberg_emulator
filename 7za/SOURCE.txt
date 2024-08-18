@@ -1,9 +1,11 @@
-============================================================================ INFO
+#### INFO
+
 https://sourceforge.net/projects/p7zip/
 
 VERSION: https://sourceforge.net/projects/p7zip/files/p7zip/16.02/
 
-============================================================================ LICENSE
+#### LICENSE
+
   7-Zip
   ~~~~~
   License for use and distribution
