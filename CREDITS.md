@@ -1,40 +1,42 @@
 # Many thanks for these sources
-- [third-party\build\win\cert\openssl](#third-party\build\win\cert\openssl)
-- [third-party\build\win\cert\signtool](#third-party\build\win\cert\signtool)
-- [third-party\common\linux\premake](#third-party\common\linux\premake)
-- [third-party\common\win\premake](#third-party\common\win\premake)
-- [third-party\common\win\vswhere](#third-party\common\win\vswhere)
-- [third-party\deps\common\curl](#third-party\deps\common\curl)
-- [third-party\deps\common\ingame_overlay](#third-party\deps\common\ingame_overlay)
-- [third-party\deps\common\libssq](#third-party\deps\common\libssq)
-- [third-party\deps\common\mbedtls](#third-party\deps\common\mbedtls)
-- [third-party\deps\common\protobuf](#third-party\deps\common\protobuf)
-- [third-party\deps\common\zlib](#third-party\deps\common\zlib)
-- [third-party\deps\linux\7za](#third-party\deps\linux\7za)
-- [third-party\deps\linux\cmake](#third-party\deps\linux\cmake)
-- [third-party\deps\win\7za](#third-party\deps\win\7za)
-- [third-party\deps\win\cmake](#third-party\deps\win\cmake)
-- [libs\detours](#libs\detours)
-- [libs\fifo_map](#libs\fifo_map)
-- [libs\gamepad](#libs\gamepad)
-- [libs\imgui](#libs\imgui)
-- [libs\json](#libs\json)
-- [libs\sha](#libs\sha)
-- [libs\simpleini](#libs\simpleini)
-- [libs\stb](#libs\stb)
-- [libs\utfcpp](#libs\utfcpp)
-- [tools\steamclient_loader](#tools\steamclient_loader)
+- [third-party\build\win\cert\openssl](#third-partybuildwincertopenssl)
+- [third-party\build\win\cert\signtool](#third-partybuildwincertsigntool)
+- [third-party\common\linux\premake](#third-partycommonlinuxpremake)
+- [third-party\common\win\premake](#third-partycommonwinpremake)
+- [third-party\common\win\vswhere](#third-partycommonwinvswhere)
+- [third-party\deps\common\curl](#third-partydepscommoncurl)
+- [third-party\deps\common\ingame_overlay](#third-partydepscommoningame_overlay)
+- [third-party\deps\common\libssq](#third-partydepscommonlibssq)
+- [third-party\deps\common\mbedtls](#third-partydepscommonmbedtls)
+- [third-party\deps\common\protobuf](#third-partydepscommonprotobuf)
+- [third-party\deps\common\zlib](#third-partydepscommonzlib)
+- [third-party\deps\linux\7za](#third-partydepslinux7za)
+- [third-party\deps\linux\cmake](#third-partydepslinuxcmake)
+- [third-party\deps\win\7za](#third-partydepswin7za)
+- [third-party\deps\win\cmake](#third-partydepswincmake)
+- [libs\detours](#libsdetours)
+- [libs\fifo_map](#libsfifo_map)
+- [libs\gamepad](#libsgamepad)
+- [libs\imgui](#libsimgui)
+- [libs\json](#libsjson)
+- [libs\sha](#libssha)
+- [libs\simpleini](#libssimpleini)
+- [libs\stb](#libsstb)
+- [libs\utfcpp](#libsutfcpp)
+- [tools\steamclient_loader](#toolssteamclient_loader)
 
 ### third-party\build\win\cert\openssl
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/openssl/openssl
 
 VERSION: https://github.com/openssl/openssl/tree/openssl-3.3.1
 
 Pre-compiled binaries provided by Shining Light Productions (https://slproweb.com/products/Win32OpenSSL.html)
 
-============================================================================ LICENSE
+#### LICENSE
+
                                  Apache License
                            Version 2.0, January 2004
                         https://www.apache.org/licenses/
@@ -214,19 +216,22 @@ Pre-compiled binaries provided by Shining Light Productions (https://slproweb.co
 
 ### third-party\build\win\cert\signtool
 
-============================================================================ INFO
+#### INFO
+
 https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool
 
 VERSION: Windows SDK 10.0.22621.0
 
 ### third-party\common\linux\premake
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/premake/premake-core
 
 VERSION: https://github.com/premake/premake-core/releases/tag/v5.0.0-beta2
 
-============================================================================ LICENSE
+#### LICENSE
+
 Copyright (c) 2003-2022 Jason Perkins and individual contributors.
 All rights reserved.
 
@@ -257,12 +262,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### third-party\common\win\premake
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/premake/premake-core
 
 VERSION: https://github.com/premake/premake-core/releases/tag/v5.0.0-beta2
 
-============================================================================ LICENSE
+#### LICENSE
+
 Copyright (c) 2003-2022 Jason Perkins and individual contributors.
 All rights reserved.
 
@@ -293,12 +300,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### third-party\common\win\vswhere
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/microsoft/vswhere
 
 VERSION: https://github.com/microsoft/vswhere/releases/tag/3.1.7
 
-============================================================================ LICENSE
+#### LICENSE
+
 The MIT License (MIT)
 Copyright (C) Microsoft Corporation. All rights reserved.
 
@@ -310,12 +319,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ### third-party\deps\common\curl
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/curl/curl
 
 VERSION: https://github.com/curl/curl/releases/tag/curl-8_9_1
 
-============================================================================ LICENSE
+#### LICENSE
+
 COPYRIGHT AND PERMISSION NOTICE
 
 Copyright (c) 1996 - 2024, Daniel Stenberg, <daniel@haxx.se>, and many
@@ -341,12 +352,14 @@ in this Software without prior written authorization of the copyright holder.
 
 ### third-party\deps\common\ingame_overlay
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/Nemirtingas/ingame_overlay
 
 VERSION: https://github.com/Nemirtingas/ingame_overlay/tree/16260d812154d6f8a4ecdbaf78449c0b7d2fd098
 
-============================================================================ LICENSE
+#### LICENSE
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -562,12 +575,12 @@ terms of section 4, provided that you also meet all of these conditions:
 
     a) The work must carry prominent notices stating that you modified
     it, and giving a relevant date.
-    
+
     b) The work must carry prominent notices stating that it is
     released under this License and any conditions added under section
     7.  This requirement modifies the requirement in section 4 to
     "keep intact all notices".
-    
+
     c) You must license the entire work, as a whole, under this
     License to anyone who comes into possession of a copy.  This
     License will therefore apply, along with any applicable section 7
@@ -575,7 +588,7 @@ terms of section 4, provided that you also meet all of these conditions:
     regardless of how they are packaged.  This License gives no
     permission to license the work in any other way, but it does not
     invalidate such permission if you have separately received it.
-    
+
     d) If the work has interactive user interfaces, each must display
     Appropriate Legal Notices; however, if the Program has interactive
     interfaces that do not display Appropriate Legal Notices, your
@@ -602,7 +615,7 @@ in one of these ways:
     (including a physical distribution medium), accompanied by the
     Corresponding Source fixed on a durable physical medium
     customarily used for software interchange.
-    
+
     b) Convey the object code in, or embodied in, a physical product
     (including a physical distribution medium), accompanied by a
     written offer, valid for at least three years and valid for as
@@ -614,13 +627,13 @@ in one of these ways:
     more than your reasonable cost of physically performing this
     conveying of source, or (2) access to copy the
     Corresponding Source from a network server at no charge.
-    
+
     c) Convey individual copies of the object code with a copy of the
     written offer to provide the Corresponding Source.  This
     alternative is allowed only occasionally and noncommercially, and
     only if you received the object code with such an offer, in accord
     with subsection 6b.
-    
+
     d) Convey the object code by offering access from a designated
     place (gratis or for a charge), and offer equivalent access to the
     Corresponding Source in the same way through the same place at no
@@ -633,7 +646,7 @@ in one of these ways:
     Corresponding Source.  Regardless of what server hosts the
     Corresponding Source, you remain obligated to ensure that it is
     available for as long as needed to satisfy these requirements.
-    
+
     e) Convey the object code using peer-to-peer transmission, provided
     you inform other peers where the object code and Corresponding
     Source of the work are being offered to the general public at no
@@ -713,21 +726,21 @@ that material) supplement the terms of this License with terms:
 
     a) Disclaiming warranty or limiting liability differently from the
     terms of sections 15 and 16 of this License; or
-    
+
     b) Requiring preservation of specified reasonable legal notices or
     author attributions in that material or in the Appropriate Legal
     Notices displayed by works containing it; or
-    
+
     c) Prohibiting misrepresentation of the origin of that material, or
     requiring that modified versions of such material be marked in
     reasonable ways as different from the original version; or
-    
+
     d) Limiting the use for publicity purposes of names of licensors or
     authors of the material; or
-    
+
     e) Declining to grant rights under trademark law for use of some
     trade names, trademarks, or service marks; or
-    
+
     f) Requiring indemnification of licensors and authors of that
     material by anyone who conveys the material (or modified versions of
     it) with contractual assumptions of liability to the recipient, for
@@ -968,7 +981,7 @@ Program, unless a warranty or assumption of liability accompanies a
 copy of the Program in return for a fee.
 
                      END OF TERMS AND CONDITIONS
-    
+
             How to Apply These Terms to Your New Programs
 
   If you develop a new program, and you want it to be of the greatest
@@ -982,17 +995,17 @@ the "copyright" line and a pointer to where the full notice is found.
 
     <one line to give the program's name and a brief idea of what it does.>
     Copyright (C) <year>  <name of author>
-    
+
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-    
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
@@ -1024,12 +1037,14 @@ Public License instead of this License.  But first, please read
 
 ### third-party\deps\common\libssq
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/BinaryAlien/libssq
 
 VERSION: https://github.com/BinaryAlien/libssq/releases/tag/v3.0.0
 
-============================================================================ LICENSE
+#### LICENSE
+
 MIT License
 Copyright (c) 2023 BinaryAlien
 
@@ -1053,12 +1068,14 @@ SOFTWARE.
 
 ### third-party\deps\common\mbedtls
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/Mbed-TLS/mbedtls
 
 VERSION: https://github.com/Mbed-TLS/mbedtls/releases/tag/v3.6.0
 
-============================================================================ LICENSE
+#### LICENSE
+
 Mbed TLS files are provided under a dual [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html)
 OR [GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html) license.
 This means that users may choose which of these licenses they take the code
@@ -1369,12 +1386,12 @@ above, provided that you also meet all of these conditions:
 
     a) You must cause the modified files to carry prominent notices
     stating that you changed the files and the date of any change.
-    
+
     b) You must cause any work that you distribute or publish, that in
     whole or in part contains or is derived from the Program or any
     part thereof, to be licensed as a whole at no charge to all third
     parties under the terms of this License.
-    
+
     c) If the modified program normally reads commands interactively
     when run, you must cause it, when started running for such
     interactive use in the most ordinary way, to print or display an
@@ -1413,14 +1430,14 @@ Sections 1 and 2 above provided that you also do one of the following:
     a) Accompany it with the complete corresponding machine-readable
     source code, which must be distributed under the terms of Sections
     1 and 2 above on a medium customarily used for software interchange; or,
-    
+
     b) Accompany it with a written offer, valid for at least three
     years, to give any third party, for a charge no more than your
     cost of physically performing source distribution, a complete
     machine-readable copy of the corresponding source code, to be
     distributed under the terms of Sections 1 and 2 above on a medium
     customarily used for software interchange; or,
-    
+
     c) Accompany it with the information you received as to the offer
     to distribute corresponding source code.  (This alternative is
     allowed only for noncommercial distribution and only if you
@@ -1543,17 +1560,17 @@ PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,
 REPAIR OR CORRECTION.
 
   12. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
-      WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
-      REDISTRIBUTE THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES,
-      INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING
-      OUT OF THE USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED
-      TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY
-      YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER
-      PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
-      POSSIBILITY OF SUCH DAMAGES.
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
+REDISTRIBUTE THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES,
+INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING
+OUT OF THE USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED
+TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY
+YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER
+PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
 
                      END OF TERMS AND CONDITIONS
-          
+
             How to Apply These Terms to Your New Programs
 
   If you develop a new program, and you want it to be of the greatest
@@ -1567,17 +1584,17 @@ the "copyright" line and a pointer to where the full notice is found.
 
     <one line to give the program's name and a brief idea of what it does.>
     Copyright (C) <year>  <name of author>
-    
+
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
-    
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-    
+
     You should have received a copy of the GNU General Public License along
     with this program; if not, write to the Free Software Foundation, Inc.,
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -1615,12 +1632,14 @@ Public License instead of this License.
 
 ### third-party\deps\common\protobuf
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/protocolbuffers/protobuf
 
 VERSION: https://github.com/protocolbuffers/protobuf/releases/tag/v27.3
 
-============================================================================ LICENSE
+#### LICENSE
+
 Copyright 2008 Google Inc.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -1656,12 +1675,14 @@ support library is itself covered by the above license.
 
 ### third-party\deps\common\zlib
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/madler/zlib
 
 VERSION: https://github.com/madler/zlib/releases/tag/v1.3.1
 
-============================================================================ LICENSE
+#### LICENSE
+
 MIT License
 Copyright (c) 2023 BinaryAlien
 
@@ -1685,12 +1706,14 @@ SOFTWARE.
 
 ### third-party\deps\linux\7za
 
-============================================================================ INFO
+#### INFO
+
 https://sourceforge.net/projects/p7zip/
 
 VERSION: https://sourceforge.net/projects/p7zip/files/p7zip/16.02/
 
-============================================================================ LICENSE
+#### LICENSE
+
   7-Zip
   ~~~~~
   License for use and distribution
@@ -1784,12 +1807,14 @@ VERSION: https://sourceforge.net/projects/p7zip/files/p7zip/16.02/
 
 ### third-party\deps\linux\cmake
 
-============================================================================ INFO
+#### INFO
+
 https://gitlab.kitware.com/cmake/cmake
 
 VERSION: https://github.com/Kitware/CMake/releases/tag/v3.30.2
 
-============================================================================ LICENSE
+#### LICENSE
+
                    GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -1958,12 +1983,14 @@ Library.
 
 ### third-party\deps\win\7za
 
-============================================================================ INFO
+#### INFO
+
 https://www.7-zip.org/
 
 VERSION: https://sourceforge.net/projects/sevenzip/files/7-Zip/24.08/
 
-============================================================================ LICENSE
+#### LICENSE
+
   7-Zip
   ~~~~~
   License for use and distribution
@@ -2057,12 +2084,14 @@ VERSION: https://sourceforge.net/projects/sevenzip/files/7-Zip/24.08/
 
 ### third-party\deps\win\cmake
 
-============================================================================ INFO
+#### INFO
+
 https://gitlab.kitware.com/cmake/cmake
 
 VERSION: https://github.com/Kitware/CMake/releases/tag/v3.30.2
 
-============================================================================ LICENSE
+#### LICENSE
+
                    GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -2231,12 +2260,14 @@ Library.
 
 ### libs\detours
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/microsoft/Detours
 
 VERSION: https://github.com/microsoft/Detours/tree/4b8c659f549b0ab21cf649377c7a84eb708f5e68
 
-============================================================================ LICENSE
+#### LICENSE
+
 Copyright (c) Microsoft Corporation.
 
 MIT License
@@ -2261,12 +2292,14 @@ SOFTWARE.
 
 ### libs\fifo_map
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/nlohmann/fifo_map
 
 VERSION: https://github.com/nlohmann/fifo_map/tree/d732aaf9a315415ae8fd7eb11e3a4c1f80e42a48
 
-============================================================================ LICENSE
+#### LICENSE
+
 MIT License
 
 Copyright (c) 2015-2017 Niels Lohmann
@@ -2291,12 +2324,14 @@ SOFTWARE.
 
 ### libs\gamepad
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/mtwilliams/libgamepad
 
 VERSION: ????
 
-============================================================================ LICENSE
+#### LICENSE
+
 Copyright (c) 2014 Michael Williams
 Copyright (c) 2010-2011 Sean Middleditch
 
@@ -2320,12 +2355,14 @@ THE SOFTWARE.
 
 ### libs\imgui
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/ocornut/imgui
 
 VERSION: ????
 
-============================================================================ LICENSE
+#### LICENSE
+
 The MIT License (MIT)
 
 Copyright (c) 2014-2024 Omar Cornut
@@ -2350,12 +2387,14 @@ SOFTWARE.
 
 ### libs\json
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/nlohmann/json
 
 VERSION: https://github.com/nlohmann/json/releases/tag/v3.11.3
 
-============================================================================ LICENSE
+#### LICENSE
+
 MIT License
 
 Copyright (c) 2013-2022 Niels Lohmann
@@ -2380,22 +2419,24 @@ SOFTWARE.
 
 ### libs\sha
 
-============================================================================ INFO
+#### INFO
 https://github.com/vog/sha1
 
 VERSION: https://github.com/vog/sha1/tree/3f8a4aa032d144309d00dbfe972906a49b3631b9
 
-============================================================================ LICENSE
+#### LICENSE
 PUBLIC DOMAIN
 
 ### libs\simpleini
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/brofield/simpleini
 
 VERSION: https://github.com/brofield/simpleini/releases/tag/v4.22
 
-============================================================================ LICENSE
+#### LICENSE
+
 The MIT License (MIT)
 
 Copyright (c) 2006-2022 Brodie Thiesfield
@@ -2419,12 +2460,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ### libs\stb
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/nothings/stb
 
 VERSION: https://github.com/nothings/stb/tree/f75e8d1cad7d90d72ef7a4661f1b994ef78b4e31
 
-============================================================================ LICENSE
+#### LICENSE
+
 This software is available under 2 licenses -- choose whichever you prefer.
 ------------------------------------------------------------------------------
 ALTERNATIVE A - MIT License
@@ -2465,12 +2508,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ### libs\utfcpp
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/nemtrif/utfcpp
 
 VERSION: https://github.com/nemtrif/utfcpp/releases/tag/v4.0.5
 
-============================================================================ LICENSE
+#### LICENSE
+
 Boost Software License - Version 1.0 - August 17th, 2003
 
 Permission is hereby granted, free of charge, to any person or organization
@@ -2497,7 +2542,8 @@ DEALINGS IN THE SOFTWARE.
 
 ### tools\steamclient_loader
 
-============================================================================ INFO
+#### INFO
+
 https://github.com/Rat431/ColdAPI_Steam
 
 Original version of ColdClientLoader by Rat431.
