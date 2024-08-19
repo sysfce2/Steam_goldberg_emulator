@@ -1,53 +1,46 @@
 @echo off
+setlocal EnableDelayedExpansion
+cd /d "%~dp0"
 
-setlocal
+set "ROOT=%cd%"
+set "OPENSSL_EXE=%ROOT%\openssl\openssl.exe"
+set "SIGNTOOL_EXE=%ROOT%\signtool\signtool.exe"
 
-set /a exit=0
-
-set "file=%~1"
-if not defined file (
-  set /a exit=1
-  goto :end_script
+set "FILE=%~1"
+if not defined FILE (
+  goto :end_script_with_err
 )
 
-pushd "%~dp0"
-set "OPENSSL_CONF=%cd%\openssl.cnf"
-
-set "filename=%random%"
-for %%A in ("%file%") do (
-  set "filename=%random%-%%~nxA"
+set "FILENAME=%random%"
+for %%A in ("%FILE%") do (
+  set "FILENAME=%random%-%%~nxA"
 )
 
 :re_pvt
 call :gen_rnd rr
-set "pvt_file=%cd%\prvt-%rr%-%filename%.pem"
+set "PVT_FILE=%ROOT%\prvt-%rr%-%FILENAME%.pem"
 :: parallel build can generate same rand number
-if exist "%pvt_file%" (
+if exist "%PVT_FILE%" (
   goto :re_pvt
 )
 
 :re_cer
 call :gen_rnd rr
-set "cer_file=%cd%\cert-%rr%-%filename%.pem"
+set "CER_FILE=%ROOT%\cert-%rr%-%FILENAME%.pem"
 :: parallel build can generate same rand number
-if exist "%cer_file%" (
+if exist "%CER_FILE%" (
   goto :re_cer
 )
 
 :re_pfx
 call :gen_rnd rr
-set "pfx_file=%cd%\cfx-%rr%-%filename%.pfx"
+set "PFX_FILE=%ROOT%\cfx-%rr%-%FILENAME%.pfx"
 :: parallel build can generate same rand number
-if exist "%pfx_file%" (
+if exist "%PFX_FILE%" (
   goto :re_pfx
 )
 
-set "openssl_exe=%cd%\openssl.exe"
-set "signtool_exe=%cd%\signtool.exe"
-
-popd
-
-call "%openssl_exe%" req -newkey rsa:2048 -nodes -keyout "%pvt_file%" -x509 -days 5525 -out "%cer_file%" ^
+call "%OPENSSL_EXE%" req -newkey rsa:2048 -nodes -keyout "%PVT_FILE%" -x509 -days 5525 -out "%CER_FILE%" ^
   -subj "/O=GSE/CN=GSE" ^
   -addext "extendedKeyUsage=codeSigning" ^
   -addext "basicConstraints=critical,CA:true" ^
@@ -59,44 +52,46 @@ call "%openssl_exe%" req -newkey rsa:2048 -nodes -keyout "%pvt_file%" -x509 -day
   -addext "issuerAltName=issuer:copy" ^
   -addext "nsComment=GSE" ^
   -extensions v3_req
-set /a exit+=%errorlevel%
-if %exit% neq 0 (
-  goto :end_script
+if %errorlevel% neq 0 (
+  goto :end_script_with_err
 )
 
-call "%openssl_exe%" pkcs12 -export -out "%pfx_file%" -inkey "%pvt_file%" -in "%cer_file%" -passout pass:
-set /a exit+=%errorlevel%
+call "%OPENSSL_EXE%" pkcs12 -export -out "%PFX_FILE%" -inkey "%PVT_FILE%" -in "%CER_FILE%" -passout pass:
 
-del /f /q "%cer_file%"
-del /f /q "%pvt_file%"
+del /f /q "%CER_FILE%"
+del /f /q "%PVT_FILE%"
 
-if %exit% neq 0 (
-  goto :end_script
+if %errorlevel% neq 0 (
+  goto :end_script_with_err
 )
 
-call "%signtool_exe%" sign /d "GSE" /fd sha256 /f "%pfx_file%" /p "" "%~1"
-set /a exit+=%errorlevel%
-if %exit% neq 0 (
-  goto :end_script
+call "%SIGNTOOL_EXE%" sign /d "GSE" /fd sha256 /f "%PFX_FILE%" /p "" "%FILE%"
+
+del /f /q "%PFX_FILE%"
+
+if %errorlevel% neq 0 (
+  goto :end_script_with_err
 )
 
-del /f /q "%pfx_file%"
-
+:: exit without error
 :end_script
-endlocal
-exit /b %exit%
+  endlocal
+  exit /b 0
 
+:: exit with error
+:end_script_with_err
+  endlocal
+  exit /b 1
 
 :: when every project is built in parallel '/MP' with Visual Studio,
 :: the regular random variable might be the same, causing racing
 :: this will waste some time and hopefully generate a different number
 :: 1: (ref) out random number
 :gen_rnd
-  setlocal enabledelayedexpansion 
+  setlocal EnableDelayedExpansion
   for /l %%A in (1, 1, 10) do (
     set "_r=!random!"
   )
-endlocal & (
+  endlocal
   set "%~1=%random%"
   exit /b
-)
