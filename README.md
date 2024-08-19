@@ -1,7 +1,7 @@
 ## :large_orange_diamond: **Goldberg Steam Emu**
-Fork of https://gitlab.com/Mr_Goldberg/goldberg_emulator  
+Fork of https://gitlab.com/Mr_Goldberg/goldberg_emulator with a lot of fixes, improvements, additional features and a completely reworked file structure.
 
-Fork originally make by wizark952. This is a latest version of his work.
+Fork originally made by wizark952. This is latest version of it.
 
 ### Feel free to make a PR.
 
@@ -10,7 +10,6 @@ Fork originally make by wizark952. This is a latest version of his work.
 :red_circle:  
 
 **This fork is not a takeover, not a resurrection of the original project, and not a replacement.**  
-**This is just a fork, don't take it seriously.**  
 **You are highly encouraged to fork/clone it and do whatever you want with it.**  
 
 :red_circle:
@@ -35,14 +34,13 @@ This project depends on many third-party libraries and tools, credits to them fo
 * **Generate the proper app configuration using the `generate_emu_config` tool.**  
 * **If things don't work, try the `ColdClientLoader` setup.**  
 
-You can find helper guides, scripts, and tools here:
+You can find some guides, helper tools and scripts here:
 
-**(These guides, scripts, and tools are maintained by their authors.)**
+**These guides, tools and scripts are maintained by their authors. 
+Before using them, it's always a good idea to first make sure they are updated and designed to support all features of this fork of the emulator.**
 
-* **[GBE-Autoconfigurator](https://github.com/daci12345/GBE-Autoconfigurator)**
-* **[Semuexec](https://gitlab.com/detiam/Semuexec)**
-* **[Steam Emu Utility](https://github.com/turusudiro/SteamEmuUtility)**
 * **[How to use Goldberg Emulator](https://rentry.co/goldberg_emulator)**
+* **[Steam Emu Utility](https://github.com/turusudiro/SteamEmuUtility)**
 * **[GSE-Generator](https://github.com/brunolee-GIT/GSE-Generator)**
 
 You can also find instructions here in [README.release.md](./post_build/README.release.md)  
