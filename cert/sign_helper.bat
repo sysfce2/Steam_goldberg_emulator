@@ -6,19 +6,21 @@ set "ROOT=%cd%"
 set "OPENSSL_EXE=%ROOT%\openssl\openssl.exe"
 set "SIGNTOOL_EXE=%ROOT%\signtool\signtool.exe"
 
-set "FILE=%~1"
-if not defined FILE (
+set "OPENSSL_CONF=%ROOT%\openssl.cnf"
+
+set "FILE_PATH=%~1"
+if not defined FILE_PATH (
   goto :end_script_with_err
 )
 
-set "FILENAME=%random%"
-for %%A in ("%FILE%") do (
-  set "FILENAME=%random%-%%~nxA"
+set "FILE_NAME=%RANDOM%"
+for %%A in ("%FILE_PATH%") do (
+  set "FILE_NAME=%RANDOM%-%%~nxA"
 )
 
 :re_pvt
 call :gen_rnd rr
-set "PVT_FILE=%ROOT%\prvt-%rr%-%FILENAME%.pem"
+set "PVT_FILE=%ROOT%\pvt-%rr%-%FILE_NAME%.pem"
 :: parallel build can generate same rand number
 if exist "%PVT_FILE%" (
   goto :re_pvt
@@ -26,7 +28,7 @@ if exist "%PVT_FILE%" (
 
 :re_cer
 call :gen_rnd rr
-set "CER_FILE=%ROOT%\cert-%rr%-%FILENAME%.pem"
+set "CER_FILE=%ROOT%\cert-%rr%-%FILE_NAME%.pem"
 :: parallel build can generate same rand number
 if exist "%CER_FILE%" (
   goto :re_cer
@@ -34,29 +36,28 @@ if exist "%CER_FILE%" (
 
 :re_pfx
 call :gen_rnd rr
-set "PFX_FILE=%ROOT%\cfx-%rr%-%FILENAME%.pfx"
+set "PFX_FILE=%ROOT%\cfx-%rr%-%FILE_NAME%.pfx"
 :: parallel build can generate same rand number
 if exist "%PFX_FILE%" (
   goto :re_pfx
 )
 
-call "%OPENSSL_EXE%" req -newkey rsa:2048 -nodes -keyout "%PVT_FILE%" -x509 -days 5525 -out "%CER_FILE%" ^
-  -subj "/O=GSE/CN=GSE" ^
-  -addext "extendedKeyUsage=codeSigning" ^
+call "%OPENSSL_EXE%" req -x509 -noenc -days 5525 -newkey rsa:4096 -keyout "%PVT_FILE%" -out "%CER_FILE%" ^
+  -subj "/CN=GSE/OU=GSE/O=GSE/C=UK" ^
   -addext "basicConstraints=critical,CA:true" ^
-  -addext "subjectAltName=email:GSE,DNS:GSE,DNS:GSE" ^
-  -addext "keyUsage=digitalSignature,keyEncipherment" ^
-  -addext "authorityKeyIdentifier=keyid,issuer:always" ^
-  -addext "crlDistributionPoints=URI:GSE" ^
+  -addext "keyUsage=digitalSignature" ^
   -addext "subjectKeyIdentifier=hash" ^
+  -addext "authorityKeyIdentifier=keyid:always,issuer:always" ^
+  -addext "subjectAltName=email:GSE,URI:GSE" ^
   -addext "issuerAltName=issuer:copy" ^
-  -addext "nsComment=GSE" ^
+  -addext "extendedKeyUsage=codeSigning" ^
+  -addext "crlDistributionPoints=URI:GSE" ^
   -extensions v3_req
 if %errorlevel% neq 0 (
   goto :end_script_with_err
 )
 
-call "%OPENSSL_EXE%" pkcs12 -export -out "%PFX_FILE%" -inkey "%PVT_FILE%" -in "%CER_FILE%" -passout pass:
+call "%OPENSSL_EXE%" pkcs12 -export -passout pass: -inkey "%PVT_FILE%" -in "%CER_FILE%" -out "%PFX_FILE%"
 
 del /f /q "%CER_FILE%"
 del /f /q "%PVT_FILE%"
@@ -65,7 +66,7 @@ if %errorlevel% neq 0 (
   goto :end_script_with_err
 )
 
-call "%SIGNTOOL_EXE%" sign /d "GSE" /fd sha256 /f "%PFX_FILE%" /p "" "%FILE%"
+call "%SIGNTOOL_EXE%" sign /d "GSE" /fd sha256 /f "%PFX_FILE%" /p "" "%FILE_PATH%"
 
 del /f /q "%PFX_FILE%"
 
@@ -90,8 +91,8 @@ if %errorlevel% neq 0 (
 :gen_rnd
   setlocal EnableDelayedExpansion
   for /l %%A in (1, 1, 10) do (
-    set "_r=!random!"
+    set "_r=!RANDOM!"
   )
   endlocal
-  set "%~1=%random%"
+  set "%~1=%RANDOM%"
   exit /b
