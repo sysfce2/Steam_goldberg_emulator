@@ -17,14 +17,17 @@
 
 #include "dll/local_storage.h"
 
+#if defined(__WINDOWS__)
+// NOTE: stb_image_write
+#define STBIW_WINDOWS_UTF8
+// NOTE: stb_image
+#define STBI_WINDOWS_UTF8
+#endif
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
-#if defined(__WINDOWS__)
-#define STBI_WINDOWS_UTF8
-#define STBIW_WINDOWS_UTF8
-#endif
 #include "stb/stb_image.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -32,6 +35,7 @@
 #include "stb/stb_image_write.h"
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_STATIC
 #include "stb/stb_image_resize2.h"
 
 struct File_Data {
@@ -813,7 +817,8 @@ bool Local_Storage::load_json(const std::string &full_path, nlohmann::json& json
             PRINT_DEBUG("Loaded json '%s' (%zu items)", full_path.c_str(), json.size());
             return true;
         } catch (const std::exception& e) {
-            PRINT_DEBUG("Error while parsing '%s' json error: %s", full_path.c_str(), e.what());
+            const char *errorMessage = e.what();
+            PRINT_DEBUG("Error while parsing '%s' json error: %s", full_path.c_str(), errorMessage);
         }
     } else {
         PRINT_DEBUG("Couldn't open file '%s' to read json", full_path.c_str());
