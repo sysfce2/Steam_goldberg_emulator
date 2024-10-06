@@ -7,12 +7,12 @@
 // these are defined in dll.cpp at the top like this:
 // static char old_xxx[128] = ...
 const static std::vector<std::string> interface_patterns = {
-    R"(STEAMAPPLIST_INTERFACE_VERSION\d+)",
     R"(STEAMAPPS_INTERFACE_VERSION\d+)",
+    R"(STEAMAPPLIST_INTERFACE_VERSION\d+)",
     R"(STEAMAPPTICKET_INTERFACE_VERSION\d+)",
     R"(SteamClient\d+)",
+    R"(STEAMCONTROLLER_INTERFACE_VERSION)",
     R"(SteamController\d+)",
-    R"(STEAMUNIFIEDMESSAGES_INTERFACE_VERSION\d+)",
     R"(SteamFriends\d+)",
     R"(SteamGameCoordinator\d+)",
     R"(SteamGameServerStats\d+)",
@@ -71,7 +71,7 @@ unsigned int findinterface(
 
 int main(int argc, char *argv[])
 {
-    std::cout << "Generate_Interfaces.exe for Goldberg Steam Emulator " << std::endl << std::endl;
+    std::cout << "----Generate Interfaces----" << std::endl << std::endl;
 
     if (argc < 2) 
     {
@@ -93,17 +93,15 @@ int main(int argc, char *argv[])
 
     if (steam_api_contents.empty())
     {
-        std::cerr << "Error loading data" << std::endl;
+        std::cerr << "Error loading data from file: " << argv[1] << std::endl;
         return 1;
     }
-
-    std::cout << "Please wait... Generating steam_interfaces.txt" << std::endl << std::endl;
 
     std::ofstream out_file("steam_interfaces.txt");
     if (!out_file)
     {
 
-        std::cerr << "Error opening output file" << std::endl;
+        std::cerr << "Error opening output file: steam_interfaces.txt" << std::endl;
         return 1;
     }
 
