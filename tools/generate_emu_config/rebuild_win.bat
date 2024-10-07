@@ -49,6 +49,9 @@ pyinstaller "stats_schema_achievement_gen\achievements_gen.py" --distpath "%OUT_
 )
 call "%SIGNER_TOOL%" "%OUT_DIR%\parse_achievements_schema\parse_achievements_schema.exe"
 
+call ".\bat\_pack_api.bat"
+call ".\bat\_pack_exe.bat"
+
 xcopy /s /y /e "post_build" "%out_dir%\generate_emu_config\"
 xcopy /s /y /e "_DEFAULT" "%out_dir%\generate_emu_config\_DEFAULT\"
 
