@@ -1,4 +1,7 @@
 import os
+from steam_id_converter.SteamID import (
+    SteamID
+)
 
 __codex_ini = '''
 ###        ÜÛÛÛÛÛ   Ü
@@ -162,10 +165,12 @@ def generate_cdx_ini(
         achs_list.append(f'{ach["name"]} Achieved={icon}') # unlocked
         achs_list.append(f'{ach["name"]} Unachieved={icon_gray}') # locked
 
+    steam_id = SteamID(accountid)
+
     formatted_ini = __codex_ini.format(
         cdx_id = appid,
         cdx_username = username,
-        cdx_accountid = accountid,
+        cdx_accountid = steam_id.get_steam32_id(),
         cdx_language = language,
         cdx_dlc_list = "\n".join(dlc_list),
         cdx_ach_list = "\n".join(achs_list)
