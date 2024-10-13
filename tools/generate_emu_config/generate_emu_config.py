@@ -2,10 +2,11 @@ import pathlib
 import time
 from stats_schema_achievement_gen import achievements_gen
 from external_components import (
-    ach_watcher_gen, cdx_gen, app_images, app_details, safe_name, scx_gen, top_own
+    ach_watcher_gen, cdx_gen, rne_gen, app_images, app_details, safe_name, scx_gen, pcgw_page, top_own
 )
 from controller_config_generator import parse_controller_vdf
 from steam.client import SteamClient
+from steam.webauth import WebAuth
 from steam.enums.common import EResult
 from steam.enums.emsg import EMsg
 from steam.core.msg import MsgProto
@@ -580,7 +581,7 @@ def help():
     exe_name = os.path.basename(sys.argv[0])
     print(f"\nUsage: {exe_name} [Switches] appid appid appid ... ")
     print(f" Example: {exe_name} 421050 420 480")
-    print(f" Example: {exe_name} -img -scr -vids_max -scx -cdx -acw -clr 421050 480")
+    print(f" Example: {exe_name} -img -scr -vids_max -scx -cdx -rne -acw -clr 421050 480")
     print("\nSwitches:")
     print(" -img:      download art images for each app: Steam generated background, icon, logo, etc...")
     print(" -scr:      download screenshots for each app if they're available")
@@ -588,6 +589,7 @@ def help():
     print(" -vids_max: download max quality videos for each app if they're available")
     print(" -scx:      download market images for each app: Steam trading cards, badges, backgrounds, etc...")
     print(" -cdx:      generate .ini file for CODEX Steam emu for each app")
+    print(" -rne:      generate .ini file for RUNE Steam emu for each app")
     print(" -acw:      generate schemas of all possible languages for Achievement Watcher")
     print(" -skip_ach: skip downloading & generating achievements and their images")
     print(" -skip_con: skip downloading & generating controller configuration files")
@@ -611,7 +613,6 @@ def main():
     PASSWORD = ""
 
     DOWNLOAD_SCREENSHOTS = False
-    DOWNLOAD_THUMBNAILS = True
     DOWNLOAD_VIDEOS = False
     DOWNLOAD_LOW = False
     DOWNLOAD_MAX = False
@@ -619,6 +620,7 @@ def main():
     DOWNLOAD_SCX = False
     SAVE_APP_NAME = False
     GENERATE_CODEX_INI = False
+    GENERATE_RUNE_INI = False
     GENERATE_ACHIEVEMENT_WATCHER_SCHEMAS = False
     CLEANUP_BEFORE_GENERATING = False
     ANON_LOGIN = False
@@ -628,8 +630,7 @@ def main():
     SKIP_INVENTORY = False
     DEFAULT_PRESET = True
     DEFAULT_PRESET_NO = 1
-    
-    prompt_for_unavailable = True
+
 
     if len(sys.argv) < 2:
         help()
@@ -655,6 +656,8 @@ def main():
             DOWNLOAD_SCX = True
         elif f'{appid}'.lower() == '-cdx':
             GENERATE_CODEX_INI = True
+        elif f'{appid}'.lower() == '-rne':
+            GENERATE_RUNE_INI = True
         elif f'{appid}'.lower() == '-acw':
             GENERATE_ACHIEVEMENT_WATCHER_SCHEMAS = True
         elif f'{appid}'.lower() == '-clr':
@@ -695,10 +698,10 @@ def main():
         sys.exit(1)
 
     client = SteamClient()
-    login_tmp_folder = os.path.join(get_exe_dir(RELATIVE_DIR), "login_temp")
-    if not os.path.exists(login_tmp_folder):
-        os.makedirs(login_tmp_folder)
-    client.set_credential_location(login_tmp_folder)
+    # login_tmp_folder = os.path.join(get_exe_dir(RELATIVE_DIR), "login_temp")
+    # if not os.path.exists(login_tmp_folder):
+    #     os.makedirs(login_tmp_folder)
+    # client.set_credential_location(login_tmp_folder)
 
     # first read the 'my_login.txt' file
     my_login_file = os.path.join(get_exe_dir(RELATIVE_DIR), "my_login.txt")
@@ -727,44 +730,14 @@ def main():
             time.sleep(1000)
             result = client.anonymous_login()
             trials -= 1
-    elif (len(USERNAME) == 0 or len(PASSWORD) == 0):
-        client.cli_login()
     else:
-        result = client.login(USERNAME, password=PASSWORD)
-        auth_code, two_factor_code = None, None
-        while result in (
-            EResult.AccountLogonDenied, EResult.InvalidLoginAuthCode,
-            EResult.AccountLoginDeniedNeedTwoFactor, EResult.TwoFactorCodeMismatch,
-            EResult.TryAnotherCM, EResult.ServiceUnavailable,
-            EResult.InvalidPassword,
-            ):
-
-            if result == EResult.InvalidPassword:
-                print("__ Invalid password. The password you set is wrong.")
-                exit(1)
-
-            elif result in (EResult.AccountLogonDenied, EResult.InvalidLoginAuthCode):
-                prompt = ("__ Enter email code: " if result == EResult.AccountLogonDenied else
-                            "__ Incorrect code. Enter email code: ")
-                auth_code, two_factor_code = input(prompt), None
-
-            elif result in (EResult.AccountLoginDeniedNeedTwoFactor, EResult.TwoFactorCodeMismatch):
-                prompt = ("__ Enter 2FA code: " if result == EResult.AccountLoginDeniedNeedTwoFactor else
-                            "__ Incorrect code. Enter 2FA code: ")
-                auth_code, two_factor_code = None, input(prompt)
-
-            elif result in (EResult.TryAnotherCM, EResult.ServiceUnavailable):
-                if prompt_for_unavailable and result == EResult.ServiceUnavailable:
-                    while True:
-                        answer = input("__ Steam is down. Keep retrying? [y/n]: ").lower()
-                        if answer in 'yn': break
-
-                    prompt_for_unavailable = False
-                    if answer == 'n': break
-
-                client.reconnect(maxdelay=15)
-
-            result = client.login(USERNAME, PASSWORD, None, auth_code, two_factor_code)
+        webauth = WebAuth(USERNAME, PASSWORD)
+        if (len(USERNAME) > 0 and len(PASSWORD) > 0):
+            webauth.cli_login(USERNAME, PASSWORD)
+        else:
+            webauth_prompt_username = input("Enter Steam username: ")
+            webauth.cli_login(webauth_prompt_username)
+        client.login(webauth.username, access_token=webauth.refresh_token)
 
     # generate 'top_owners_ids.txt' if 'top_owners_ids.html' exists
     top_own.top_owners()
@@ -1345,6 +1318,16 @@ def main():
                 dlc_config_list,
                 achievements)
             
+        if GENERATE_RUNE_INI:
+            rne_gen.generate_rne_ini(
+                base_out_dir,
+                appid,
+                cfg_user_account_steamid,
+                cfg_user_account_name,
+                cfg_user_language,
+                dlc_config_list,
+                achievements)
+            
         if DOWNLOAD_SCX: 
             scx_gen.download_scx(base_out_dir, appid)
         
@@ -1352,15 +1335,38 @@ def main():
         print(f"*** FINISHED config for app id {appid} ***")
         print(" ")
 
+def _tracebackPrint(_errorValue):
+    print("Unexpected error:")
+    print(_errorValue)
+    print("-----------------------")
+    for line in traceback.format_exception(_errorValue):
+        print(line)
+    print("-----------------------")
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print("Unexpected error:")
-        print(e)
-        print("-----------------------")
-        for line in traceback.format_exception(e):
-            print(line)
-        print("-----------------------")
-        sys.exit(1)
+        if 'client_id' in e.args:
+            print("Wrong Steam username and / or password. Please try again!")
+            try:
+                main()
+            except Exception as e:
+                if 'client_id' in e.args:
+                    print("Wrong Steam username and / or password. Please try again!")
+                    try:
+                        main()
+                    except Exception as e:
+                        if 'client_id' in e.args:
+                            print("Wrong Steam username and / or password. Please try again!")
+                            sys.exit(1)
+                        else:
+                            _tracebackPrint(e)
+                            sys.exit(1)
+                else:
+                    _tracebackPrint(e)
+                    sys.exit(1)
+        else:
+            _tracebackPrint(e)
+            sys.exit(1)
 

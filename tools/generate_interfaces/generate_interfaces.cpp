@@ -7,8 +7,9 @@
 // these are defined in dll.cpp at the top like this:
 // static char old_xxx[128] = ...
 const static std::vector<std::string> interface_patterns = {
-    R"(STEAMAPPS_INTERFACE_VERSION\d+)",
+    R"(SteamAppDisableUpdate\d+)",
     R"(STEAMAPPLIST_INTERFACE_VERSION\d+)",
+    R"(STEAMAPPS_INTERFACE_VERSION\d+)",
     R"(STEAMAPPTICKET_INTERFACE_VERSION\d+)",
     R"(SteamClient\d+)",
     R"(STEAMCONTROLLER_INTERFACE_VERSION)",
