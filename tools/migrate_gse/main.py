@@ -152,7 +152,7 @@ def convert_to_ini(global_settings: str):
         elif file == 'immediate_gameserver_stats.txt':
             configs_main["main::general"]["immediate_gameserver_stats"] = 1 #updated ini through ConfigObj
         elif file == 'is_beta_branch.txt':
-            configs_main["main::general"]["is_beta_branch"] = 1 #updated ini through ConfigObj
+            configs_app["app::general"]["is_beta_branch"] = 1 #updated ini through ConfigObj
         elif file == 'matchmaking_server_details_via_source_query.txt':
             configs_main["main::general"]["matchmaking_server_details_via_source_query"] = 1 #updated ini through ConfigObj
         elif file == 'matchmaking_server_list_actual_type.txt':
