@@ -30,9 +30,14 @@ cp -a "_DEFAULT" "$out_dir/generate_emu_config/_DEFAULT"
 cp -f "steam_default_icon_locked.jpg" "$out_dir/generate_emu_config"
 cp -f "steam_default_icon_unlocked.jpg" "$out_dir/generate_emu_config"
 cp -f "README.md" "$out_dir/generate_emu_config"
-echo "Check the README" > "$out_dir/generate_emu_config/my_login.EXAMPLE.txt"
-echo "Check the README" > "$out_dir/generate_emu_config/top_owners_ids.EXAMPLE.txt"
-echo "You can use a website like: https://steamladder.com/games/" >> "$out_dir/generate_emu_config/top_owners_ids.EXAMPLE.txt"
+if [ -e top_owners_ids.txt ]
+then
+    cp -f "top_owners_ids.txt" "$out_dir/generate_emu_config"
+else
+    echo "Check the README" > "$out_dir/generate_emu_config/my_login.EXAMPLE.txt"
+    echo "Check the README" > "$out_dir/generate_emu_config/top_owners_ids.EXAMPLE.txt"
+    echo "You can use a website like: https://steamladder.com/games/" >> "$out_dir/generate_emu_config/top_owners_ids.EXAMPLE.txt"
+fi
 
 echo;
 echo =============
