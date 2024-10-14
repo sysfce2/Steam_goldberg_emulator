@@ -24,8 +24,8 @@ pyinstaller "controller_config_generator/parse_controller_vdf.py" --distpath "$o
 echo building parse_achievements_schema...
 pyinstaller "stats_schema_achievement_gen/achievements_gen.py" --distpath "$out_dir" -y --clean --onedir --name "parse_achievements_schema" --noupx --console -i "NONE" --workpath "$build_temp_dir" --specpath "$build_temp_dir" || exit 1
 
-#cp -a "post_build" "%out_dir%/generate_emu_config/post_build" # skip this, as it's only for Windows; will have to use a different 'post_build' folder for Linux
-cp -a "_DEFAULT" "%out_dir%/generate_emu_config/_DEFAULT"
+#cp -a "post_build" "$out_dir/generate_emu_config/post_build" # skip this, as it's only for Windows; will have to use a different 'post_build' folder for Linux
+cp -a "_DEFAULT" "$out_dir/generate_emu_config/_DEFAULT"
 
 cp -f "steam_default_icon_locked.jpg" "$out_dir/generate_emu_config"
 cp -f "steam_default_icon_unlocked.jpg" "$out_dir/generate_emu_config"
