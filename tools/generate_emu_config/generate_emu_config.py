@@ -1047,86 +1047,101 @@ def main():
         cfg_user_account_steamid = cfg_user["user::general"]["account_steamid"]
         cfg_user_language = cfg_user["user::general"]["language"]
 
-        config_found = 0
+        config_found = 0 # needed to skip showing "[ ] Found controller configs --- generating action sets..." again if already shown once
         config_generated = 0 # used to avoid overwriting supported config by unsupported one
         config_generated_not_sup = 0 # used to avoid overwriting prefered unsupported config if no supported config present
         downloading_ctrl_vdf = 0 # needed to remove possible duplicate 'Found controller configs...'
+        valid_id = 0 # needed to skip showing "[ ] Found controller configs --- generating action sets..." if no valid is found in either "steamcontrollerconfigdetails" or "steamcontrollertouchconfigdetails"
         if "config" in game_info:
             if not SKIP_CONTROLLER and "steamcontrollerconfigdetails" in game_info["config"]:
                 controller_details = game_info["config"]["steamcontrollerconfigdetails"]
-                print(f"[ ] Found controller configs --- generating action sets...")
-                downloading_ctrl_vdf=1
                 for id in controller_details:
-                    details = controller_details[id]
-                    controller_type = ""
-                    enabled_branches = ""
-                    if "controller_type" in details:
-                        controller_type = details["controller_type"]
-                    if "enabled_branches" in details:
-                        enabled_branches = details["enabled_branches"]
-                        
-                    if (("default" in enabled_branches) or ("public" in enabled_branches)): # download only 'default' and 'public' branches to avoid multiple configs for same controller type
-                        print(f'[ ] __ downloading config, file id = {id}, controller type = {controller_type}') # first noticed for Elden Ring, two 'controller_ps4' vdf configs are downloaded, but only one of them is converted to action sets
-                        out_vdf = download_published_file(client, int(id), os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}')) 
+                    # make sure the controller config id exists and is a numeric string
+                    # fixes "TypeError: string indices must be integers, not 'str'" when generating for "Unknown 9: Awakening" (appid 1477940)
+                    if id.isdigit():
+                        if (downloading_ctrl_vdf == 0) and (valid_id == 0):
+                            print(f"[ ] Found controller configs --- generating action sets...")
+                            downloading_ctrl_vdf = 1
+                            valid_id = 1
+                        details = controller_details[id]
+                        controller_type = ""
+                        enabled_branches = ""
+                        if "controller_type" in details:
+                            controller_type = details["controller_type"]
+                        if "enabled_branches" in details:
+                            enabled_branches = details["enabled_branches"]
 
-                    if out_vdf is not None:
-                        if (controller_type in ["controller_xbox360", "controller_xboxone"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
-                            config_found = 1
-                            #print(f"[ ] __ controller type '{controller_type}' is supported ... converting .vdf to action sets")
-                            if config_generated == 0:
-                                print(f"[ ] __ parsing '{controller_type}' vdf - supported, can be used with emu")
-                                parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
+                        out_vdf = None # initialize out_vdf, fixes "UnboundLocalError: cannot access local variable 'out_vdf' where it is not associated with a value" when generating for "Factorio" (appid 427520)
+                            
+                        if (("default" in enabled_branches) or ("public" in enabled_branches)): # download only 'default' and 'public' branches to avoid multiple configs for same controller type
+                            print(f'[ ] __ downloading config, file id = {id}, controller type = {controller_type}') # first noticed for Elden Ring, two 'controller_ps4' vdf configs are downloaded, but only one of them is converted to action sets
+                            out_vdf = download_published_file(client, int(id), os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}')) 
 
-                                # delete txt files in .\steam_settings\controller folder
-                                for txt_file in os.listdir(os.path.join(emu_settings_dir, "controller")):
-                                    if not txt_file.endswith(".txt"):
-                                        continue
-                                    os.remove(os.path.join(os.path.join(emu_settings_dir, "controller"), txt_file))
-                                shutil.copytree(os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"), os.path.join(emu_settings_dir, "controller"), dirs_exist_ok=True)
-                                config_generated = 1
-                            else:
-                                print(f"[ ] __ parsing '{controller_type}' vdf - supported, can be used with emu")
-                                parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
+                        if out_vdf is not None:
+                            if (controller_type in ["controller_xbox360", "controller_xboxone"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
+                                config_found = 1
+                                #print(f"[ ] __ controller type '{controller_type}' is supported ... converting .vdf to action sets")
+                                if config_generated == 0:
+                                    print(f"[ ] __ parsing '{controller_type}' vdf - supported, can be used with emu")
+                                    parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
 
-                                if controller_type in ["controller_xboxone"]: # always use xboxone config if present
                                     # delete txt files in .\steam_settings\controller folder
                                     for txt_file in os.listdir(os.path.join(emu_settings_dir, "controller")):
                                         if not txt_file.endswith(".txt"):
                                             continue
                                         os.remove(os.path.join(os.path.join(emu_settings_dir, "controller"), txt_file))
                                     shutil.copytree(os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"), os.path.join(emu_settings_dir, "controller"), dirs_exist_ok=True)
-                                    #config_generated = 1
+                                    config_generated = 1
+                                else:
+                                    print(f"[ ] __ parsing '{controller_type}' vdf - supported, can be used with emu")
+                                    parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
 
-                        elif (controller_type in ["controller_ps4", "controller_ps5", "controller_steamcontroller_gordon", "controller_neptune", "controller_switch_pro"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
-                            config_found=1
-                            #print(f"[X] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
-                            print(f"[X] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
-                            parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
+                                    if controller_type in ["controller_xboxone"]: # always use xboxone config if present
+                                        # delete txt files in .\steam_settings\controller folder
+                                        for txt_file in os.listdir(os.path.join(emu_settings_dir, "controller")):
+                                            if not txt_file.endswith(".txt"):
+                                                continue
+                                            os.remove(os.path.join(os.path.join(emu_settings_dir, "controller"), txt_file))
+                                        shutil.copytree(os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"), os.path.join(emu_settings_dir, "controller"), dirs_exist_ok=True)
+                                        #config_generated = 1
 
+                            elif (controller_type in ["controller_ps4", "controller_ps5", "controller_steamcontroller_gordon", "controller_neptune", "controller_switch_pro"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
+                                config_found=1
+                                #print(f"[X] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
+                                print(f"[X] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
+                                parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
+            
             if not SKIP_CONTROLLER and "steamcontrollertouchconfigdetails" in game_info["config"]:
                 controller_details = game_info["config"]["steamcontrollertouchconfigdetails"]
-                if downloading_ctrl_vdf == 0:
-                    print(f"[ ] Found controller configs --- generating action sets...")
                 for id in controller_details:
-                    details = controller_details[id]
-                    controller_type = ""
-                    enabled_branches = ""
-                    if "controller_type" in details:
-                        controller_type = details["controller_type"]
-                    if "enabled_branches" in details:
-                        enabled_branches = details["enabled_branches"]
+                    # make sure the controller config id exists and is a numeric string
+                    # fixes "TypeError: string indices must be integers, not 'str'" when generating for "Unknown 9: Awakening" (appid 1477940)
+                    if id.isdigit():
+                        if (downloading_ctrl_vdf == 0) and (valid_id == 0):
+                            print(f"[ ] Found controller configs --- generating action sets...")
+                            downloading_ctrl_vdf = 1
+                            valid_id = 1
+                        details = controller_details[id]
+                        controller_type = ""
+                        enabled_branches = ""
+                        if "controller_type" in details:
+                            controller_type = details["controller_type"]
+                        if "enabled_branches" in details:
+                            enabled_branches = details["enabled_branches"]
 
-                    if (("default" in enabled_branches) or ("public" in enabled_branches)): # download only 'default' and 'public' branches to avoid multiple configs for same controller type
-                        print(f'[ ] __ downloading config, file id = {id}, controller type = {controller_type}') # first noticed for Elden Ring, two 'controller_ps4' vdf configs are downloaded, but only one of them is converted to action sets
-                        out_vdf = download_published_file(client, int(id), os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}')) 
-                        
-                    if out_vdf is not None:
-                        if (controller_type in ["controller_mobile_touch"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
-                            config_found = 1
-                            #print(f"[X] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
-                            print(f"[X] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
-                            parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
-            
+                        out_vdf = None # initialize out_vdf, fixes "UnboundLocalError: cannot access local variable 'out_vdf' where it is not associated with a value" when generating for "Factorio" (appid 427520)
+
+                        if (("default" in enabled_branches) or ("public" in enabled_branches)): # download only 'default' and 'public' branches to avoid multiple configs for same controller type
+                            print(f'[ ] __ downloading config, file id = {id}, controller type = {controller_type}') # first noticed for Elden Ring, two 'controller_ps4' vdf configs are downloaded, but only one of them is converted to action sets
+                            out_vdf = download_published_file(client, int(id), os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}')) 
+                            
+                        if out_vdf is not None:
+                            if (controller_type in ["controller_mobile_touch"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
+                                config_found = 1
+                                #print(f"[X] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
+                                print(f"[X] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
+                                parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
+
             ''' # NOTE zip the parent 'app_backup' folder instead of only the child 'controller' folder
             if config_found:
                 shutil.make_archive(os.path.join(backup_dir, 'controller'), 'zip', os.path.join(backup_dir, 'controller')) # first argument is the name of the zip file
