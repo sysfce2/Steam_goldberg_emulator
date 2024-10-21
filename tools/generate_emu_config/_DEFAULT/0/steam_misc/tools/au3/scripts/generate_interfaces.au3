@@ -107,10 +107,10 @@ FileClose($hFile)
 
 $interfaces_ini = @ScriptDir & '\steam_settings\steam_interfaces.ini'
 
-$codex_ini = @ScriptDir & '\steam_misc\extra_cdx\CODEX\steam_emu.ini'
+$codex_ini = @ScriptDir & '\steam_misc\extra_crk\CODEX\steam_emu.ini'
 _AddInterfaces($codex_ini)
 
-$rune_ini = @ScriptDir & '\steam_misc\extra_cdx\RUNE\steam_emu.ini'
+$rune_ini = @ScriptDir & '\steam_misc\extra_crk\RUNE\steam_emu.ini'
 _AddInterfaces($rune_ini)
 
 FileDelete($interfaces_ini)

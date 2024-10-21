@@ -340,14 +340,14 @@ def download_app_details(
         time.sleep(0.1)
 
     if not app_details:
-        print(f"[?] No app details found - skip creating 'app_details.json'")
+        print(f"[?] No app details found - skip creating <OUT_DIR>\\steam_misc\\app_info\\app_details.json")
         #if last_exception: # skip showing last_exception
         #    print(f"[X] __ last error: {last_exception}")
         return
 
     with open(details_out_file, "wt", encoding='utf-8') as f:
         json.dump(app_details, f, ensure_ascii=False, indent=2)
-        print(f"[ ] Found app details --- writing to 'app_details.json'") # move it here to avoid showing both 'downloading' and 'cannot download'
+        print(f"[ ] Found app details --- writing to <OUT_DIR>\\steam_misc\\app_info\\app_details.json") # move it here to avoid showing both 'downloading' and 'cannot download'
     
     if download_screenshots:
         __download_screenshots(base_out_dir, appid, app_details)

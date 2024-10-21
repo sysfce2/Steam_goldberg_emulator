@@ -17,7 +17,7 @@ __codex_ini = r'''###
 ###          ßßßÛÛ²ÜÜÜÜÜÛ²ÛÛÛ²ßß    
 ###
 ###
-### Game data is stored at %SystemDrive%\\Users\\Public\\Documents\\Steam\\CODEX\\{cdx_id}
+### Game data is stored at %SystemDrive%\Users\Public\Documents\Steam\CODEX\{cdx_id}
 ###
 
 [Settings]
@@ -141,7 +141,7 @@ def generate_cdx_ini(
         os.makedirs(os.path.join(base_out_dir, "steam_misc\\extra_crk\\CODEX"))
 
     codex_ini_path = os.path.join(base_out_dir, "steam_misc\\extra_crk\\CODEX\\steam_emu.ini")
-    print(f"[ ] Generating CODEX config --- writing 'steam_emu.ini'")
+    print(f"[ ] Generating CODEX config --- writing <OUT_DIR>\\steam_misc\\extra_crk\\CODEX\\steam_emu.ini")
     print(f"[ ] __ if to be used, make sure it has the correct interface versions")
 
     dlc_list = [f"{d[0]}={d[1]}" for d in dlc]

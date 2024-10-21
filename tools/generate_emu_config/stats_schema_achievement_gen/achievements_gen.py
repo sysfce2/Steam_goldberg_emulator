@@ -122,9 +122,9 @@ def generate_stats_achievements(
     if output_stats:
         with open(os.path.join(config_directory, "stats.txt"), 'wt', encoding='utf-8') as f:
             f.writelines(output_stats)
-            print(f"[ ] Found {len(output_stats)} stats --- writing to 'stats.txt'")
+            print(f"[ ] Found {len(output_stats)} stats --- writing to <OUT_DIR>\\steam_settings\\stats.txt'")
     else:
-        print(f"[?] No stats found - skip creating 'stats.txt'")
+        print(f"[?] No stats found - skip creating <OUT_DIR>\\steam_settings\\stats.txt")
 
     return (achievements_out, stats_out,
             copy_default_unlocked_img, copy_default_locked_img)

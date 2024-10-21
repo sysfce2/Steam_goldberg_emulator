@@ -95,10 +95,13 @@ def download_scx(base_out_dir : str, appid : int):
 
         _game_found=True
 
+        print(f"[ ] Searching SCX content...")
+
         for line in app_scx_line:
             if 'Game not found' in line:
                 shutil.rmtree(os.path.join(base_out_dir, 'steam_misc\\app_scx'))
                 _game_found=False
+                print(f"[?] __ no SCX content found --- nothing downloaded to <OUT_DIR>\\steam_misc\\app_scx folder")
                 break
 
             if ('class="tracking-wider font-league-gothic"' in line) and ('<a href="' in line):
@@ -242,7 +245,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _trading_cards != line_series_name_safe:
                     if _trading_cards_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading trading cards...")
+                        print(f"[ ] __ found '{line_series_name_safe}' trading cards...")
                     _trading_cards = line_series_name_safe
 
                 if 'data-gallery-type="cards"' in line:
@@ -296,7 +299,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 #if _foil_trading_cards != line_series_name_safe:
                     #if _foil_trading_cards_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        #print(f"[ ] __ {line_series_name_safe} --- downloading foil trading cards...")
+                        #print(f"[ ] __ found '{line_series_name_safe}' foil trading cards...")
                     #_foil_trading_cards = line_series_name_safe 
 
                 if 'data-gallery-type="foil-cards"' in line:
@@ -340,7 +343,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _backgrounds != line_series_name_safe:
                     if _backgrounds_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading backgrounds...")
+                        print(f"[ ] __ found '{line_series_name_safe}' backgrounds...")
                     _backgrounds = line_series_name_safe 
 
                 if 'data-gallery-type="backgrounds"' in line:
@@ -386,7 +389,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _badges != line_series_name_safe:
                     if _badges_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading badges...")
+                        print(f"[ ] __ found '{line_series_name_safe}' badges...")
                     _badges = line_series_name_safe
 
                 if 'class="sm:h-[80px]"' in line:
@@ -418,7 +421,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 #if _foil_badges != line_series_name_safe:
                     #if _foil_badges_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        #print(f"[ ] __ {line_series_name_safe} --- downloading foil badges...")
+                        #print(f"[ ] __ found '{line_series_name_safe}' foil badges...")
                     #_foil_badges = line_series_name_safe
 
                 if 'class="sm:h-[80px]"' in line:
@@ -450,7 +453,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _emoticons != line_series_name_safe:
                     if _emoticons_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading emoticons...")
+                        print(f"[ ] __ found '{line_series_name_safe}' emoticons...")
                     _emoticons = line_series_name_safe
 
                 if 'class="sm:h-[54px]"' in line:
@@ -504,7 +507,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _animated_stickers != line_series_name_safe:
                     if _animated_stickers_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading animated stickers...")
+                        print(f"[ ] __ found '{line_series_name_safe}' animated stickers...")
                     _animated_stickers = line_series_name_safe
 
                 if 'Animated" class=' in line:
@@ -559,7 +562,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _animated_backgrounds != line_series_name_safe:
                     if _animated_backgrounds_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading animated backgrounds...")
+                        print(f"[ ] __ found '{line_series_name_safe}' animated backgrounds...")
                     _animated_backgrounds = line_series_name_safe
 
                 if 'class="sm:h-[99px] md:h-[87px] lg:h-[75px] xl:h-[83px] 2xl:h-[88px]"' in line:
@@ -628,7 +631,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _animated_mini_backgrounds != line_series_name_safe:
                     if _animated_mini_backgrounds_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading animated mini backgrounds...")
+                        print(f"[ ] __ found '{line_series_name_safe}' animated mini backgrounds...")
                     _animated_mini_backgrounds = line_series_name_safe
 
                 if 'class="sm:h-[148px] md:h-[130px] lg:h-[112px] xl:h-[123px] 2xl:h-[132px]"' in line:
@@ -697,7 +700,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _avatar_frames != line_series_name_safe:
                     if _avatar_frames_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading avatar frames...")
+                        print(f"[ ] __ found '{line_series_name_safe}' avatar frames...")
                     _avatar_frames = line_series_name_safe
 
                 if '>Animation<' in line:
@@ -753,7 +756,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _animated_avatars != line_series_name_safe:
                     if _animated_avatars_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading animated avatars...")
+                        print(f"[ ] __ found '{line_series_name_safe}' animated avatars...")
                     _animated_avatars = line_series_name_safe
 
                 if '>Animation<' in line:
@@ -809,7 +812,7 @@ def download_scx(base_out_dir : str, appid : int):
 
                 if _profiles != line_series_name_safe:
                     if _profiles_series == line_series_count: # this fixes duplicating message for last found 'section' in html source, after finding a new 'series'
-                        print(f"[ ] __ {line_series_name_safe} --- downloading profiles...")
+                        print(f"[ ] __ found '{line_series_name_safe}' profiles...")
                     _profiles = line_series_name_safe
 
                 if 'class="sm:h-[166px] md:h-[146px] lg:h-[126px] xl:h-[138px] 2xl:h-[148px]"' in line:

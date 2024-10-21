@@ -12,7 +12,7 @@ def __ClosestDictKey(targetKey : str, srcDict : dict[str, object] | set[str]) ->
     return None
 
 def __generate_ach_watcher_schema(lang: str, app_id: int, achs: list[dict]) -> list[dict]:
-    print(f"[ ] __ writing {lang} {app_id}.db to '.\\schema\\{lang}' folder")
+    print(f"[ ] __ writing {lang} {app_id}.db to <SCH_DIR>\\{lang} folder")
     out_achs_list = []
     for idx in range(len(achs)):
         ach = copy.deepcopy(achs[idx])
@@ -114,7 +114,7 @@ def generate_all_ach_watcher_schemas(
         #print("[X] Couldn't generate Achievement Watcher schemas, no achievements found") # move notification to main script
         return
     else:
-        print(f"[ ] Generating Achievement Watcher schemas...")
+        print(f"[ ] Generating & packing Achievement Watcher schemas...")
         #if app_exe:
         #    print(f"[ ] __ Detected app exe: '{app_exe}'") # move notification to main script
         #else:
@@ -163,7 +163,7 @@ def generate_all_ach_watcher_schemas(
         print(f"[ ] __ Assuming english is the only supported language")
         langs = ["english"]
 
-    print(f"[ ] __ schema = OUTPUT\\{appid}\\steam_misc\\achievement_watcher\\steam_cache\\schema")
+    print(f"[ ] __ <SCH_DIR> = <OUT_DIR>\\steam_misc\\extra_acw\\steam_cache\\schema")
     
     for lang in langs:
         out_schema_folder = os.path.join(ach_watcher_out_dir, lang)

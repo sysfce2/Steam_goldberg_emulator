@@ -301,7 +301,7 @@ def get_stats_schema(client, game_id, owner_id):
     return client.wait_msg(EMsg.ClientGetUserStatsResponse, timeout=5)
 
 def download_achievement_images(game_id : int, image_names : set[str], output_folder : str):
-    print(f"[ ] Found {len(image_names)} achievements images --- downloading to '.\\steam_settings\\img' folder")
+    print(f"[ ] Found {len(image_names)} achievements images --- downloading to <OUT_DIR>\\steam_settings\\img folder")
 
     q : queue.Queue[str] = queue.Queue()
 
@@ -356,7 +356,7 @@ def generate_achievement_stats(client, game_id : int, output_directory, backup_d
             break
 
     if stats_schema_found is None: # no achievement found
-        print(f"[?] No achievements found - skip creating 'achievements.json'")
+        print(f"[?] No achievements found - skip creating <OUT_DIR>\\steam_settings\\achievements.json")
         return []
 
     achievement_images_dir = os.path.join(output_directory, "img")
@@ -371,9 +371,9 @@ def generate_achievement_stats(client, game_id : int, output_directory, backup_d
     ) = achievements_gen.generate_stats_achievements(stats_schema_found.body.schema, output_directory)
 
     if len(achievements) != 1:
-        print(f"[ ] Found {len(achievements)} achievements --- writing to 'achievements.json'")
+        print(f"[ ] Found {len(achievements)} achievements --- writing to <OUT_DIR>\\steam_settings\\achievements.json")
     else:
-        print(f"[ ] Found {len(achievements)} achievement --- writing to 'achievements.json'")
+        print(f"[ ] Found {len(achievements)} achievement --- writing to <OUT_DIR>\\steam_settings\\achievements.json")
 
     #print(f"[ ] Writing 'UserGameStatsSchema_{game_id}.bin'")
     
@@ -592,16 +592,19 @@ def help():
     print(" -rne:      generate .ini file for RUNE Steam emu for each app")
     print(" -acw:      generate schemas of all possible languages for Achievement Watcher")
     print(" -skip_ach: skip downloading & generating achievements and their images")
-    print(" -skip_con: skip downloading & generating controller configuration files")
-    print(" -skip_inv: skip downloading & generating inventory data (items.json & default_items.json)")
-    print(" -clr:      delete any folder/file with the same name as the output before generating any data")
-    print(" -rel:      generate temp files/folders, and expect input files, relative to the current working directory")
+    print(" -skip_con: skip downloading & generating controller configuration files (action sets txt files)")
+    print(" -skip_inv: skip downloading & generating inventory data ('items.json' & 'default_items.json')")
     print(" -anon:     login as an anonymous account, these have very limited access and cannot get all app details")
-    print(" -name:     save the output of each app in a folder with the same name as the app, unsafe characters are discarded")
-    print("\nAll switches are optional except app id, at least 1 app id must be provided")
+    print(" -name:     save the complete game config in a folder with the same name as the app (unsafe characters are discarded)")
+    print(" -rel_out:  generate complete game config in _OUTPUT/appid folder, relative to the bat, sh or app calling generate_emu_config app")
+    print(" -rel_raw:  generate complete game config in the same folder that contains the bat, sh or app calling generate_emu_config app")
+    print(" -clr:      clear output folder before generating the complete game config")
+    print("            do note that it will not work when '-rel_raw' argument is used too")
+    print("\nAll switches are optional except appid, at least 1 appid must be provided")
     print("\nAutomate the login prompt:")
-    print(" * You can create a file called 'my_login.txt' beside the script, then add your username on the first line")
-    print("   and your password on the second line.")
+    print(" * You can create a file called 'my_login.txt' beside the script, then add your:")
+    print("   USERNAME on the first line")
+    print("   PASSWORD on the second line")
     print(" * You can set these 2 environment variables (will override 'my_login.txt'):")
     print("   GSE_CFG_USERNAME")
     print("   GSE_CFG_PASSWORD")
@@ -664,8 +667,12 @@ def main():
             CLEANUP_BEFORE_GENERATING = True
         elif f'{appid}'.lower() == '-anon':
             ANON_LOGIN = True
-        elif f'{appid}'.lower() == '-rel':
+        elif f'{appid}'.lower() == '-rel_out':
             RELATIVE_DIR = True
+            RELATIVE_set = 'out'
+        elif f'{appid}'.lower() == '-rel_raw':
+            RELATIVE_DIR = True
+            RELATIVE_set = 'raw'
         elif f'{appid}'.lower() == '-skip_ach':
             SKIP_ACH = True
         elif f'{appid}'.lower() == '-skip_con':
@@ -698,13 +705,13 @@ def main():
         sys.exit(1)
 
     client = SteamClient()
-    # login_tmp_folder = os.path.join(get_exe_dir(RELATIVE_DIR), "login_temp")
+    # login_tmp_folder = os.path.join(get_exe_dir(False), "login_temp") # replaced 'RELATIVE_DIR with 'False' to always look for or create login_temp in generate_emu_config folder
     # if not os.path.exists(login_tmp_folder):
     #     os.makedirs(login_tmp_folder)
     # client.set_credential_location(login_tmp_folder)
 
     # first read the 'my_login.txt' file
-    my_login_file = os.path.join(get_exe_dir(RELATIVE_DIR), "my_login.txt")
+    my_login_file = os.path.join(get_exe_dir(False), "my_login.txt") # replaced 'RELATIVE_DIR with 'False' to always look for or create my_login.txt in generate_emu_config folder
     if not ANON_LOGIN and os.path.isfile(my_login_file):
         filedata = ['']
         with open(my_login_file, "r", encoding="utf-8") as f:
@@ -743,7 +750,7 @@ def main():
     top_own.top_owners()
 
     # read and prepend top_owners_ids.txt
-    top_owners_file = os.path.join(get_exe_dir(RELATIVE_DIR), "top_owners_ids.txt")
+    top_owners_file = os.path.join(get_exe_dir(False), "top_owners_ids.txt") # replaced 'RELATIVE_DIR with 'False' to always look for or create top_owners_ids.txt in generate_emu_config folder
     if os.path.isfile(top_owners_file):
         filedata = ['']
         with open(top_owners_file, "r", encoding="utf-8") as f:
@@ -756,6 +763,17 @@ def main():
     # prepend user account ID as a top owner
     if not ANON_LOGIN:
         TOP_OWNER_IDS.insert(0, client.steam_id.as_64)
+
+    user_name = ''
+    user_repl = ''
+    if platform.system() == "Windows": # Windows
+        user_name = os.getenv("USERNAME")
+        user_repl = r'%username%'
+    elif platform.system() == "Linux": # Linux
+        user_name = os.getenv("USER")
+        user_repl = r'$user'
+
+    username = os.getenv("USERNAME") or os.getenv("USER")
 
     for appid in appids:
 
@@ -772,10 +790,8 @@ def main():
             print(f"*** ABORTED config for app id {appid} ***")
             print(" ")
             break
-        game_info : dict = raw["apps"][appid]
 
-        print(f"[ ] Found product info --- writing to 'app_product_info.json'")
-        
+        game_info : dict = raw["apps"][appid]
         game_info_common : dict = game_info.get("common", {})
         app_name = game_info_common.get("name", "")
         app_name_on_disk = f"{appid}"
@@ -791,33 +807,64 @@ def main():
             app_name = f"Unknown_Steam_app_{appid}" # we need this for later use in the Achievement Watcher
             print(f"[X] Cannot find app name on Steam store")
 
-        #root_backup_dir = os.path.join(get_exe_dir(RELATIVE_DIR), "BACKUP")
+        #root_backup_dir = os.path.join(get_exe_dir(False), "_BACKUP") # replaced 'RELATIVE_DIR with 'False' to always look for or create _BACKUP in generate_emu_config folder
         #backup_dir = os.path.join(root_backup_dir, f"{appid}")
         #if not os.path.exists(backup_dir):
         #    os.makedirs(backup_dir)
 
-        root_def_dir = "_DEFAULT"
-        root_out_dir = "_OUTPUT"
-        base_out_dir = os.path.join(root_out_dir, app_name_on_disk)
+        root_def_dir_RELATIVE = os.path.join(get_exe_dir(True), "_DEFAULT") # _DEFAULT folder relative to external bat, sh or app calling generate_emu_config exe; with get_exe_dir(False) is only relative to generate_emu_config exe
+        root_out_dir_RELATIVE = os.path.join(get_exe_dir(True), "_OUTPUT") # _OUTPUT folder relative to external bat, sh or app calling generate_emu_config exe; with get_exe_dir(False) is only relative to generate_emu_config exe
+
+        if RELATIVE_DIR:
+            if RELATIVE_set == 'out':
+                root_out_dir = os.path.join(get_exe_dir(True), "_OUTPUT")
+                base_out_dir = os.path.join(root_out_dir, app_name_on_disk)
+                CLEANUP_override = 0
+            elif RELATIVE_set == 'raw':
+                root_out_dir = os.path.join(get_exe_dir(True))
+                base_out_dir = os.path.join(get_exe_dir(True))
+                CLEANUP_override = 1
+                
+            if os.path.exists(root_def_dir_RELATIVE) and os.path.isdir(root_def_dir_RELATIVE):
+                if os.listdir(root_def_dir_RELATIVE):
+                    root_def_dir = os.path.join(get_exe_dir(True), "_DEFAULT")
+                else:
+                    root_def_dir = os.path.join(get_exe_dir(False), "_DEFAULT")
+            else:
+                root_def_dir = os.path.join(get_exe_dir(False), "_DEFAULT")
+        else:
+            root_out_dir = os.path.join(get_exe_dir(False), "_OUTPUT")
+            base_out_dir = os.path.join(root_out_dir, app_name_on_disk)
+            CLEANUP_override = 0
+
+            root_def_dir = os.path.join(get_exe_dir(False), "_DEFAULT")
+
         emu_settings_dir = os.path.join(base_out_dir, "steam_settings")
         info_out_dir = os.path.join(base_out_dir, "steam_misc\\app_info")
 
+        print(f"[ ] DEF_DIR = {root_def_dir.replace(user_name, user_repl, 1)}")
+        if RELATIVE_DIR and (RELATIVE_set == 'raw'):
+            print(f"[ ] OUT_DIR = {os.getcwd().replace(user_name, user_repl, 1)}")
+        else:
+            print(f"[ ] OUT_DIR = {base_out_dir.replace(user_name, user_repl, 1)}")
+
         if CLEANUP_BEFORE_GENERATING:
-            print(f"[ ] Cleaning '{base_out_dir}' folder...")
-            base_dir_path = pathlib.Path(base_out_dir)
-            if base_dir_path.is_file():
-                base_dir_path.unlink()
-                time.sleep(0.05)
-            elif base_dir_path.is_dir():
-                shutil.rmtree(base_dir_path)
-                time.sleep(0.05)
-            
-            while base_dir_path.exists():
-                time.sleep(0.05)
+            if CLEANUP_override == 0:
+                print(f"[ ] Cleaning <OUT_DIR> folder...")
+                base_dir_path = pathlib.Path(base_out_dir)
+                if base_dir_path.is_file():
+                    base_dir_path.unlink()
+                    time.sleep(0.05)
+                elif base_dir_path.is_dir():
+                    shutil.rmtree(base_dir_path)
+                    time.sleep(0.05)
+                while base_dir_path.exists():
+                    time.sleep(0.05)
 
         root_backup_dir = os.path.join(base_out_dir, "steam_misc\\app_backup")
         #backup_dir = os.path.join(root_backup_dir, f"{appid}")
         backup_dir = root_backup_dir #use different structure for 'backup' dir
+
         if not os.path.exists(backup_dir):
             os.makedirs(backup_dir)
 
@@ -830,19 +877,20 @@ def main():
         #with open(os.path.join(info_out_dir, "app_widget.url"), mode='w', newline='\r\n') as f:
             #f.write(f"[InternetShortcut]\nURL=https://store.steampowered.com/widget/{appid}/")
 
-        if DEFAULT_PRESET == True:
-            print(f"[ ] Copying preset emu configs to '{base_out_dir}' folder")
-            shutil.copytree(os.path.join(root_def_dir, str(0)), base_out_dir, dirs_exist_ok=True) # copy from default emu dir
-            print(f"[ ] __ default emu config from '{os.path.join(root_def_dir, str(0))}' folder")
-            shutil.copytree(os.path.join(root_def_dir, str(DEFAULT_PRESET_NO)), base_out_dir, dirs_exist_ok=True) # copy from preset emu dir
-            print(f"[ ] __ preset emu config from '{os.path.join(root_def_dir, str(DEFAULT_PRESET_NO))}' folder")
-            if os.path.exists(os.path.join(root_def_dir, str(appid))):
-                shutil.copytree(os.path.join(root_def_dir, str(appid)), base_out_dir, dirs_exist_ok=True) # copy from preset app dir
-                print(f"[ ] __ app emu config from '{os.path.join(root_def_dir, str(appid))}' folder")
+        print(f"[ ] Copying preset emu configs...")
+        shutil.copytree(os.path.join(root_def_dir, str(0)), base_out_dir, dirs_exist_ok=True) # copy from default emu dir
+        print(f"[ ] __ default emu config from <DEF_DIR>\\{str(0)} folder")
+        shutil.copytree(os.path.join(root_def_dir, str(DEFAULT_PRESET_NO)), base_out_dir, dirs_exist_ok=True) # copy from preset emu dir
+        print(f"[ ] __ preset emu config from <DEF_DIR>\\{str(DEFAULT_PRESET_NO)} folder")
+        if os.path.exists(os.path.join(root_def_dir, str(appid))):
+            shutil.copytree(os.path.join(root_def_dir, str(appid)), base_out_dir, dirs_exist_ok=True) # copy from preset app dir
+            print(f"[ ] __ app emu config from <DEF_DIR>\\{str(appid)} folder")
 
         with open(os.path.join(emu_settings_dir, "steam_appid.txt"), 'w') as f:
             f.write(str(appid))
             #print(f"[ ] Writing 'steam_appid.txt'")
+
+        print(f"[ ] Found product info --- writing to <OUT_DIR>\\steam_misc\\app_info\\app_product_info.json")
 
         with open(os.path.join(info_out_dir, "app_product_info.json"), "wt", encoding='utf-8') as f:
             json.dump(game_info, f, ensure_ascii=False, indent=2)
@@ -850,7 +898,7 @@ def main():
 
         with open(os.path.join(backup_dir, "product_info.json"), "wt", encoding='utf-8') as f:
             json.dump(game_info, f, ensure_ascii=False, indent=2)
-            #print(f"[ ] Writing 'app_product_info.json'")
+            #print(f"[ ] Writing 'product_info.json'")
         
         app_details.download_app_details(
             base_out_dir, info_out_dir,
@@ -897,11 +945,11 @@ def main():
                     f.write(f'{lang}\n')
                 #print(f"[ ] Writing 'supported_languages.txt'")
                 if len(languages) == 1:
-                    print(f"[ ] Found {len(languages)} supported language --- writing to 'supported_languages.txt'")
+                    print(f"[ ] Found {len(languages)} supported language --- writing to <OUT_DIR>\\steam_settings\\supported_languages.txt")
                 else:
-                    print(f"[ ] Found {len(languages)} supported languages --- writing to 'supported_languages.txt'")
+                    print(f"[ ] Found {len(languages)} supported languages --- writing to <OUT_DIR>\\steam_settings\\supported_languages.txt")
         else:
-            print(f"[?] No supported languages found - skip creating 'supported_languages.txt'")
+            print(f"[?] No supported languages found - skip creating <OUT_DIR>\\steam_settings\\supported_languages.txt")
 
         ReplaceStringInFile(os.path.join(emu_settings_dir, "configs.app.ini"), 'This is another example DLC name', '#   56789=', '56789=') # make sure we write DLCs after '#   56789=This is another example DLC name'
 
@@ -935,11 +983,11 @@ def main():
                 dlc_config_list.append((dlc, dlc_name))
 
             if len(dlc_list) == 1:
-                print(f"[ ] Found {len(dlc_config_list)} DLC --- writing to 'configs.app.ini'")
+                print(f"[ ] Found {len(dlc_config_list)} DLC --- writing to <OUT_DIR>\\steam_settings\\configs.app.ini")
             else:
-                print(f"[ ] Found {len(dlc_config_list)} DLCs --- writing to 'configs.app.ini'")
+                print(f"[ ] Found {len(dlc_config_list)} DLCs --- writing to <OUT_DIR>\\steam_settings\\configs.app.ini")
         else:
-            print(f"[?] No DLCs found - skip writing to 'configs.app.ini'")
+            print(f"[?] No DLCs found - skip writing to <OUT_DIR>\\steam_settings\\configs.app.ini")
 
         if not dlc_raw == {}:
             with open(os.path.join(info_out_dir, "dlc_product_info.json"), "wt", encoding='utf-8') as f:
@@ -1021,25 +1069,25 @@ def main():
                     f.write(f"{game_depot}\n")
                 #print(f"[ ] Writing 'depots.txt'")
                 if len(all_depots) == 1:
-                    print(f"[ ] Found {len(all_depots)} depot --- writing to 'depots.txt'")
+                    print(f"[ ] Found {len(all_depots)} depot --- writing to <OUT_DIR>\\steam_settings\\depots.txt")
                 else:
-                    print(f"[ ] Found {len(all_depots)} depots --- writing to 'depots.txt'")
+                    print(f"[ ] Found {len(all_depots)} depots --- writing to <OUT_DIR>\\steam_settings\\depots.txt")
         else:
-            print(f"[?] No depots found - skip creating 'depots.txt'")
+            print(f"[?] No depots found - skip creating <OUT_DIR>\\steam_settings\\depots.txt")
 
         if len(all_branches) >= 1:
             with open(os.path.join(emu_settings_dir, "branches.json"), "wt", encoding='utf-8') as f:
                 json.dump(all_branches, f, ensure_ascii=False, indent=2)
                 if len(all_branches) == 1:
-                    print(f"[ ] Found {len(all_branches)} branch --- writing to 'branches.json'")
+                    print(f"[ ] Found {len(all_branches)} branch --- writing to <OUT_DIR>\\steam_settings\\branches.json")
                 else:
-                    print(f"[ ] Found {len(all_branches)} branches --- writing to 'branches.json'")
+                    print(f"[ ] Found {len(all_branches)} branches --- writing to <OUT_DIR>\\steam_settings\\branches.json")
                 if "public" in game_info["depots"]["branches"]:
                     if "buildid" in game_info["depots"]["branches"]["public"]:
                         buildid = game_info["depots"]["branches"]["public"]["buildid"]
                         print(f"[ ] __ default branch name: public, latest build id: {buildid}")
         else:
-            print(f"[?] No branches found - skip creating 'branches.json'")
+            print(f"[?] No branches found - skip creating <OUT_DIR>\\steam_settings\\branches.json")
 
         # read some keys from 'configs.user.ini'
         cfg_user = ConfigObj(os.path.join(emu_settings_dir, "configs.user.ini"), encoding='utf-8')
@@ -1047,11 +1095,10 @@ def main():
         cfg_user_account_steamid = cfg_user["user::general"]["account_steamid"]
         cfg_user_language = cfg_user["user::general"]["language"]
 
-        config_found = 0 # needed to skip showing "[ ] Found controller configs --- generating action sets..." again if already shown once
+        config_found = 0 # needed to show 'No controller configs found...' if value remains 0
         config_generated = 0 # used to avoid overwriting supported config by unsupported one
-        config_generated_not_sup = 0 # used to avoid overwriting prefered unsupported config if no supported config present
         downloading_ctrl_vdf = 0 # needed to remove possible duplicate 'Found controller configs...'
-        valid_id = 0 # needed to skip showing "[ ] Found controller configs --- generating action sets..." if no valid is found in either "steamcontrollerconfigdetails" or "steamcontrollertouchconfigdetails"
+        valid_id = 0 # needed to skip showing "Found controller configs..." if no valid is found in either "steamcontrollerconfigdetails" or "steamcontrollertouchconfigdetails"
         if "config" in game_info:
             if not SKIP_CONTROLLER and "steamcontrollerconfigdetails" in game_info["config"]:
                 controller_details = game_info["config"]["steamcontrollerconfigdetails"]
@@ -1107,8 +1154,8 @@ def main():
 
                             elif (controller_type in ["controller_ps4", "controller_ps5", "controller_steamcontroller_gordon", "controller_neptune", "controller_switch_pro"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
                                 config_found=1
-                                #print(f"[X] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
-                                print(f"[X] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
+                                #print(f"[ ] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
+                                print(f"[ ] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
                                 parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
             
             if not SKIP_CONTROLLER and "steamcontrollertouchconfigdetails" in game_info["config"]:
@@ -1138,8 +1185,8 @@ def main():
                         if out_vdf is not None:
                             if (controller_type in ["controller_mobile_touch"] and (("default" in enabled_branches) or ("public" in enabled_branches))):
                                 config_found = 1
-                                #print(f"[X] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
-                                print(f"[X] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
+                                #print(f"[ ] __ controller type '{controller_type}' is not supported ... converting .vdf to action sets")
+                                print(f"[ ] __ parsing '{controller_type}' vdf - not supported, backup purposes only")
                                 parse_controller_vdf.generate_controller_config(out_vdf.decode('utf-8'), os.path.join(os.path.join(backup_dir, 'controller\\' + f'{controller_type}' + '_' + f'{id}'), "action_set"))
 
             ''' # NOTE zip the parent 'app_backup' folder instead of only the child 'controller' folder
@@ -1245,9 +1292,9 @@ def main():
             raw_inventory = json.dumps(inventory, indent=4)
 
             if len(inventory) != 1:
-                print(f"[ ] Found {len(inventory)} inventory items --- writing to 'items.json' and 'default_items.json'")
+                print(f"[ ] Found {len(inventory)} inventory items --- writing to <OUT_DIR>\\steam_settings\\items.json & default_items.json")
             else:
-                print(f"[ ] Found {len(inventory)} inventory item --- writing to 'items.json' and 'default_items.json'")
+                print(f"[ ] Found {len(inventory)} inventory item --- writing to <OUT_DIR>\\steam_settings\\items.json & default_items.json")
 
             with open(os.path.join(backup_dir, f"InventoryItems_{appid}.json"), "w") as f:
                 f.write(raw_inventory)
@@ -1275,7 +1322,7 @@ def main():
                 #print(f"[ ] __ writing 'default_items.json'")
 
         else:
-            print(f"[?] No inventory items found - skip creating 'items.json' and 'default_items.json'")
+            print(f"[?] No inventory items found - skip creating <OUT_DIR>\\steam_settings\\items.json & default_items.json")
 
         if app_exe:
             if app_mode_new != "":
