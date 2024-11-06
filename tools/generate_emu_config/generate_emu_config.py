@@ -583,6 +583,7 @@ def help():
     print(f" Example: {exe_name} 421050 420 480")
     print(f" Example: {exe_name} -img -scr -vids_max -scx -cdx -rne -acw -clr 421050 480")
     print("\nSwitches:")
+    print(" -token:    save refresh_token to disk, the logged-on account will be saved")
     print(" -img:      download art images for each app: Steam generated background, icon, logo, etc...")
     print(" -scr:      download screenshots for each app if they're available")
     print(" -vids_low: download low quality videos for each app if they're available")
@@ -627,6 +628,7 @@ def main():
     GENERATE_ACHIEVEMENT_WATCHER_SCHEMAS = False
     CLEANUP_BEFORE_GENERATING = False
     ANON_LOGIN = False
+    SAVE_REFRESH_TOKEN = False
     RELATIVE_DIR = False
     SKIP_ACH = False
     SKIP_CONTROLLER = False
@@ -667,6 +669,8 @@ def main():
             CLEANUP_BEFORE_GENERATING = True
         elif f'{appid}'.lower() == '-anon':
             ANON_LOGIN = True
+        elif f'{appid}'.lower() == '-token':
+            SAVE_REFRESH_TOKEN = True
         elif f'{appid}'.lower() == '-rel_out':
             RELATIVE_DIR = True
             RELATIVE_set = 'out'
@@ -705,30 +709,6 @@ def main():
         sys.exit(1)
 
     client = SteamClient()
-    # login_tmp_folder = os.path.join(get_exe_dir(False), "login_temp") # replaced 'RELATIVE_DIR with 'False' to always look for or create login_temp in generate_emu_config folder
-    # if not os.path.exists(login_tmp_folder):
-    #     os.makedirs(login_tmp_folder)
-    # client.set_credential_location(login_tmp_folder)
-
-    # first read the 'my_login.txt' file
-    my_login_file = os.path.join(get_exe_dir(False), "my_login.txt") # replaced 'RELATIVE_DIR with 'False' to always look for or create my_login.txt in generate_emu_config folder
-    if not ANON_LOGIN and os.path.isfile(my_login_file):
-        filedata = ['']
-        with open(my_login_file, "r", encoding="utf-8") as f:
-            filedata = f.readlines()
-        filedata = list(map(lambda s: s.replace("\r", "").replace("\n", ""), filedata))
-        filedata = [l for l in filedata if l]
-        if len(filedata) == 2:
-            USERNAME = filedata[0]
-            PASSWORD = filedata[1]
-    
-    # then allow the env vars to override the login details
-    env_username = os.environ.get('GSE_CFG_USERNAME', None)
-    env_password = os.environ.get('GSE_CFG_PASSWORD', None)
-    if env_username:
-        USERNAME = env_username
-    if env_password:
-        PASSWORD = env_password
 
     if ANON_LOGIN:
         result = client.anonymous_login()
@@ -738,13 +718,93 @@ def main():
             result = client.anonymous_login()
             trials -= 1
     else:
-        webauth = WebAuth(USERNAME, PASSWORD)
-        if (len(USERNAME) > 0 and len(PASSWORD) > 0):
-            webauth.cli_login(USERNAME, PASSWORD)
-        else:
-            webauth_prompt_username = input("Enter Steam username: ")
-            webauth.cli_login(webauth_prompt_username)
-        client.login(webauth.username, access_token=webauth.refresh_token)
+        # first read the 'my_login.txt' file
+        my_login_file = os.path.join(get_exe_dir(RELATIVE_DIR), "my_login.txt")
+        if not ANON_LOGIN and os.path.isfile(my_login_file):
+            filedata = ['']
+            with open(my_login_file, "r", encoding="utf-8") as f:
+                filedata = f.readlines()
+            filedata = list(map(lambda s: s.replace("\r", "").replace("\n", ""), filedata))
+            filedata = [l for l in filedata if l]
+            if len(filedata) == 1:
+                USERNAME = filedata[0]
+            elif len(filedata) == 2:
+                USERNAME, PASSWORD = filedata[0], filedata[1]
+        
+        # then allow the env vars to override the login details
+        env_username = os.environ.get('GSE_CFG_USERNAME', None)
+        env_password = os.environ.get('GSE_CFG_PASSWORD', None)
+        if env_username:
+            USERNAME = env_username
+        if env_password:
+            PASSWORD = env_password
+
+        # the file to save/load credentials
+        REFRESH_TOKENS = os.path.join(get_exe_dir(RELATIVE_DIR), "refresh_tokens.json")
+        refresh_tokens = {}
+        if os.path.isfile(REFRESH_TOKENS):
+            with open(REFRESH_TOKENS) as f:
+                try:
+                    lf = json.load(f)
+                    refresh_tokens = lf if isinstance(lf, dict) else {}
+                except:
+                    pass
+
+        # select username from credentials if not already persent
+        if not USERNAME:
+            users = {i: user for i, user in enumerate(refresh_tokens, 1)}
+            if len(users) != 0:
+                for i, user in users.items():
+                    print(f"{i}: {user}")
+                while True:
+                    try:
+                        num=int(input("Choose an account to login (0 for add account): "))
+                    except ValueError:
+                        print('Please type a number'); continue
+                    break
+                USERNAME = users.get(num)
+
+        # still no username? ask user
+        if not USERNAME:
+            USERNAME = input("Steam user: ")
+
+        REFRESH_TOKEN = refresh_tokens.get(USERNAME)
+
+        webauth, result = WebAuth(), None
+        while result in (
+            EResult.TryAnotherCM, EResult.ServiceUnavailable,
+            EResult.InvalidPassword, None):
+
+            if result in (EResult.TryAnotherCM, EResult.ServiceUnavailable):
+                if prompt_for_unavailable and result == EResult.ServiceUnavailable:
+                    while True:
+                        answer = input("Steam is down. Keep retrying? [y/n]: ").lower()
+                        if answer in 'yn': break
+
+                    prompt_for_unavailable = False
+                    if answer == 'n': break
+
+                client.reconnect(maxdelay=15)
+            elif result == EResult.InvalidPassword:
+                print("invalid password or refresh_token,")
+                print(f"correct the password or/and delete '{REFRESH_TOKENS}' and try again.")
+                exit(1)
+
+            if not REFRESH_TOKEN:
+                try:
+                    webauth.cli_login(USERNAME, PASSWORD)
+                except Exception as e:
+                    print(f'Unknown exception: {e}, maybe some account info is wrong?')
+                    exit(1)
+                USERNAME, PASSWORD = webauth.username, webauth.password
+                REFRESH_TOKEN = webauth.refresh_token
+
+            result = client.login(USERNAME, PASSWORD, REFRESH_TOKEN)
+
+        if SAVE_REFRESH_TOKEN:
+            with open(REFRESH_TOKENS, 'w') as f:
+                refresh_tokens.update({USERNAME: REFRESH_TOKEN})
+                json.dump(refresh_tokens, f, indent=4)
 
     # generate 'top_owners_ids.txt' if 'top_owners_ids.html' exists
     top_own.top_owners()
