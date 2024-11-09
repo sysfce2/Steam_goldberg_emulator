@@ -2,7 +2,7 @@
 
 https://github.com/Nemirtingas/ingame_overlay
 
-VERSION: https://github.com/Nemirtingas/ingame_overlay/tree/16260d812154d6f8a4ecdbaf78449c0b7d2fd098
+VERSION: https://github.com/Nemirtingas/ingame_overlay/tree/f819c89e3b59dd7704eea8148c40c9f9be52284e
 
 #### LICENSE
 
