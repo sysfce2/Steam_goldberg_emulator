@@ -1,26 +1,31 @@
-import pathlib
-import time
-from stats_schema_achievement_gen import achievements_gen
 from external_components import (
     ach_watcher_gen, cdx_gen, rne_gen, app_images, app_details, safe_name, scx_gen, pcgw_page, top_own
 )
+from stats_schema_achievement_gen import achievements_gen
 from controller_config_generator import parse_controller_vdf
 from steam.client import SteamClient
 from steam.webauth import WebAuth
 from steam.enums.common import EResult
 from steam.enums.emsg import EMsg
 from steam.core.msg import MsgProto
+from configobj import ConfigObj
+from bs4 import BeautifulSoup
 import os
 import re
 import sys
-import platform
+import base64
 import json
-import requests
-import threading
+import pathlib
+import platform
 import queue
+import requests
+import random
 import shutil
+import socket
+import time
+import threading
 import traceback
-from configobj import ConfigObj
+
 
 # Steam ids with public profiles that own a lot of games --- https://steamladder.com/ladder/games/
 # How to generate/update top_owners_ids.txt upon running generate_emu_config:
@@ -290,6 +295,47 @@ def get_exe_dir(relative = False):
     else:
         return os.path.dirname(os.path.abspath(__file__))
 
+def download_app_header(
+    base_out_dir : str,
+    appid : int):
+
+    icons_out_dir = base_out_dir
+
+    def downloader_thread(appid : int, image_url : str):
+        # try 3 times
+        for download_trial in range(3):
+            try:
+                r = requests.get(image_url)
+                if r.status_code == requests.codes.ok: # if download was successfull
+                    with open(os.path.join(icons_out_dir, f"{str(appid)+".jpg"}"), "wb") as f:
+                        f.write(r.content)
+                    break
+            except Exception as ex:
+                pass
+
+            time.sleep(0.1)
+
+    app_images_names = [
+        #r'capsule_616x353.jpg'
+        #r'capsule_467x181.jpg',
+        #r'capsule_231x87.jpg',
+        r'header.jpg', # use header, as capsule might not be available for all games
+    ]
+
+    if not os.path.exists(icons_out_dir):
+        os.makedirs(icons_out_dir)
+        time.sleep(0.050)
+
+    threads_list : list[threading.Thread] = []
+    for image_name in app_images_names:
+        image_url = f'https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/{image_name}'
+        t = threading.Thread(target=downloader_thread, args=(appid, image_url), daemon=True)
+        threads_list.append(t)
+        t.start()
+    
+    for t in threads_list:
+        t.join()
+
 def get_stats_schema(client, game_id, owner_id):
     message = MsgProto(EMsg.ClientGetUserStats)
     message.body.game_id = game_id
@@ -533,6 +579,18 @@ def get_depots_infos(raw_infos, appid):
         return (dlc_list, depot_app_list, all_depots, all_branches)
     except Exception:
         return (set(), set(), set())
+    
+# https://stackoverflow.com/a/62115290
+def isConnected():
+    try:
+        # connect to the host - tells us if the host is actually reachable
+        sock = socket.create_connection(("1.1.1.1", 80))
+        if sock is not None:
+            sock.close
+        return True
+    except OSError:
+        pass
+    return False
 
 # https://stackoverflow.com/a/48336994    
 def GetListOfSubstrings(stringSubject,string1,string2):
@@ -543,7 +601,7 @@ def GetListOfSubstrings(stringSubject,string1,string2):
 
     while(intstart < strlength and continueloop == 1):
         intindex1=stringSubject.find(string1,intstart)
-        if(intindex1 != -1): #The substring was found, lets proceed
+        if(intindex1 != -1): # The substring was found, lets proceed
             intindex1 = intindex1+len(string1)
             intindex2 = stringSubject.find(string2,intindex1)
             if(intindex2 != -1):
@@ -577,13 +635,98 @@ def ReplaceStringInFile(f_file, search_string, old_string, new_string):
                 f_handle.write(f_string)
                 f_handle.close()
 
+# https://stackoverflow.com/a/75606545
+def SearchAppId(search_str, search_language, search_country, number_pages, number_results):
+    # https://docs.python-requests.org/en/master/user/quickstart/#passing-parameters-in-urls
+    #query = input("What would you like to search for? ") # disabled, we're passing it as first argument to this function
+    params = {
+        "q": search_str,          # query example
+        "hl": search_language,          # language
+        "gl": search_country,          # country of the search, UK -> United Kingdom
+        "start": number_pages,          # number page by default up to 0
+        "num": number_results          # parameter defines the maximum number of results to return.
+    }
+
+    # https://docs.python-requests.org/en/master/user/quickstart/#custom-headers
+    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/602.2.14 (KHTML, like Gecko) Version/10.0.1 Safari/602.2.14'
+    
+    user_agent_list = [
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+    ]
+    
+    #Set the headers
+    headers = {"Accept-Language": "en-US,en;q=0.9", 
+    'User-Agent': random.choice(user_agent_list),
+    'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    "Accept-Encoding": "gzip, deflate, br"
+    }
+
+    page_limit = 1          # page limit if you don't need to fetch everything
+    page_num = 0
+
+    data_all = []
+    data_page = []
+
+    while True:
+        page_num += 1
+            
+        html = requests.get("https://www.google.com/search", params=params, headers=headers, timeout=30)
+        soup = BeautifulSoup(html.text, 'lxml')
+        
+        for result in soup.select(".tF2Cxc"):
+            title = result.select_one(".DKV0Md").text
+            try:
+                snippet = result.select_one(".Hdw6tb span").text # was only returning null before, now it's fixed
+            except:
+                snippet = None
+            links = result.select_one(".yuRUbf a")["href"]
+
+            # json data for all search pages
+            data_all.append({
+            "title": title,
+            #"snippet": snippet, # not needed
+            "link": links
+            })
+        
+            # json data for each search page 
+            data_page.append({
+            "title": title,
+            #"snippet": snippet, # not needed
+            "link": links
+            })
+
+        print(f"page: {page_num}")
+        print(json.dumps(data_page, indent=2, ensure_ascii=False))
+        
+        with open(os.path.join(os.getcwd(), f"google_result_{page_num}.json"), "wt", encoding='utf-8') as f:
+            json.dump(data_page, f, ensure_ascii=False, indent=2)
+        
+        data_page = []
+        
+        # stop loop due to page limit condition
+        if page_num == page_limit:
+            break
+        # stop the loop on the absence of the next page
+        if soup.select_one(".d6cvqb a[id=pnnext]"):
+            params["start"] += 10
+        else:
+            break
+
+        sleep_delay_list = [60, 110, 80, 90, 130, 70, 120, 100]
+
+        time.sleep(random.choice(sleep_delay_list)/1000)
+
+    with open(os.path.join(os.getcwd(), f"google_result_all.json"), "wt", encoding='utf-8') as f:
+        json.dump(data_all, f, ensure_ascii=False, indent=2)
+        
+
+
 def help():
     exe_name = os.path.basename(sys.argv[0])
     print(f"\nUsage: {exe_name} [Switches] appid appid appid ... ")
     print(f" Example: {exe_name} 421050 420 480")
     print(f" Example: {exe_name} -img -scr -vids_max -scx -cdx -rne -acw -clr 421050 480")
     print("\nSwitches:")
-    print(" -token:    save refresh_token to disk, the logged-on account will be saved")
     print(" -img:      download art images for each app: Steam generated background, icon, logo, etc...")
     print(" -scr:      download screenshots for each app if they're available")
     print(" -vids_low: download low quality videos for each app if they're available")
@@ -595,10 +738,12 @@ def help():
     print(" -skip_ach: skip downloading & generating achievements and their images")
     print(" -skip_con: skip downloading & generating controller configuration files (action sets txt files)")
     print(" -skip_inv: skip downloading & generating inventory data ('items.json' & 'default_items.json')")
-    print(" -anon:     login as an anonymous account, these have very limited access and cannot get all app details")
-    print(" -name:     save the complete game config in a folder with the same name as the app (unsafe characters are discarded)")
     print(" -rel_out:  generate complete game config in _OUTPUT/appid folder, relative to the bat, sh or app calling generate_emu_config app")
     print(" -rel_raw:  generate complete game config in the same folder that contains the bat, sh or app calling generate_emu_config app")
+    print(" -anon:     login as an anonymous account, these have very limited access and cannot get all app details")
+    print(" -name:     save the complete game config in a folder with the same name as the app (unsafe characters are discarded)")
+    print(" -find:     start generate_emu_config in 'appid_finder' mode, make sure to use it with '-rel_raw' argument")
+    print(" -tok:      save login_token to disk, the logged-on account will be saved")
     print(" -clr:      clear output folder before generating the complete game config")
     print("            do note that it will not work when '-rel_raw' argument is used too")
     print("\nAll switches are optional except appid, at least 1 appid must be provided")
@@ -616,6 +761,7 @@ def main():
     USERNAME = ""
     PASSWORD = ""
 
+    SEARCH_APPID = False
     DOWNLOAD_SCREENSHOTS = False
     DOWNLOAD_VIDEOS = False
     DOWNLOAD_LOW = False
@@ -633,9 +779,8 @@ def main():
     SKIP_ACH = False
     SKIP_CONTROLLER = False
     SKIP_INVENTORY = False
-    DEFAULT_PRESET = True
+    #DEFAULT_PRESET = True
     DEFAULT_PRESET_NO = 1
-
 
     if len(sys.argv) < 2:
         help()
@@ -645,6 +790,8 @@ def main():
     for appid in sys.argv[1:]:
         if f'{appid}'.isnumeric():
             appids.add(int(appid))
+        elif f'{appid}'.lower() == '-find':
+            SEARCH_APPID = True
         elif f'{appid}'.lower() == '-scr':
             DOWNLOAD_SCREENSHOTS = True
         elif f'{appid}'.lower() == '-vids_low':
@@ -669,7 +816,7 @@ def main():
             CLEANUP_BEFORE_GENERATING = True
         elif f'{appid}'.lower() == '-anon':
             ANON_LOGIN = True
-        elif f'{appid}'.lower() == '-token':
+        elif f'{appid}'.lower() == '-tok':
             SAVE_REFRESH_TOKEN = True
         elif f'{appid}'.lower() == '-rel_out':
             RELATIVE_DIR = True
@@ -684,31 +831,123 @@ def main():
         elif f'{appid}'.lower() == '-skip_inv':
             SKIP_INVENTORY = True
         elif f'{appid}'.lower() == '-def1':
-            DEFAULT_PRESET = True
+            #DEFAULT_PRESET = True
             DEFAULT_PRESET_NO = 1
         elif f'{appid}'.lower() == '-def2':
-            DEFAULT_PRESET = True
+            #DEFAULT_PRESET = True
             DEFAULT_PRESET_NO = 2
         elif f'{appid}'.lower() == '-def3':
-            DEFAULT_PRESET = True
+            #DEFAULT_PRESET = True
             DEFAULT_PRESET_NO = 3
         elif f'{appid}'.lower() == '-def4':
-            DEFAULT_PRESET = True
+            #DEFAULT_PRESET = True
             DEFAULT_PRESET_NO = 4
         elif f'{appid}'.lower() == '-def5':
-            DEFAULT_PRESET = True
+            #DEFAULT_PRESET = True
             DEFAULT_PRESET_NO = 5
         else:
             print(f'___ Invalid switch: {appid}')
             help()
             sys.exit(1)
-    
+
+    current_working_dir = os.getcwd() # for some reason searching for appid works correctly with os.getcwd(), but not with get_exe_dir(True) or get_exe_dir(False)
+
+    if SEARCH_APPID == True:
+        search_dir = os.path.basename(current_working_dir)
+        search_dir_repl = search_dir.replace('®', '').replace('™', '')
+        search_dir_repl = search_dir_repl.replace('"', '').replace("'", "").replace('`', '')
+        search_dir_repl = search_dir_repl.replace('...', '.').replace('..', '.').replace('.', '')
+        search_dir_repl = search_dir_repl.replace('...', '.').replace('..', '.').replace('.', '')
+        search_dir_repl = search_dir_repl.replace('(', ' ').replace(')', ' ').replace('[', ' ').replace(']', ' ')
+        search_dir_repl = search_dir_repl.replace('   ', ' ').replace('  ', ' ').replace(' ', '+')
+        search_dir_repl = search_dir_repl.replace('___', '_').replace('__', '_').replace('_', '+')
+
+        if os.path.exists(os.path.join(os.getcwd(), "_steam_appid_")): 
+            shutil.rmtree(os.path.join(os.getcwd(), "_steam_appid_"))
+
+        if os.path.exists(os.path.join(os.getcwd(), "google_result_1.json")):
+            os.remove(os.path.join(os.getcwd(), "google_result_1.json"))
+
+        if os.path.exists(os.path.join(os.getcwd(), "google_result_all.json")):
+            os.remove(os.path.join(os.getcwd(), "google_result_all.json"))
+
+        if os.path.exists(os.path.join(os.getcwd(), "google_result_parsed.json")):
+            os.remove(os.path.join(os.getcwd(), "google_result_parsed.json"))
+        
+        SearchAppId(search_dir + '+steamdb+depots', 'en', 'uk', 0, 25)
+        
+        with open(os.path.join(os.getcwd(), "google_result_all.json"), encoding='utf-8') as google_json:
+            results_json = json.load(google_json)
+
+        results_data_parsed = []
+        found_game_appid = 0
+        found_game_appname = ""
+
+        if not os.path.exists(os.path.join(os.getcwd(), "_steam_appid_")):
+            os.makedirs(os.path.join(os.getcwd(), "_steam_appid_"))
+            time.sleep(0.050)
+
+        for item in results_json:
+            search_title = item["title"]
+            #search_snippet = searchresult["snippet"]
+            search_link = item["link"]
+
+            if ("Depots" in search_title) and ("steamdb.info/app" in search_link):
+                # json data for each search page 
+                results_data_parsed.append({
+                    "title": search_title,
+                    #"snippet": snippet, # not needed
+                    "link": search_link
+                    })
+                
+                game_appid = search_link.replace("https://steamdb.info/app/", "").replace("/config/", "").replace("/depots/", "")
+                game_title = search_title.replace(" Config", "").replace(" Depots", "")
+                game_title = game_title.replace("Config - ", "").replace("Depots - ", "")
+                game_title = game_title.replace(" - SteamDB", "").replace(" · SteamDB", "").replace("SteamDB - ", "").replace("SteamDB · ", "")
+                game_title = game_title.replace(f" (App {game_appid})", "").replace(f" [App {game_appid}]", "")
+
+                if found_game_appid == 0:
+                    found_game_appid = game_appid
+                    found_game_appname = game_title
+
+                    print(f'\n')
+                    print(f'game appid: {found_game_appid}')
+                    print(f'game name: {found_game_appname}')
+                    print(f'\n')
+
+                    with open(os.path.join(os.getcwd(), "_steam_appid_", "game_appid.txt"), "wt", encoding='utf-8') as f_appid:
+                        f_appid.write(found_game_appid)
+
+                    with open(os.path.join(os.getcwd(), "_steam_appid_", "game_name.txt"), "wt", encoding='utf-8') as f_appname:
+                        f_appname.write(found_game_appname)
+
+                download_app_header(os.path.join(os.getcwd(), "_steam_appid_"), game_appid)
+
+                with open(os.path.join(os.getcwd(), "_steam_appid_", f"{game_appid}.txt"), "wt", encoding='utf-8') as f_txt:
+                        f_txt.write(game_title)
+
+        with open(os.path.join(os.getcwd(), f"google_result_parsed.json"), "wt", encoding='utf-8') as f_json:
+            json.dump(results_data_parsed, f_json, ensure_ascii=False, indent=2)
+
+        sys.exit(1)
+
+    steam_appid_found_txt = os.path.join(os.getcwd(), "_steam_appid_.txt")
+
+    if os.path.exists(steam_appid_found_txt):
+        with open(steam_appid_found_txt, "r", encoding="utf-8") as f:
+            steam_appid_found = f.readline()
+            if f'{steam_appid_found}'.isnumeric():
+                appids.add(int(steam_appid_found))
+
     if not appids:
         print(f'___ No app id was provided')
         help()
         sys.exit(1)
-
+    
     client = SteamClient()
+
+    USERNAME = "" 
+    PASSWORD = ""
 
     if ANON_LOGIN:
         result = client.anonymous_login()
@@ -719,7 +958,7 @@ def main():
             trials -= 1
     else:
         # first read the 'my_login.txt' file
-        my_login_file = os.path.join(get_exe_dir(RELATIVE_DIR), "my_login.txt")
+        my_login_file = os.path.join(get_exe_dir(False), "my_login.txt") # replaced 'RELATIVE_DIR with 'False' to always look for or create my_login.txt in generate_emu_config folder
         if not ANON_LOGIN and os.path.isfile(my_login_file):
             filedata = ['']
             with open(my_login_file, "r", encoding="utf-8") as f:
@@ -739,8 +978,8 @@ def main():
         if env_password:
             PASSWORD = env_password
 
-        # the file to save/load credentials
-        REFRESH_TOKENS = os.path.join(get_exe_dir(RELATIVE_DIR), "refresh_tokens.json")
+        # the file to save/load credentials (username and token)
+        REFRESH_TOKENS = os.path.join(get_exe_dir(False), "refresh_tokens.json") # replaced 'RELATIVE_DIR with 'False' to always look for or create refresh_tokens.json in generate_emu_config folder
         refresh_tokens = {}
         if os.path.isfile(REFRESH_TOKENS):
             with open(REFRESH_TOKENS) as f:
@@ -750,24 +989,32 @@ def main():
                 except:
                     pass
 
-        # select username from credentials if not already persent
-        if not USERNAME:
+        # select username and token from credentials if not already present
+        if USERNAME == '':
             users = {i: user for i, user in enumerate(refresh_tokens, 1)}
             if len(users) != 0:
-                for i, user in users.items():
-                    print(f"{i}: {user}")
-                while True:
-                    try:
-                        num=int(input("Choose an account to login (0 for add account): "))
-                    except ValueError:
-                        print('Please type a number'); continue
-                    break
-                USERNAME = users.get(num)
+                if len(users) > 1: # only select username and token if multiple are available
+                    for i, user in users.items():
+                        print(f"{i}: {user}")
+                    while True:
+                        try:
+                            num=int(input(f"Select an account to login to (1 to {len(users)}) or type 0 to add an account: "))
+                        except ValueError:
+                            print(f'Invalid selection. Please type 0 or a number between from 1 to {len(users)}!')
+                            continue
+                        break
+                    USERNAME = users.get(num)
+                else: # otherwise just use the only existing username and token
+                    USERNAME = users.get(1)
 
-        # still no username? ask user
-        if not USERNAME:
-            USERNAME = input("Steam user: ")
+        # ask user if still no username is found either in my_login.txt or refresh_tokens.json
+        while True:
+            if USERNAME == '':
+                USERNAME = input("Enter Steam username: ")
+            else:
+                break
 
+        steam_try_again = True
         REFRESH_TOKEN = refresh_tokens.get(USERNAME)
 
         webauth, result = WebAuth(), None
@@ -776,26 +1023,18 @@ def main():
             EResult.InvalidPassword, None):
 
             if result in (EResult.TryAnotherCM, EResult.ServiceUnavailable):
-                if prompt_for_unavailable and result == EResult.ServiceUnavailable:
+                if steam_try_again and result == EResult.ServiceUnavailable:
                     while True:
-                        answer = input("Steam is down. Keep retrying? [y/n]: ").lower()
-                        if answer in 'yn': break
-
-                    prompt_for_unavailable = False
-                    if answer == 'n': break
-
+                        answer = input("Steam is down. Try again? [y/n]: ").lower()
+                        if answer in 'yn': 
+                            break
+                    steam_try_again = False
+                    if answer == 'n': 
+                        break
                 client.reconnect(maxdelay=15)
-            elif result == EResult.InvalidPassword:
-                print("invalid password or refresh_token,")
-                print(f"correct the password or/and delete '{REFRESH_TOKENS}' and try again.")
-                exit(1)
 
             if not REFRESH_TOKEN:
-                try:
-                    webauth.cli_login(USERNAME, PASSWORD)
-                except Exception as e:
-                    print(f'Unknown exception: {e}, maybe some account info is wrong?')
-                    exit(1)
+                webauth.cli_login(USERNAME, PASSWORD)
                 USERNAME, PASSWORD = webauth.username, webauth.password
                 REFRESH_TOKEN = webauth.refresh_token
 
@@ -804,7 +1043,18 @@ def main():
         if SAVE_REFRESH_TOKEN:
             with open(REFRESH_TOKENS, 'w') as f:
                 refresh_tokens.update({USERNAME: REFRESH_TOKEN})
-                json.dump(refresh_tokens, f, indent=4)
+                json.dump(refresh_tokens,f,indent=4)
+    
+    '''
+        if SAVE_REFRESH_TOKEN:
+            with open(REFRESH_TOKENS, 'w') as f:
+                refresh_tokens.update({USERNAME: REFRESH_TOKEN})
+                refresh_tokens_str = json.dumps(refresh_tokens,indent=4)
+                refresh_tokens_byt = refresh_tokens_str.encode('utf-8')
+                refresh_tokens_byt_b64 = base64.b64encode(refresh_tokens_byt)
+                refresh_tokens_str_b64 = refresh_tokens_byt_b64.decode('utf-8')
+                f.write(refresh_tokens_str_b64)
+    '''
 
     # generate 'top_owners_ids.txt' if 'top_owners_ids.html' exists
     top_own.top_owners()
@@ -1467,19 +1717,27 @@ def _tracebackPrint(_errorValue):
 
 if __name__ == "__main__":
     try:
-        main()
+        if isConnected():
+            main()
+        else:
+            print(" ")
+            print("You can't use this program without an Internet connection.")
+            print(" ")
     except Exception as e:
         if 'client_id' in e.args:
+            print(" ")
             print("Wrong Steam username and / or password. Please try again!")
             try:
                 main()
             except Exception as e:
                 if 'client_id' in e.args:
+                    print(" ")
                     print("Wrong Steam username and / or password. Please try again!")
                     try:
                         main()
                     except Exception as e:
                         if 'client_id' in e.args:
+                            print(" ")
                             print("Wrong Steam username and / or password. Please try again!")
                             sys.exit(1)
                         else:

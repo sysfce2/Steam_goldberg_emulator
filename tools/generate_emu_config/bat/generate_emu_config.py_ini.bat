@@ -1,5 +1,5 @@
-@echo off 
-pip install -U git+https://github.com/Sak32009/steam_py_fork.git@fix-cm-servers
+@echo off
+pip install -U steam[client] git+https://github.com/alex47exe/steam_fork.git
 pip install pyinstaller 
 pip install requests
 pip install certifi

@@ -52,6 +52,11 @@ call "%SIGNER_TOOL%" "%OUT_DIR%\parse_achievements_schema\parse_achievements_sch
 call ".\bat\_pack_api.bat"
 call ".\bat\_pack_exe.bat"
 
+mkdir "%out_dir%\generate_emu_config\appid_finder\appid_finder\au3"
+xcopy /s /y /e "appid_finder\appid_finder\au3" "%out_dir%\generate_emu_config\appid_finder\appid_finder\au3\"
+copy /y "appid_finder\appid_finder\appid_finder.au3" "%out_dir%\generate_emu_config\appid_finder\appid_finder\"
+copy /y "appid_finder\appid_finder\appid_finder.a3x" "%out_dir%\generate_emu_config\appid_finder\appid_finder\"
+
 xcopy /s /y /e "post_build" "%out_dir%\generate_emu_config\"
 xcopy /s /y /e "_DEFAULT" "%out_dir%\generate_emu_config\_DEFAULT\"
 
@@ -79,3 +84,4 @@ goto :end_script
 
   endlocal
   exit /b %LAST_ERR_CODE%
+  
