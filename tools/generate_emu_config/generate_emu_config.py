@@ -13,8 +13,7 @@ from bs4 import BeautifulSoup
 import os
 import re
 import sys
-import base64
-import json
+import json, lxml
 import pathlib
 import platform
 import queue
