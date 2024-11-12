@@ -64,10 +64,17 @@ While 1
 
         Case $Button
 			If GUICtrlRead($Input) == "" Then
-				$hFileOpen = FileOpen(@ScriptDir & "\_steam_appid_.txt", $FO_OVERWRITE)
+				$hFileOpen = FileOpen(@ScriptDir & "\_STEAM_APP_.txt", $FO_OVERWRITE)
 				FileWriteLine($hFileOpen, $game_appid)
 				FileWriteLine($hFileOpen, $game_name)
 				FileClose($hFileOpen)
+				Run(@ScriptDir & "\generate_emu_config.bat")
+				Exit
+			Else
+				$hFileOpen = FileOpen(@ScriptDir & "\_STEAM_DIR_.txt", $FO_OVERWRITE)
+				FileWriteLine($hFileOpen, GUICtrlRead($Input))
+				FileClose($hFileOpen)
+				Run(@ScriptDir & "\generate_emu_config-appid_finder.bat")
 				Exit
 			EndIf
 

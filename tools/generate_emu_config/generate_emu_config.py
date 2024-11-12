@@ -9,16 +9,16 @@ from steam.enums.common import EResult
 from steam.enums.emsg import EMsg
 from steam.core.msg import MsgProto
 from configobj import ConfigObj
-from bs4 import BeautifulSoup
+from search_engines_scraper.search_engines.engines import Bing
+from search_engines_scraper.search_engines.engines import Google
 import os
 import re
 import sys
-import json, lxml
+import json
 import pathlib
 import platform
 import queue
 import requests
-import random
 import shutil
 import socket
 import time
@@ -634,92 +634,72 @@ def ReplaceStringInFile(f_file, search_string, old_string, new_string):
                 f_handle.write(f_string)
                 f_handle.close()
 
-# https://stackoverflow.com/a/75606545
-def SearchAppId(search_str, search_language, search_country, number_pages, number_results):
-    # https://docs.python-requests.org/en/master/user/quickstart/#passing-parameters-in-urls
-    #query = input("What would you like to search for? ") # disabled, we're passing it as first argument to this function
-    params = {
-        "q": search_str,          # query example
-        "hl": search_language,          # language
-        "gl": search_country,          # country of the search, UK -> United Kingdom
-        "start": number_pages,          # number page by default up to 0
-        "num": number_results          # parameter defines the maximum number of results to return.
-    }
+def SearchAppId_Google(search_folder, search_str, number_pages):
+    results_google = Google().search(search_str, number_pages)
 
-    # https://docs.python-requests.org/en/master/user/quickstart/#custom-headers
-    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/602.2.14 (KHTML, like Gecko) Version/10.0.1 Safari/602.2.14'
-    
-    user_agent_list = [
-    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-    ]
-    
-    #Set the headers
-    headers = {"Accept-Language": "en-US,en;q=0.9", 
-    'User-Agent': random.choice(user_agent_list),
-    'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    "Accept-Encoding": "gzip, deflate, br"
-    }
+    results_number = 0
+    results_data = []
 
-    page_limit = 1          # page limit if you don't need to fetch everything
-    page_num = 0
+    results_google_titles = results_google.titles()
+    results_google_snippets = results_google.text()
+    results_google_links = results_google.links()
+    results_google_hosts = results_google.hosts()
 
-    data_all = []
-    data_page = []
+    results_number = len(results_google_links)
 
-    while True:
-        page_num += 1
+    if results_number >= 1:
+        for result in range(results_number):
+            results_data.append({
+                "title": results_google_titles[result],
+                #"snippet": results_google_snippets[result], # not needed
+                "link": results_google_links[result],
+                #"host": results_google_hosts[result], # not needed
+                })
             
-        html = requests.get("https://www.google.com/search", params=params, headers=headers, timeout=30)
-        soup = BeautifulSoup(html.text, 'lxml')
-        
-        for result in soup.select(".tF2Cxc"):
-            title = result.select_one(".DKV0Md").text
-            try:
-                snippet = result.select_one(".Hdw6tb span").text # was only returning null before, now it's fixed
-            except:
-                snippet = None
-            links = result.select_one(".yuRUbf a")["href"]
+        print(f'\n')
+        print(f'[ ] __ Found results for: {search_folder}')
+        print(f'\n')
+            
+        print(json.dumps(results_data, indent=2, ensure_ascii=False))
+            
+        with open(os.path.join(os.getcwd(), f"google_results.json"), "wt", encoding='utf-8') as f:
+            json.dump(results_data, f, ensure_ascii=False, indent=2)
+    else:
+        SearchAppId_Bing(search_str, number_pages)
 
-            # json data for all search pages
-            data_all.append({
-            "title": title,
-            #"snippet": snippet, # not needed
-            "link": links
-            })
-        
-            # json data for each search page 
-            data_page.append({
-            "title": title,
-            #"snippet": snippet, # not needed
-            "link": links
-            })
+def SearchAppId_Bing(search_folder, search_str, number_pages):
+    results_bing = Bing().search(search_str, number_pages)
 
-        print(f"page: {page_num}")
-        print(json.dumps(data_page, indent=2, ensure_ascii=False))
-        
-        with open(os.path.join(os.getcwd(), f"google_result_{page_num}.json"), "wt", encoding='utf-8') as f:
-            json.dump(data_page, f, ensure_ascii=False, indent=2)
-        
-        data_page = []
-        
-        # stop loop due to page limit condition
-        if page_num == page_limit:
-            break
-        # stop the loop on the absence of the next page
-        if soup.select_one(".d6cvqb a[id=pnnext]"):
-            params["start"] += 10
-        else:
-            break
+    results_number = 0
+    results_data = []
 
-        sleep_delay_list = [60, 110, 80, 90, 130, 70, 120, 100]
+    results_bing_titles = results_bing.titles()
+    results_bing_snippets = results_bing.text()
+    results_bing_links = results_bing.links()
+    results_bing_hosts = results_bing.hosts()
 
-        time.sleep(random.choice(sleep_delay_list)/1000)
+    results_number = len(results_bing_links)
 
-    with open(os.path.join(os.getcwd(), f"google_result_all.json"), "wt", encoding='utf-8') as f:
-        json.dump(data_all, f, ensure_ascii=False, indent=2)
-        
-
-
+    if results_number >= 1:
+        for result in results_bing_links:
+            results_data.append({
+                "title": results_bing_titles[result],
+                #"snippet": results_bing_snippets[result], # not needed
+                "link": results_bing_links[result],
+                #"host": results_bing_hosts[result], # not needed
+                })
+            
+        print(f'\n')
+        print(f'[ ] __ Found results for: {search_folder}')
+        print(f'\n')
+            
+        print(json.dumps(results_data, indent=2, ensure_ascii=False))
+            
+        with open(os.path.join(os.getcwd(), f"bing_results.json"), "wt", encoding='utf-8') as f:
+            json.dump(results_data, f, ensure_ascii=False, indent=2)
+    else:
+        SearchAppId_Google(search_str, number_pages)
+    
 def help():
     exe_name = os.path.basename(sys.argv[0])
     print(f"\nUsage: {exe_name} [Switches] appid appid appid ... ")
@@ -850,33 +830,57 @@ def main():
             sys.exit(1)
 
     current_working_dir = os.getcwd() # for some reason searching for appid works correctly with os.getcwd(), but not with get_exe_dir(True) or get_exe_dir(False)
+    _steam_dir_ = os.path.join(os.getcwd(), "_STEAM_DIR_.txt") # previosly generated on 'NO, RETRY' by external AutoIt3 interface for 'appid_finder', used to override the folder name in 'appid_finder' mode
 
     if SEARCH_APPID == True:
-        search_dir = os.path.basename(current_working_dir)
+        if os.path.exists(_steam_dir_):
+            filedata = ['']
+            with open(_steam_dir_, "r", encoding="utf-8") as f:
+                filedata = f.readlines()
+            filedata = list(map(lambda s: s.replace("\r", "").replace("\n", ""), filedata))
+            filedata = [l for l in filedata if l]
+            if len(filedata) == 1:
+                search_dir = filedata[0]
+            else: # ignore additional lines if present
+                search_dir = filedata[0]
+            os.remove(_steam_dir_)
+        else: 
+            search_dir = os.path.basename(current_working_dir)
+        
         search_dir_repl = search_dir.replace('®', '').replace('™', '')
         search_dir_repl = search_dir_repl.replace('"', '').replace("'", "").replace('`', '')
         search_dir_repl = search_dir_repl.replace('...', '.').replace('..', '.').replace('.', '')
         search_dir_repl = search_dir_repl.replace('...', '.').replace('..', '.').replace('.', '')
         search_dir_repl = search_dir_repl.replace('(', ' ').replace(')', ' ').replace('[', ' ').replace(']', ' ')
-        search_dir_repl = search_dir_repl.replace('   ', ' ').replace('  ', ' ').replace(' ', '+')
-        search_dir_repl = search_dir_repl.replace('___', '_').replace('__', '_').replace('_', '+')
+        search_dir_repl = search_dir_repl.replace('   ', ' ').replace('  ', ' ')
+        search_dir_repl = search_dir_repl.replace('___', '_').replace('__', '_')
 
         if os.path.exists(os.path.join(os.getcwd(), "_steam_appid_")): 
             shutil.rmtree(os.path.join(os.getcwd(), "_steam_appid_"))
 
-        if os.path.exists(os.path.join(os.getcwd(), "google_result_1.json")):
-            os.remove(os.path.join(os.getcwd(), "google_result_1.json"))
+        if os.path.exists(os.path.join(os.getcwd(), "google_results.json")):
+            os.remove(os.path.join(os.getcwd(), "google_results.json"))
+        if os.path.exists(os.path.join(os.getcwd(), "google_results_parsed.json")):
+            os.remove(os.path.join(os.getcwd(), "google_results_parsed.json"))
 
-        if os.path.exists(os.path.join(os.getcwd(), "google_result_all.json")):
-            os.remove(os.path.join(os.getcwd(), "google_result_all.json"))
-
-        if os.path.exists(os.path.join(os.getcwd(), "google_result_parsed.json")):
-            os.remove(os.path.join(os.getcwd(), "google_result_parsed.json"))
+        if os.path.exists(os.path.join(os.getcwd(), "bing_results.json")):
+            os.remove(os.path.join(os.getcwd(), "bing_results.json"))
+        if os.path.exists(os.path.join(os.getcwd(), "bing_results_parsed.json")):
+            os.remove(os.path.join(os.getcwd(), "bing_results_parsed.json"))
         
-        SearchAppId(search_dir + '+steamdb+depots', 'en', 'uk', 0, 25)
+        SearchAppId_Google(search_dir, search_dir + ' steamdb depots', 1)
         
-        with open(os.path.join(os.getcwd(), "google_result_all.json"), encoding='utf-8') as google_json:
-            results_json = json.load(google_json)
+        if os.path.exists(os.path.join(os.getcwd(), "google_results.json")):
+            with open(os.path.join(os.getcwd(), "google_results.json"), encoding='utf-8') as google_json:
+                results_json = json.load(google_json)
+        elif os.path.exists(os.path.join(os.getcwd(), "bing_results.json")):
+            with open(os.path.join(os.getcwd(), "bing_results.json"), encoding='utf-8') as bing_json:
+                results_json = json.load(bing_json)
+        else:
+            print(f'\n')
+            print(f'[X] __ No results found for: {search_dir}')
+            print(f'\n')
+            exit()
 
         results_data_parsed = []
         found_game_appid = 0
@@ -925,18 +929,34 @@ def main():
                 with open(os.path.join(os.getcwd(), "_steam_appid_", f"{game_appid}.txt"), "wt", encoding='utf-8') as f_txt:
                         f_txt.write(game_title)
 
-        with open(os.path.join(os.getcwd(), f"google_result_parsed.json"), "wt", encoding='utf-8') as f_json:
+        with open(os.path.join(os.getcwd(), f"google_results_parsed.json"), "wt", encoding='utf-8') as f_json:
             json.dump(results_data_parsed, f_json, ensure_ascii=False, indent=2)
 
         sys.exit(1)
 
-    steam_appid_found_txt = os.path.join(os.getcwd(), "_steam_appid_.txt")
+    _steam_app_ = os.path.join(os.getcwd(), "_STEAM_APP_.txt") # previosly generated on 'YES, CONTINUE' by extrenal AutoIt3 interface for 'appid_finder', used to read the appid to generate complete emu config for
 
-    if os.path.exists(steam_appid_found_txt):
-        with open(steam_appid_found_txt, "r", encoding="utf-8") as f:
-            steam_appid_found = f.readline()
+    if os.path.exists(_steam_app_):
+        filedata = ['']
+        with open(_steam_app_, "r", encoding="utf-8") as f:
+            filedata = f.readlines()
+        filedata = list(map(lambda s: s.replace("\r", "").replace("\n", ""), filedata))
+        filedata = [l for l in filedata if l]
+        if len(filedata) == 1:
+            steam_appid_found = filedata[0]
             if f'{steam_appid_found}'.isnumeric():
                 appids.add(int(steam_appid_found))
+        elif len(filedata) == 2:
+            steam_appid_found = filedata[0]
+            if f'{steam_appid_found}'.isnumeric():
+                appids.add(int(steam_appid_found))
+            steam_appname_found = filedata[1]
+        else: # ignore additional lines if present
+            steam_appid_found = filedata[0]
+            if f'{steam_appid_found}'.isnumeric():
+                appids.add(int(steam_appid_found))
+            steam_appname_found = filedata[1]
+        os.remove(_steam_app_)
 
     if not appids:
         print(f'___ No app id was provided')
@@ -1748,4 +1768,3 @@ if __name__ == "__main__":
         else:
             _tracebackPrint(e)
             sys.exit(1)
-
