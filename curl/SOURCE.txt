@@ -2,7 +2,7 @@
 
 https://github.com/curl/curl
 
-VERSION: https://github.com/curl/curl/releases/tag/curl-8_9_1
+VERSION: https://github.com/curl/curl/releases/tag/curl-8_11_0
 
 #### LICENSE
 
