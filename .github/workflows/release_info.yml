@@ -78,7 +78,7 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases"
+        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"}
         $sortedReleases = $releases | Sort-Object {[datetime]::Parse($_.published_at)} -Descending
         $owner = '${{ github.repository_owner }}'
         $repo = '${{ github.event.repository.name }}'
