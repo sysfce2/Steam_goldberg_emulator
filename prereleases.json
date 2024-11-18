@@ -3,7 +3,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_release_info",
-    "commit": "Unknown",
+    "commit": "1958914eedb41793b5bfbb4bc6cada48f42018ec",
     "details": {
       "name": "Test the new integrated prerelease_info.json",
       "tag": "test_prerelease_info",
@@ -16,7 +16,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_release_info",
-    "commit": "Unknown",
+    "commit": "42dbc195eb03cf9a6747b882638cba9773a753bb",
     "details": {
       "name": "Test the new integrated release_info.json",
       "tag": "test_release_info",
