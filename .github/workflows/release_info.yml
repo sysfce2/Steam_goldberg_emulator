@@ -1,0 +1,130 @@
+name: Create release / prerelease info
+
+on:
+  release:
+    types: [published, prereleased]
+
+jobs:
+  create-release-info:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get branch name, commit SHA, tag name, release name, release date, and release time
+        id: get_branch_commit
+        shell: pwsh
+        run: |
+          $commit_sha = $(git rev-list -n 1 $env:GITHUB_REF)
+          $branch_name = $(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)
+          $release_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/releases/tags/${{ github.event.release.tag_name }}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          $release_name = $release_info.name
+          $published_at = $release_info.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $release_date = $published_at.Split("T")[0]
+          $release_time = $published_at.Split("T")[1].Split("Z")[0]
+          echo "BRANCH_NAME=$branch_name" >> $env:GITHUB_ENV
+          echo "COMMIT_SHA=$commit_sha" >> $env:GITHUB_ENV
+          echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $env:GITHUB_ENV
+          echo "RELEASE_NAME=$release_name" >> $env:GITHUB_ENV
+          echo "RELEASE_DATE=$release_date" >> $env:GITHUB_ENV
+          echo "RELEASE_TIME=$release_time" >> $env:GITHUB_ENV
+          echo "IS_PRERELEASE=${{ github.event.release.prerelease }}" >> $env:GITHUB_ENV
+
+      - name: Verify and display branch name, commit SHA, tag name, release name, release date, and release time
+        shell: pwsh
+        run: |
+          if ($env:BRANCH_NAME -eq "") {
+            Write-Host "Branch name is empty. Exiting..."
+            exit 1
+          }
+          Write-Host "Branch name is: $env:BRANCH_NAME"
+          Write-Host "Commit SHA is: $env:COMMIT_SHA"
+          Write-Host "Tag Name is: $env:TAG_NAME"
+          Write-Host "Release Name is: $env:RELEASE_NAME"
+          Write-Host "Release Date is: $env:RELEASE_DATE"
+          Write-Host "Release Time is: $env:RELEASE_TIME"
+          Write-Host "Is Prerelease: $env:IS_PRERELEASE"
+
+      - name: Checkout and set branch writable
+        shell: pwsh
+        run: |
+          git checkout $env:BRANCH_NAME
+
+      - name: Create release info JSON files
+        shell: pwsh
+        run: |
+          $release_info = @{
+            name = "$env:RELEASE_NAME"
+            tag = "$env:TAG_NAME"
+            branch = "$env:BRANCH_NAME"
+            commit = "$env:COMMIT_SHA"
+            date = "$env:RELEASE_DATE"
+            time = "$env:RELEASE_TIME"
+          }
+          if ($env:IS_PRERELEASE -eq "true") {
+            $release_info | ConvertTo-Json -Depth 4 | Out-File -FilePath "$env:GITHUB_WORKSPACE/latest_prerelease.json" -Encoding utf8
+          } else {
+            $release_info | ConvertTo-Json -Depth 4 | Out-File -FilePath "$env:GITHUB_WORKSPACE/latest_release.json" -Encoding utf8
+          }
+
+      - name: Reorder JSON entries
+        shell: pwsh
+        run: |
+          function Reorder-Json {
+              param (
+                  [Parameter(Mandatory=$true)]
+                  [string]$FilePath
+              )
+              $json = Get-Content -Raw -Path $FilePath | ConvertFrom-Json
+              $orderedJson = @()
+              foreach ($item in $json) {
+                  $orderedItem = [ordered]@{
+                      name = $item.name
+                      tag = $item.tag
+                      branch = $item.branch
+                      commit = $item.commit
+                      date = $item.date
+                      time = $item.time
+                  }
+                  $orderedJson += $orderedItem
+              }
+              $orderedJson | ConvertTo-Json -Depth 4 | Out-File -FilePath $FilePath -Encoding utf8
+          }
+          if (Test-Path -Path "$env:GITHUB_WORKSPACE/latest_release.json") {
+              Reorder-Json -FilePath "$env:GITHUB_WORKSPACE/latest_release.json"
+          }
+          if (Test-Path -Path "$env:GITHUB_WORKSPACE/latest_prerelease.json") {
+              Reorder-Json -FilePath "$env:GITHUB_WORKSPACE/latest_prerelease.json"
+          }
+
+      - name: Configure git
+        run: |
+          git config --global user.name '${{ github.actor }}'
+          git config --global user.email '${{ github.actor }}@users.noreply.github.com'
+
+      - name: Add and commit JSON files
+        shell: pwsh
+        run: |
+          $files_to_commit = ""
+          if (Test-Path -Path "$env:GITHUB_WORKSPACE/latest_release.json") {
+            git add latest_release.json
+            $files_to_commit += "latest_release.json "
+          }
+          if (Test-Path -Path "$env:GITHUB_WORKSPACE/latest_prerelease.json") {
+            git add latest_prerelease.json
+            $files_to_commit += "latest_prerelease.json "
+          }
+          if ($files_to_commit -eq "") {
+            Write-Host "No JSON files to commit"
+          } else {
+            git commit --amend --no-edit
+            git push -f origin $env:BRANCH_NAME
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
