@@ -23,58 +23,73 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        $commit_sha = $(git rev-list -n 1 $env:GITHUB_REF)
-        $branch_name = $(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)
-        $release_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/releases/tags/${{ github.event.release.tag_name }}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-        $release_name = $release_info.name
-        $published_at = $release_info.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ")
-        $release_date = $published_at.Split("T")[0]
-        $release_time = $published_at.Split("T")[1].Split("Z")[0]
-        echo "BRANCH_NAME=$branch_name" >> $env:GITHUB_ENV
-        echo "COMMIT_SHA=$commit_sha" >> $env:GITHUB_ENV
-        echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $env:GITHUB_ENV
-        echo "RELEASE_NAME=$release_name" >> $env:GITHUB_ENV
-        echo "RELEASE_DATE=$release_date" >> $env:GITHUB_ENV
-        echo "RELEASE_TIME=$release_time" >> $env:GITHUB_ENV
+        try {
+          $commit_sha = $(git rev-list -n 1 $env:GITHUB_REF)
+          $branch_name = $(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)
+          $release_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/releases/tags/${{ github.event.release.tag_name }}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          $release_name = $release_info.name
+          $published_at = $release_info.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $release_date = $published_at.Split("T")[0]
+          $release_time = $published_at.Split("T")[1].Split("Z")[0]
+          echo "BRANCH_NAME=$branch_name" >> $env:GITHUB_ENV
+          echo "COMMIT_SHA=$commit_sha" >> $env:GITHUB_ENV
+          echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $env:GITHUB_ENV
+          echo "RELEASE_NAME=$release_name" >> $env:GITHUB_ENV
+          echo "RELEASE_DATE=$release_date" >> $env:GITHUB_ENV
+          echo "RELEASE_TIME=$release_time" >> $env:GITHUB_ENV
+        } catch {
+          Write-Error "Failed to get branch, commit, tag, or release information: $_"
+          throw
+        }
 
     - name: Verify and display branch name, commit SHA, tag name, release name, release date, and release time
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        if ($env:BRANCH_NAME -eq "") {
-          Write-Host "Branch name is empty. Exiting..."
-          exit 1
+        try {
+          if ($env:BRANCH_NAME -eq "") {
+            Write-Error "Branch name is empty. Exiting..."
+            exit 1
+          }
+          Write-Host "Branch name is: $env:BRANCH_NAME"
+          Write-Host "Commit SHA is: $env:COMMIT_SHA"
+          Write-Host "Tag Name is: $env:TAG_NAME"
+          Write-Host "Release Name is: $env:RELEASE_NAME"
+          Write-Host "Release Date is: $env:RELEASE_DATE"
+          Write-Host "Release Time is: $env:RELEASE_TIME"
+        } catch {
+          Write-Error "Verification failed: $_"
+          throw
         }
-        Write-Host "Branch name is: $env:BRANCH_NAME"
-        Write-Host "Commit SHA is: $env:COMMIT_SHA"
-        Write-Host "Tag Name is: $env:TAG_NAME"
-        Write-Host "Release Name is: $env:RELEASE_NAME"
-        Write-Host "Release Date is: $env:RELEASE_DATE"
-        Write-Host "Release Time is: $env:RELEASE_TIME"
 
-    - name: Checkout release branch and commit
+    - name: Checkout release branch
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        git fetch origin
-        git checkout $env:BRANCH_NAME
-        git checkout $env:COMMIT_SHA
-        git branch -D temp-branch || true
-        git checkout -b temp-branch
+        try {
+          git fetch origin
+          git checkout $env:BRANCH_NAME
+        } catch {
+          Write-Error "Failed to checkout branch: $_"
+          throw
+        }
       shell: pwsh
 
     - name: Ensure branch is writable
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        $branchStatus = git status
-        if ($branchStatus -match 'Your branch is up to date with') {
-          echo "Branch $env:BRANCH_NAME is writable."
-        } else {
-          Write-Host "Branch $env:BRANCH_NAME is not writable, attempting to make it writable..."
-          git branch -D $env:BRANCH_NAME
-          git checkout -b $env:BRANCH_NAME $env:COMMIT_SHA
+        try {
+          $branchStatus = git status
+          if ($branchStatus -match 'Your branch is up to date with') {
+            echo "Branch $env:BRANCH_NAME is writable."
+          } else {
+            throw "Branch $env:BRANCH_NAME is not writable."
+          }
+        } catch {
+          Write-Error "Branch writable check failed: $_"
+          throw
         }
       shell: pwsh
 
@@ -82,72 +97,77 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases"
-        $sortedReleases = $releases | Sort-Object {[datetime]::Parse($_.published_at)} -Descending
-        $owner = '${{ github.repository_owner }}'
-        $repo = '${{ github.event.repository.name }}'
-        $releaseObjs = $sortedReleases | Where-Object { -not $_.prerelease } | ForEach-Object {
-          if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
-            $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $commit_info.sha
-          } else {
-            # Fetch commit SHA using the tag name and branch name
-            $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $tag_commit_info.sha
-          }
-          $downloads = $_.assets | ForEach-Object {
+        try {
+          $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases"
+          $sortedReleases = $releases | Sort-Object {[datetime]::Parse($_.published_at)} -Descending
+          $owner = '${{ github.repository_owner }}'
+          $repo = '${{ github.event.repository.name }}'
+          $releaseObjs = $sortedReleases | Where-Object { -not $_.prerelease } | ForEach-Object {
+            if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
+              $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+              $commit_sha = $commit_info.sha
+            } else {
+              # Fetch commit SHA using the tag name and branch name
+              $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+              $commit_sha = $tag_commit_info.sha
+            }
+            $downloads = $_.assets | ForEach-Object {
+              [PSCustomObject]@{
+                name   = $_.name
+                url    = $_.browser_download_url
+                count  = $_.download_count
+              }
+            }
             [PSCustomObject]@{
-              name   = $_.name
-              url    = $_.browser_download_url
-              count  = $_.download_count
+              owner    = $owner
+              repo     = $repo
+              branch   = $_.target_commitish
+              commit   = $commit_sha
+              details  = [PSCustomObject]@{
+                name      = $_.name
+                tag       = $_.tag_name
+                date      = ([datetime]::Parse($_.published_at)).ToString('yyyy-MM-dd')
+                time      = ([datetime]::Parse($_.published_at)).ToString('HH:mm:ss')
+                downloads = $downloads
+              }
             }
           }
-          [PSCustomObject]@{
-            owner    = $owner
-            repo     = $repo
-            branch   = $_.target_commitish
-            commit   = $commit_sha
-            details  = [PSCustomObject]@{
-              name      = $_.name
-              tag       = $_.tag_name
-              date      = ([datetime]::Parse($_.published_at)).ToString('yyyy-MM-dd')
-              time      = ([datetime]::Parse($_.published_at)).ToString('HH:mm:ss')
-              downloads = $downloads
+          $prereleaseObjs = $sortedReleases | Where-Object { $_.prerelease } | ForEach-Object {
+            if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
+              $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+              $commit_sha = $commit_info.sha
+            } else {
+              # Fetch commit SHA using the tag name and branch name
+              $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+              $commit_sha = $tag_commit_info.sha
             }
-          }
-        }
-        $prereleaseObjs = $sortedReleases | Where-Object { $_.prerelease } | ForEach-Object {
-          if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
-            $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $commit_info.sha
-          } else {
-            # Fetch commit SHA using the tag name and branch name
-            $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $tag_commit_info.sha
-          }
-          $downloads = $_.assets | ForEach-Object {
+            $downloads = $_.assets | ForEach-Object {
+              [PSCustomObject]@{
+                name   = $_.name
+                url    = $_.browser_download_url
+                count  = $_.download_count
+              }
+            }
             [PSCustomObject]@{
-              name   = $_.name
-              url    = $_.browser_download_url
-              count  = $_.download_count
+              owner    = $owner
+              repo     = $repo
+              branch   = $_.target_commitish
+              commit   = $commit_sha
+              details  = [PSCustomObject]@{
+                name      = $_.name
+                tag       = $_.tag_name
+                date      = ([datetime]::Parse($_.published_at)).ToString('yyyy-MM-dd')
+                time      = ([datetime]::Parse($_.published_at)).ToString('HH:mm:ss')
+                downloads = $downloads
+              }
             }
           }
-          [PSCustomObject]@{
-            owner    = $owner
-            repo     = $repo
-            branch   = $_.target_commitish
-            commit   = $commit_sha
-            details  = [PSCustomObject]@{
-              name      = $_.name
-              tag       = $_.tag_name
-              date      = ([datetime]::Parse($_.published_at)).ToString('yyyy-MM-dd')
-              time      = ([datetime]::Parse($_.published_at)).ToString('HH:mm:ss')
-              downloads = $downloads
-            }
-          }
+          $releaseObjs | ConvertTo-Json -Depth 100 > releases.json
+          $prereleaseObjs | ConvertTo-Json -Depth 100 > prereleases.json
+        } catch {
+          Write-Error "Failed to generate JSONs: $_"
+          throw
         }
-        $releaseObjs | ConvertTo-Json -Depth 100 > releases.json
-        $prereleaseObjs | ConvertTo-Json -Depth 100 > prereleases.json
       shell: pwsh
 
     - name: Commit and force push JSONs
@@ -156,14 +176,19 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        git config --global user.name '${{ github.actor }}'
-        git config --global user.email '${{ github.actor }}@users.noreply.github.com'
-        if (Test-Path -Path releases.json) {
-          git add releases.json
+        try {
+          git config --global user.name '${{ github.actor }}'
+          git config --global user.email '${{ github.actor }}@users.noreply.github.com'
+          if (Test-Path -Path releases.json) {
+            git add releases.json
+          }
+          if (Test-Path -Path prereleases.json) {
+            git add prereleases.json
+          }
+          git commit --amend --no-edit
+          git push --force-with-lease
+        } catch {
+          Write-Error "Failed to commit and push JSONs: $_"
+          throw
         }
-        if (Test-Path -Path prereleases.json) {
-          git add prereleases.json
-        }
-        git commit --amend --no-edit
-        git push --force-with-lease
       shell: pwsh
