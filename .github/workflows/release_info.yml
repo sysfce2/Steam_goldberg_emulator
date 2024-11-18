@@ -86,7 +86,9 @@ jobs:
             $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
             $commit_sha = $commit_info.sha
           } else {
-            $commit_sha = "Unknown"
+            # Fetch commit SHA using the tag name and branch name
+            $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+            $commit_sha = $tag_commit_info.sha
           }
           $downloads = $_.assets | ForEach-Object {
             [PSCustomObject]@{
@@ -114,7 +116,9 @@ jobs:
             $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
             $commit_sha = $commit_info.sha
           } else {
-            $commit_sha = "Unknown"
+            # Fetch commit SHA using the tag name and branch name
+            $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+            $commit_sha = $tag_commit_info.sha
           }
           $downloads = $_.assets | ForEach-Object {
             [PSCustomObject]@{
