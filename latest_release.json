@@ -1,8 +1,0 @@
-{
-  "name": "Test the new integrated release_info.json",
-  "tag": "test_release_info",
-  "branch": "dev_release_info",
-  "commit": "42dbc195eb03cf9a6747b882638cba9773a753bb",
-  "date": "2024-11-18",
-  "time": "09:14:25"
-}
