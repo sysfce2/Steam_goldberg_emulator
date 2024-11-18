@@ -57,6 +57,7 @@ jobs:
         $VerbosePreference = "Continue"
         git fetch origin
         git checkout $env:BRANCH_NAME
+        git checkout $env:COMMIT_SHA
       shell: pwsh
 
     - name: Ensure branch is writable
