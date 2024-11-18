@@ -18,53 +18,48 @@ jobs:
           fetch-depth: 0
           #submodules: recursive
 
-    - name: Get release info
-      id: get_release_info
-      run: |
-        $ErrorActionPreference = "Stop"
-        $VerbosePreference = "Continue"
-        $release = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/releases/tags/${{ github.event.release.tag_name }}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-        $rel_name = $release.name
-        echo "name=$rel_name" >> $GITHUB_ENV
-        $rel_tag=$release.tag_name
-        echo "tag=$rel_tag" >> $GITHUB_ENV
-        $rel_branch = $(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)
-        echo "branch=$rel_branch" >> $GITHUB_ENV
-        $rel_commit = $(git rev-list -n 1 $env:GITHUB_REF)
-        echo "commit=$rel_commit" >> $GITHUB_ENV
-        #echo "commit=$($release.target_commitish)" >> $GITHUB_ENV
-        $rel_date = $release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[0]
-        echo "date=$rel_date" >> $GITHUB_ENV
-        #echo "date=$([datetime]::Parse($release.published_at)).ToString('yyyy-MM-dd')" >> $GITHUB_ENV
-        $rel_time = $release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[1].Split("Z")[0]
-        echo "time=$rel_time" >> $GITHUB_ENV
-        #echo "time=$([datetime]::Parse($release.published_at)).ToString('HH:mm:ss')" >> $GITHUB_ENV
-        echo "Release Name: $env:name"
-        echo "Release Tag: $env:tag"
-        echo "Branch: $env:branch"
-        echo "Commit: $env:commit"
-        echo "Date: $env:date"
-        echo "Time: $env:time"
-      shell: pwsh
+      - name: Get branch name, commit SHA, tag name, release name, release date, and release time
+        id: get_branch_commit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $VerbosePreference = "Continue"
+          $commit_sha = $(git rev-list -n 1 $env:GITHUB_REF)
+          $branch_name = $(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)
+          $release_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/releases/tags/${{ github.event.release.tag_name }}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          $release_name = $release_info.name
+          $published_at = $release_info.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $release_date = $published_at.Split("T")[0]
+          $release_time = $published_at.Split("T")[1].Split("Z")[0]
+          echo "BRANCH_NAME=$branch_name" >> $env:GITHUB_ENV
+          echo "COMMIT_SHA=$commit_sha" >> $env:GITHUB_ENV
+          echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $env:GITHUB_ENV
+          echo "RELEASE_NAME=$release_name" >> $env:GITHUB_ENV
+          echo "RELEASE_DATE=$release_date" >> $env:GITHUB_ENV
+          echo "RELEASE_TIME=$release_time" >> $env:GITHUB_ENV
 
-    - name: Validate environment variables
-      run: |
-        $ErrorActionPreference = "Stop"
-        $VerbosePreference = "Continue"
-        if (-not $env:name) { throw "Missing release name" }
-        if (-not $env:tag) { throw "Missing release tag" }
-        if (-not $env:branch) { throw "Missing release branch" }
-        if (-not $env:commit) { throw "Missing release commit" }
-        if (-not $env:date) { throw "Missing release date" }
-        if (-not $env:time) { throw "Missing release time" }
-      shell: pwsh
+      - name: Verify and display branch name, commit SHA, tag name, release name, release date, and release time
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $VerbosePreference = "Continue"
+          if ($env:BRANCH_NAME -eq "") {
+            Write-Host "Branch name is empty. Exiting..."
+            exit 1
+          }
+          Write-Host "Branch name is: $env:BRANCH_NAME"
+          Write-Host "Commit SHA is: $env:COMMIT_SHA"
+          Write-Host "Tag Name is: $env:TAG_NAME"
+          Write-Host "Release Name is: $env:RELEASE_NAME"
+          Write-Host "Release Date is: $env:RELEASE_DATE"
+          Write-Host "Release Time is: $env:RELEASE_TIME"
 
     - name: Checkout release branch
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
         git fetch origin
-        git checkout $env:branch
+        git checkout $env:BRANCH_NAME
       shell: pwsh
 
     - name: Ensure branch is writable
@@ -73,9 +68,9 @@ jobs:
         $VerbosePreference = "Continue"
         $branchStatus = git status
         if ($branchStatus -match 'Your branch is up to date with') {
-          echo "Branch $env:branch is writable."
+          echo "Branch $env:BRANCH_NAME is writable."
         } else {
-          throw "Branch $env:branch is not writable."
+          throw "Branch $env:BRANCH_NAME is not writable."
         }
       shell: pwsh
 
@@ -151,5 +146,5 @@ jobs:
         }
         git commit --amend --no-edit
         git push --force-with-lease
-        #git push -f origin $env:branch
+        #git push -f origin $env:BRANCH_NAME
       shell: pwsh
