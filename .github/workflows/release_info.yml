@@ -77,18 +77,15 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases"
+        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"}
         $sortedReleases = $releases | Sort-Object {[datetime]::Parse($_.published_at)} -Descending
         $owner = '${{ github.repository_owner }}'
         $repo = '${{ github.event.repository.name }}'
         $releaseObjs = $sortedReleases | Where-Object { -not $_.prerelease } | ForEach-Object {
-          if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
-            $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $commit_info.sha
-          } else {
-            # Fetch commit SHA using the tag name and branch name
-            $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $tag_commit_info.sha
+          $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/git/refs/tags/$($_.tag_name)" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          $commit_sha = if ($tag_commit_info.object.type -eq "commit") { $tag_commit_info.object.sha } else { 
+            $commit_info = (Invoke-RestMethod -Uri $tag_commit_info.object.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+            $commit_info.object.sha 
           }
           $downloads = $_.assets | ForEach-Object {
             [PSCustomObject]@{
@@ -112,13 +109,10 @@ jobs:
           }
         }
         $prereleaseObjs = $sortedReleases | Where-Object { $_.prerelease } | ForEach-Object {
-          if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
-            $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $commit_info.sha
-          } else {
-            # Fetch commit SHA using the tag name and branch name
-            $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/commits/${_.tag_name}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-            $commit_sha = $tag_commit_info.sha
+          $tag_commit_info = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/git/refs/tags/$($_.tag_name)" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          $commit_sha = if ($tag_commit_info.object.type -eq "commit") { $tag_commit_info.object.sha } else { 
+            $commit_info = (Invoke-RestMethod -Uri $tag_commit_info.object.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+            $commit_info.object.sha 
           }
           $downloads = $_.assets | ForEach-Object {
             [PSCustomObject]@{
