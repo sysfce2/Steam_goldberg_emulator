@@ -3,12 +3,12 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_release_info",
-    "commit": "d49cff177a04d656f4abfb48411725de9c0382e2",
+    "commit": null,
     "details": {
       "name": "Test the new integrated releases.json",
       "tag": "test_release_info2",
       "date": "2024-11-18",
-      "time": "21:40:15",
+      "time": "23:27:10",
       "downloads": null
     }
   },
@@ -16,7 +16,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_overlay_update",
-    "commit": "95085dcb8668496a08222bc78e3c8ed77d7ff8ed",
+    "commit": null,
     "details": {
       "name": "2024/17/11",
       "tag": "2024_17_11",
@@ -41,7 +41,7 @@
         {
           "name": "emu-win-release.7z",
           "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/emu-win-release.7z",
-          "count": 143
+          "count": 148
         },
         {
           "name": "generate_emu_config-linux.tar.bz2",
@@ -51,7 +51,7 @@
         {
           "name": "generate_emu_config-win.7z",
           "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/generate_emu_config-win.7z",
-          "count": 87
+          "count": 92
         },
         {
           "name": "migrate_gse-linux.tar.bz2",
@@ -70,7 +70,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "ac12cecc2e47066e1aa747067c654af37477aec4",
+    "commit": null,
     "details": {
       "name": "2024/11/12",
       "tag": "2024_11_12",
@@ -124,7 +124,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "68e35c17ee8be50e106bf927d7b570593dcde4ea",
+    "commit": null,
     "details": {
       "name": "2024/10/21",
       "tag": "2024_10_21",
@@ -159,7 +159,7 @@
         {
           "name": "generate_emu_config-win.7z",
           "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/generate_emu_config-win.7z",
-          "count": 483
+          "count": 484
         },
         {
           "name": "migrate_gse-linux.tar.bz2",
@@ -178,7 +178,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "0745935be0fcee8c15b66750eb94ce0f2c4bac45",
+    "commit": null,
     "details": {
       "name": "2024/10/14 - generate_emu_config login fix",
       "tag": "2024_10_14",
@@ -232,7 +232,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "6c5819b3f057ef9ea6dfc190c8eb15f0c7f16d7d",
+    "commit": null,
     "details": {
       "name": "2024/10/07",
       "tag": "2024_10_07",
@@ -286,7 +286,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "81416439780663aa01ee9f6d9e96167f92834ca9",
+    "commit": null,
     "details": {
       "name": "2024/09/27",
       "tag": "2024_09_27",
@@ -340,7 +340,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "71d6aa7fc45dd2cea0758d955434d92f6258d6d4",
+    "commit": null,
     "details": {
       "name": "2024/8/25",
       "tag": "2024_8_25",
@@ -394,7 +394,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "08e747398435be927579f37b14c990af6f614b5b",
+    "commit": null,
     "details": {
       "name": "2024/8/19",
       "tag": "2024_8_19",
@@ -448,7 +448,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": "fb8edcc3af80f523bd5adb916b52a5b6671c2a8f",
+    "commit": null,
     "details": {
       "name": "2024/8/4 - generate_emu_config overhaul",
       "tag": "2024_8_4",
