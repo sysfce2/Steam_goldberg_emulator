@@ -59,14 +59,16 @@ jobs:
         $VerbosePreference = "Continue"
         git fetch origin
         git checkout $env:BRANCH_NAME
-        git checkout $env:COMMIT_SHA
+        #git checkout $env:COMMIT_SHA
+        git switch -C temp-branch
+        git switch $env:BRANCH_NAME
       shell: pwsh
 
     - name: Ensure branch is writable
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        git pull origin $env:BRANCH_NAME
+        #git pull origin $env:BRANCH_NAME
         $branchStatus = git status
         Write-Host "Branch status: $branchStatus"
         if ($branchStatus -match 'Your branch is up to date with') {

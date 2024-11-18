@@ -3,12 +3,12 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_release_info",
-    "commit": null,
+    "commit": "a90c4883761fe906440ce6828840460ef11e2094",
     "details": {
       "name": "Test the new integrated releases.json",
       "tag": "test_release_info2",
       "date": "2024-11-18",
-      "time": "23:27:10",
+      "time": "23:52:00",
       "downloads": null
     }
   },
@@ -16,7 +16,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_overlay_update",
-    "commit": null,
+    "commit": "95085dcb8668496a08222bc78e3c8ed77d7ff8ed",
     "details": {
       "name": "2024/17/11",
       "tag": "2024_17_11",
@@ -70,7 +70,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "ac12cecc2e47066e1aa747067c654af37477aec4",
     "details": {
       "name": "2024/11/12",
       "tag": "2024_11_12",
@@ -124,7 +124,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "68e35c17ee8be50e106bf927d7b570593dcde4ea",
     "details": {
       "name": "2024/10/21",
       "tag": "2024_10_21",
@@ -178,7 +178,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "0745935be0fcee8c15b66750eb94ce0f2c4bac45",
     "details": {
       "name": "2024/10/14 - generate_emu_config login fix",
       "tag": "2024_10_14",
@@ -232,7 +232,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "6c5819b3f057ef9ea6dfc190c8eb15f0c7f16d7d",
     "details": {
       "name": "2024/10/07",
       "tag": "2024_10_07",
@@ -286,7 +286,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "81416439780663aa01ee9f6d9e96167f92834ca9",
     "details": {
       "name": "2024/09/27",
       "tag": "2024_09_27",
@@ -340,7 +340,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "71d6aa7fc45dd2cea0758d955434d92f6258d6d4",
     "details": {
       "name": "2024/8/25",
       "tag": "2024_8_25",
@@ -394,7 +394,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "08e747398435be927579f37b14c990af6f614b5b",
     "details": {
       "name": "2024/8/19",
       "tag": "2024_8_19",
@@ -448,7 +448,7 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev",
-    "commit": null,
+    "commit": "fb8edcc3af80f523bd5adb916b52a5b6671c2a8f",
     "details": {
       "name": "2024/8/4 - generate_emu_config overhaul",
       "tag": "2024_8_4",
