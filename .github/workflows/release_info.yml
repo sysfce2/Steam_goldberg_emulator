@@ -58,7 +58,10 @@ jobs:
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
         git fetch origin
-        git checkout -b $env:BRANCH_NAME $env:COMMIT_SHA
+        git checkout $env:BRANCH_NAME
+        git checkout $env:COMMIT_SHA
+        git branch -D temp-branch || true
+        git checkout -b temp-branch
       shell: pwsh
 
     - name: Ensure branch is writable
@@ -69,7 +72,9 @@ jobs:
         if ($branchStatus -match 'Your branch is up to date with') {
           echo "Branch $env:BRANCH_NAME is writable."
         } else {
-          throw "Branch $env:BRANCH_NAME is not writable."
+          Write-Host "Branch $env:BRANCH_NAME is not writable, attempting to make it writable..."
+          git branch -D $env:BRANCH_NAME
+          git checkout -b $env:BRANCH_NAME $env:COMMIT_SHA
         }
       shell: pwsh
 
