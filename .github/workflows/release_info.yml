@@ -24,14 +24,20 @@ jobs:
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
         $release = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/releases/tags/${{ github.event.release.tag_name }}" -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
-        echo "name=$($release.name)" >> $GITHUB_ENV
-        echo "tag=$($release.tag_name)" >> $GITHUB_ENV
-        echo "branch=$(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)" >> $GITHUB_ENV
-        echo "commit=$(git rev-list -n 1 $env:GITHUB_REF)" >> $GITHUB_ENV
+        rel_name = $release.name
+        echo "name=$rel_name" >> $GITHUB_ENV
+        rel_tag=$release.tag_name
+        echo "tag=$rel_tag" >> $GITHUB_ENV
+        rel_branch = $(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)
+        echo "branch=$rel_branch" >> $GITHUB_ENV
+        rel_commit = $(git rev-list -n 1 $env:GITHUB_REF)
+        echo "commit=$rel_commit" >> $GITHUB_ENV
         #echo "commit=$($release.target_commitish)" >> $GITHUB_ENV
-        echo "date=$release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[0]" >> $GITHUB_ENV
+        rel_date = $release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[0]
+        echo "date=$rel_date" >> $GITHUB_ENV
         #echo "date=$([datetime]::Parse($release.published_at)).ToString('yyyy-MM-dd')" >> $GITHUB_ENV
-        echo "time=$release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[1].Split("Z")[0]" >> $GITHUB_ENV
+        rel_time = $release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[1].Split("Z")[0]
+        echo "time=$rel_time" >> $GITHUB_ENV
         #echo "time=$([datetime]::Parse($release.published_at)).ToString('HH:mm:ss')" >> $GITHUB_ENV
         echo "Release Name: $env:name"
         echo "Release Tag: $env:tag"
