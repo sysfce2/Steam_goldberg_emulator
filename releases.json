@@ -1,0 +1,501 @@
+[
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev_release_info",
+    "commit": null,
+    "details": {
+      "name": "Test the new integrated releases.json",
+      "tag": "test_release_info2",
+      "date": "2024-11-18",
+      "time": "20:53:50",
+      "downloads": null
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev_overlay_update",
+    "commit": null,
+    "details": {
+      "name": "2024/17/11",
+      "tag": "2024_17_11",
+      "date": "2024-11-17",
+      "time": "06:32:51",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/emu-linux-debug.tar.bz2",
+          "count": 6
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/emu-linux-release.tar.bz2",
+          "count": 16
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/emu-win-debug.7z",
+          "count": 22
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/emu-win-release.7z",
+          "count": 140
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/generate_emu_config-linux.tar.bz2",
+          "count": 12
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/generate_emu_config-win.7z",
+          "count": 85
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/migrate_gse-linux.tar.bz2",
+          "count": 10
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/migrate_gse-win.7z",
+          "count": 34
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/11/12",
+      "tag": "2024_11_12",
+      "date": "2024-11-12",
+      "time": "04:05:33",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/emu-linux-debug.tar.bz2",
+          "count": 2
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/emu-linux-release.tar.bz2",
+          "count": 12
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/emu-win-debug.7z",
+          "count": 18
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/emu-win-release.7z",
+          "count": 386
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/generate_emu_config-linux.tar.bz2",
+          "count": 9
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/generate_emu_config-win.7z",
+          "count": 173
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/migrate_gse-linux.tar.bz2",
+          "count": 3
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_11_12/migrate_gse-win.7z",
+          "count": 54
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/10/21",
+      "tag": "2024_10_21",
+      "date": "2024-10-21",
+      "time": "02:08:37",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/emu-linux-debug.tar.bz2",
+          "count": 15
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/emu-linux-release.tar.bz2",
+          "count": 53
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/emu-win-debug.7z",
+          "count": 56
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/emu-win-release.7z",
+          "count": 780
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/generate_emu_config-linux.tar.bz2",
+          "count": 29
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/generate_emu_config-win.7z",
+          "count": 483
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/migrate_gse-linux.tar.bz2",
+          "count": 19
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_21/migrate_gse-win.7z",
+          "count": 134
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/10/14 - generate_emu_config login fix",
+      "tag": "2024_10_14",
+      "date": "2024-10-14",
+      "time": "17:42:21",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/emu-linux-debug.tar.bz2",
+          "count": 7
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/emu-linux-release.tar.bz2",
+          "count": 26
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/emu-win-debug.7z",
+          "count": 24
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/emu-win-release.7z",
+          "count": 325
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/generate_emu_config-linux.tar.bz2",
+          "count": 22
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/generate_emu_config-win.7z",
+          "count": 260
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/migrate_gse-linux.tar.bz2",
+          "count": 17
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_14/migrate_gse-win.7z",
+          "count": 74
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/10/07",
+      "tag": "2024_10_07",
+      "date": "2024-10-07",
+      "time": "15:14:30",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/emu-linux-debug.tar.bz2",
+          "count": 5
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/emu-linux-release.tar.bz2",
+          "count": 11
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/emu-win-debug.7z",
+          "count": 15
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/emu-win-release.7z",
+          "count": 212
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/generate_emu_config-linux.tar.bz2",
+          "count": 8
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/generate_emu_config-win.7z",
+          "count": 168
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/migrate_gse-linux.tar.bz2",
+          "count": 6
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_10_07/migrate_gse-win.7z",
+          "count": 52
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/09/27",
+      "tag": "2024_09_27",
+      "date": "2024-09-26",
+      "time": "23:54:35",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/emu-linux-debug.tar.bz2",
+          "count": 5
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/emu-linux-release.tar.bz2",
+          "count": 17
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/emu-win-debug.7z",
+          "count": 30
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/emu-win-release.7z",
+          "count": 250
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/generate_emu_config-linux.tar.bz2",
+          "count": 17
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/generate_emu_config-win.7z",
+          "count": 212
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/migrate_gse-linux.tar.bz2",
+          "count": 9
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_09_27/migrate_gse-win.7z",
+          "count": 68
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/8/25",
+      "tag": "2024_8_25",
+      "date": "2024-08-25",
+      "time": "14:42:41",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/emu-linux-debug.tar.bz2",
+          "count": 5
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/emu-linux-release.tar.bz2",
+          "count": 24
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/emu-win-debug.7z",
+          "count": 31
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/emu-win-release.7z",
+          "count": 436
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/generate_emu_config-linux.tar.bz2",
+          "count": 20
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/generate_emu_config-win.7z",
+          "count": 252
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/migrate_gse-linux.tar.bz2",
+          "count": 9
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_25/migrate_gse-win.7z",
+          "count": 82
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/8/19",
+      "tag": "2024_8_19",
+      "date": "2024-08-19",
+      "time": "17:07:41",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/emu-linux-debug.tar.bz2",
+          "count": 3
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/emu-linux-release.tar.bz2",
+          "count": 166
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/emu-win-debug.7z",
+          "count": 8
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/emu-win-release.7z",
+          "count": 136
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/generate_emu_config-linux.tar.bz2",
+          "count": 157
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/generate_emu_config-win.7z",
+          "count": 254
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/migrate_gse-linux.tar.bz2",
+          "count": 3
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_19/migrate_gse-win.7z",
+          "count": 28
+        }
+      ]
+    }
+  },
+  {
+    "owner": "alex47exe",
+    "repo": "gse_fork",
+    "branch": "dev",
+    "commit": null,
+    "details": {
+      "name": "2024/8/4 - generate_emu_config overhaul",
+      "tag": "2024_8_4",
+      "date": "2024-08-04",
+      "time": "12:36:13",
+      "downloads": [
+        {
+          "name": "emu-linux-debug.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/emu-linux-debug.tar.bz2",
+          "count": 10
+        },
+        {
+          "name": "emu-linux-release.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/emu-linux-release.tar.bz2",
+          "count": 22
+        },
+        {
+          "name": "emu-win-debug.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/emu-win-debug.7z",
+          "count": 33
+        },
+        {
+          "name": "emu-win-release.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/emu-win-release.7z",
+          "count": 213
+        },
+        {
+          "name": "generate_emu_config-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/generate_emu_config-linux.tar.bz2",
+          "count": 18
+        },
+        {
+          "name": "generate_emu_config-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/generate_emu_config-win.7z",
+          "count": 148
+        },
+        {
+          "name": "migrate_gse-linux.tar.bz2",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/migrate_gse-linux.tar.bz2",
+          "count": 12
+        },
+        {
+          "name": "migrate_gse-win.7z",
+          "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_8_4/migrate_gse-win.7z",
+          "count": 63
+        }
+      ]
+    }
+  }
+]
