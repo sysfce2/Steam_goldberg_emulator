@@ -82,7 +82,12 @@ jobs:
         $owner = '${{ github.repository_owner }}'
         $repo = '${{ github.event.repository.name }}'
         $releaseObjs = $sortedReleases | Where-Object { -not $_.prerelease } | ForEach-Object {
-          $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
+            $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+            $commit_sha = $commit_info.sha
+          } else {
+            $commit_sha = "Unknown"
+          }
           $downloads = $_.assets | ForEach-Object {
             [PSCustomObject]@{
               name   = $_.name
@@ -94,7 +99,7 @@ jobs:
             owner    = $owner
             repo     = $repo
             branch   = $_.target_commitish
-            commit   = $commit_info.sha
+            commit   = $commit_sha
             details  = [PSCustomObject]@{
               name      = $_.name
               tag       = $_.tag_name
@@ -105,7 +110,12 @@ jobs:
           }
         }
         $prereleaseObjs = $sortedReleases | Where-Object { $_.prerelease } | ForEach-Object {
-          $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+          if ($_.commit -ne $null -and $_.commit.url -ne $null -and $_.commit.url -ne "") {
+            $commit_info = (Invoke-RestMethod -Uri $_.commit.url -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"})
+            $commit_sha = $commit_info.sha
+          } else {
+            $commit_sha = "Unknown"
+          }
           $downloads = $_.assets | ForEach-Object {
             [PSCustomObject]@{
               name   = $_.name
@@ -117,7 +127,7 @@ jobs:
             owner    = $owner
             repo     = $repo
             branch   = $_.target_commitish
-            commit   = $commit_info.sha
+            commit   = $commit_sha
             details  = [PSCustomObject]@{
               name      = $_.name
               tag       = $_.tag_name
