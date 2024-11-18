@@ -27,18 +27,18 @@ jobs:
         echo "name=$($release.name)" >> $GITHUB_ENV
         echo "tag=$($release.tag_name)" >> $GITHUB_ENV
         echo "branch=$(git branch -r --contains $commit_sha | Select-String -Pattern 'origin/' | ForEach-Object { $_.ToString().Trim() -replace 'origin/', '' } | Sort-Object -Descending | Select-Object -First 1)" >> $GITHUB_ENV
-        #echo "commit=$(git rev-list -n 1 $env:GITHUB_REF)" >> $GITHUB_ENV
-        echo "commit=$($release.target_commitish)" >> $GITHUB_ENV
-        #echo "date=$release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[0]" >> $GITHUB_ENV
-        echo "date=$([datetime]::Parse($release.published_at)).ToString('yyyy-MM-dd')" >> $GITHUB_ENV
-        #echo "time=$release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[1].Split("Z")[0]" >> $GITHUB_ENV
-        echo "time=$([datetime]::Parse($release.published_at)).ToString('HH:mm:ss')" >> $GITHUB_ENV
-        echo "Release Name: $($release.name)"
-        echo "Release Tag: $($release.tag_name)"
-        echo "Branch: $($release.target_commitish)"
-        echo "Commit: $($release.target_commitish)"
-        echo "Date: $([datetime]::Parse($release.published_at)).ToString('yyyy-MM-dd')"
-        echo "Time: $([datetime]::Parse($release.published_at)).ToString('HH:mm:ss')"
+        echo "commit=$(git rev-list -n 1 $env:GITHUB_REF)" >> $GITHUB_ENV
+        #echo "commit=$($release.target_commitish)" >> $GITHUB_ENV
+        echo "date=$release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[0]" >> $GITHUB_ENV
+        #echo "date=$([datetime]::Parse($release.published_at)).ToString('yyyy-MM-dd')" >> $GITHUB_ENV
+        echo "time=$release.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ").Split("T")[1].Split("Z")[0]" >> $GITHUB_ENV
+        #echo "time=$([datetime]::Parse($release.published_at)).ToString('HH:mm:ss')" >> $GITHUB_ENV
+        echo "Release Name: $env:name"
+        echo "Release Tag: $env:tag"
+        echo "Branch: $env:branch"
+        echo "Commit: $env:commit"
+        echo "Date: $env:date"
+        echo "Time: $env:time"
       shell: pwsh
 
     - name: Validate environment variables
