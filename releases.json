@@ -3,12 +3,12 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_release_info",
-    "commit": "4655dc5e992b2c3e9838075a59315c8968a058cd",
+    "commit": "2f42f06ef8a97843a2d1da45e906ddf558026838",
     "details": {
       "name": "Test the new integrated releases.json",
       "tag": "test_release_info2",
       "date": "2024-11-19",
-      "time": "00:50:18",
+      "time": "01:20:09",
       "downloads": null
     }
   },
@@ -41,7 +41,7 @@
         {
           "name": "emu-win-release.7z",
           "url": "https://github.com/alex47exe/gse_fork/releases/download/2024_17_11/emu-win-release.7z",
-          "count": 148
+          "count": 149
         },
         {
           "name": "generate_emu_config-linux.tar.bz2",
