@@ -168,17 +168,17 @@ jobs:
       shell: pwsh
 
     - name: Update release tag to point to commit SHA
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    $ErrorActionPreference = "Stop"
-    $VerbosePreference = "Continue"
-    $tag_name = "${{ github.event.release.tag_name }}"
-    $commit_sha = "${{ env.COMMIT_SHA }}"
-    $repo_full = "${{ github.repository }}"
-    $api_url = "https://api.github.com/repos/$repo_full/git/refs/tags/$tag_name"
-    $body = @{
-      sha = $commit_sha
-      force = $true
-    } | ConvertTo-Json
-    Invoke-RestMethod -Uri $api_url -Method PATCH -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"} -Body $body
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    run: |
+      $ErrorActionPreference = "Stop"
+      $VerbosePreference = "Continue"
+      $tag_name = "${{ github.event.release.tag_name }}"
+      $commit_sha = "${{ env.COMMIT_SHA }}"
+      $repo_full = "${{ github.repository }}"
+      $api_url = "https://api.github.com/repos/$repo_full/git/refs/tags/$tag_name"
+      $body = @{
+        sha = $commit_sha
+        force = $true
+      } | ConvertTo-Json
+      Invoke-RestMethod -Uri $api_url -Method PATCH -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"} -Body $body
