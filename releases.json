@@ -3,12 +3,12 @@
     "owner": "alex47exe",
     "repo": "gse_fork",
     "branch": "dev_release_info",
-    "commit": "a90c4883761fe906440ce6828840460ef11e2094",
+    "commit": "4655dc5e992b2c3e9838075a59315c8968a058cd",
     "details": {
       "name": "Test the new integrated releases.json",
       "tag": "test_release_info2",
-      "date": "2024-11-18",
-      "time": "23:52:00",
+      "date": "2024-11-19",
+      "time": "00:50:18",
       "downloads": null
     }
   },
