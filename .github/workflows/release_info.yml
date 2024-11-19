@@ -15,9 +15,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-          fetch-depth: 0
+        fetch-depth: 0
 
-    - name: Get branch name, commit SHA, tag name, release name, release date, and release time
+    - name: Get branch name, commit SHA, tag name, release name, release date, release time, and first commit SHA
       id: get_branch_commit
       shell: pwsh
       run: |
@@ -30,14 +30,16 @@ jobs:
         $published_at = $release_info.published_at.ToString("yyyy-MM-ddTHH:mm:ssZ")
         $release_date = $published_at.Split("T")[0]
         $release_time = $published_at.Split("T")[1].Split("Z")[0]
+        $first_commit = $(git rev-list --max-parents=0 HEAD)
         echo "BRANCH_NAME=$branch_name" >> $env:GITHUB_ENV
         echo "COMMIT_SHA=$commit_sha" >> $env:GITHUB_ENV
         echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $env:GITHUB_ENV
         echo "RELEASE_NAME=$release_name" >> $env:GITHUB_ENV
         echo "RELEASE_DATE=$release_date" >> $env:GITHUB_ENV
         echo "RELEASE_TIME=$release_time" >> $env:GITHUB_ENV
+        echo "FIRST_COMMIT=$first_commit" >> $env:GITHUB_ENV
 
-    - name: Verify and display branch name, commit SHA, tag name, release name, release date, and release time
+    - name: Verify and display branch name, commit SHA, tag name, release name, release date, release time, and first commit SHA
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
@@ -52,23 +54,24 @@ jobs:
         Write-Host "Release Name is: $env:RELEASE_NAME"
         Write-Host "Release Date is: $env:RELEASE_DATE"
         Write-Host "Release Time is: $env:RELEASE_TIME"
+        Write-Host "First Commit SHA is: $env:FIRST_COMMIT"
 
-    - name: Checkout release branch
+    - name: Checkout release branch and ensure HEAD is not detached
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
         git fetch origin
         git checkout $env:BRANCH_NAME
-        #git checkout $env:COMMIT_SHA
-        git switch -C temp-branch
-        git switch $env:BRANCH_NAME
+        git pull origin $env:BRANCH_NAME
+        if (git branch --show-current -ne $env:BRANCH_NAME) {
+          git switch -C $env:BRANCH_NAME
+        }
       shell: pwsh
 
     - name: Ensure branch is writable
       run: |
         $ErrorActionPreference = "Stop"
         $VerbosePreference = "Continue"
-        #git pull origin $env:BRANCH_NAME
         $branchStatus = git status
         Write-Host "Branch status: $branchStatus"
         if ($branchStatus -match 'Your branch is up to date with') {
@@ -163,3 +166,19 @@ jobs:
         git commit --amend --no-edit
         git push --force-with-lease
       shell: pwsh
+
+    - name: Update release tag to point to commit SHA
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    $ErrorActionPreference = "Stop"
+    $VerbosePreference = "Continue"
+    $tag_name = "${{ github.event.release.tag_name }}"
+    $commit_sha = "${{ env.COMMIT_SHA }}"
+    $repo_full = "${{ github.repository }}"
+    $api_url = "https://api.github.com/repos/$repo_full/git/refs/tags/$tag_name"
+    $body = @{
+      sha = $commit_sha
+      force = $true
+    } | ConvertTo-Json
+    Invoke-RestMethod -Uri $api_url -Method PATCH -Headers @{"Authorization"="token ${{ secrets.GITHUB_TOKEN }}"} -Body $body
