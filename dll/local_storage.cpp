@@ -521,6 +521,7 @@ static std::string sanitize_file_name(std::string name)
     name = replace_with(name, "*", ".ASTERISK.");
     name = replace_with(name, "\"", ".QUOTE.");
     name = replace_with(name, "?", ".Q_MARK.");
+    name = replace_with(name, "%", ".PERCENT.");
 
     return name;
 }
@@ -538,6 +539,7 @@ static std::string desanitize_file_name(std::string name)
     name = replace_with(name, ".ASTERISK.", "*");
     name = replace_with(name, ".QUOTE.", "\"");
     name = replace_with(name, ".Q_MARK.", "?");
+    name = replace_with(name, ".PERCENT.", "%");
 
     return name;
 }
