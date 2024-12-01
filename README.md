@@ -1,8 +1,6 @@
 ## :large_orange_diamond: **Goldberg Steam Emu**
 Fork of https://gitlab.com/Mr_Goldberg/goldberg_emulator with a lot of fixes, improvements, additional features and a completely reworked file structure.
 
-Fork originally made by wizark952. This is latest version of it.
-
 ### Feel free to make a PR.
 
 ---
