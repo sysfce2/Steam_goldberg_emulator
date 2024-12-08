@@ -1,7 +1,7 @@
 {
     "12345": {
         "title": "Some Workshop Item",
-        "description": "This is the prefered way of specifying mod details, primary file must exist in steam_settings/mods/12345 (along with any other mod files), and preview file must exist in steam_settings/mod_images/12345",
+        "description": "This is the prefered way of specifying mod details, primary file must exist in steam_settings/mods/12345 (along with any other mod files), and preview file must exist in steam_settings/mods_img/12345",
         "primary_filename": "metadata.json",
         "preview_filename": "preview.jpg"
     },
@@ -26,7 +26,7 @@
         "downvotes": 1,
         "num_children": 0,
         "path": "C:\\games\\my_game\\steam_settings\\mods_data\\111111111_mod_data_dir",
-        "preview_url": "file:///C:/games/my_game/steam_settings/mod_img/preview.jpg",
+        "preview_url": "file:///C:/games/my_game/steam_settings/mods_img/111111111/preview.jpg",
         "score": 0.7
     },
     
