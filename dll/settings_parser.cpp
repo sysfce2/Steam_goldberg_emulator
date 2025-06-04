@@ -724,6 +724,29 @@ static std::set<std::string> parse_supported_languages(class Local_Storage *loca
     return supported_languages;
 }
 
+static void parse_purchase_date(class Settings* settings_client, Settings* settings_server)
+{
+    const char* raw_purchase_date = ini.GetValue("app::general", "purchase_date", "");
+
+    std::chrono::system_clock::time_point purchase_date;
+
+    std::tm time{};
+    std::istringstream is{ raw_purchase_date };
+    is.imbue(std::locale("")); // Default to system locale
+    is >> std::get_time(&time, "%Y/%m/%d %H:%M:%S");
+
+    // if date is formatted incorrectly
+    if (is.fail()) {
+        // default to 4 days ago
+        purchase_date = startup_time - std::chrono::hours(24 * 4);
+    } else {
+        purchase_date = std::chrono::system_clock::from_time_t(std::mktime(&time));
+    }
+
+    settings_client->set_purchase_date(purchase_date);
+    settings_server->set_purchase_date(purchase_date);
+}
+
 // app::dlcs
 static void parse_dlc(class Settings *settings_client, class Settings *settings_server)
 {
@@ -1788,6 +1811,8 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     // supported languages list
     settings_client->set_supported_languages(supported_languages);
     settings_server->set_supported_languages(supported_languages);
+
+    parse_purchase_date(settings_client, settings_server);
 
     parse_simple_features(settings_client, settings_server);
     parse_stats_features(settings_client, settings_server);

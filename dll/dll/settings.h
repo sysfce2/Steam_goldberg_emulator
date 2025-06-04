@@ -203,6 +203,9 @@ class Settings {
 private:
     CSteamID steam_id{}; // user id
     CGameID game_id{};
+
+    std::chrono::system_clock::time_point purchase_date{};
+
     std::string name{};
     std::string language{}; // default "english"
     CSteamID lobby_id = k_steamIDNil;
@@ -377,6 +380,9 @@ public:
     const std::string& get_supported_languages() const;
 
     void set_game_id(CGameID game_id);
+
+    std::chrono::system_clock::time_point get_purchase_date();
+    void set_purchase_date(std::chrono::system_clock::time_point purchase_date);
 
     void set_lobby(CSteamID lobby_id);
     CSteamID get_lobby();
