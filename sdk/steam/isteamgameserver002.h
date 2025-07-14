@@ -33,4 +33,20 @@ public:
 	virtual void GSSetGameType( const char *pchType ) = 0;
 };
 
+// client has been denied to connect to this game server because of a Steam2 auth failure
+struct GSClientSteam2Deny_t
+{
+	enum { k_iCallback = k_iSteamGameServerCallbacks + 4 };
+	uint32 m_UserID;
+	uint32 m_eSteamError;
+};
+
+// client has been accepted by Steam2 to connect to this game server
+struct GSClientSteam2Accept_t
+{
+	enum { k_iCallback = k_iSteamGameServerCallbacks + 5 };
+	uint32 m_UserID;
+	uint64 m_SteamID;
+};
+
 #endif // ISTEAMGAMESERVER002_H

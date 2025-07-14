@@ -58,6 +58,7 @@ struct Mod_entry {
     uint64 total_files_sizes{}; // added in sdk 1.60, "Total size of all files (non-legacy), excluding the preview file"
     std::string min_game_branch{}; // added in sdk 1.60
     std::string max_game_branch{}; // added in sdk 1.60
+    std::string metadata{};
 
     std::string workshopItemURL{};
 
@@ -87,7 +88,7 @@ struct Leaderboard_config {
 };
 
 struct Stat_config {
-    GameServerStats_Messages::StatInfo::Stat_Type type{};
+    StatInfo::Stat_Type type{};
     union {
         float default_value_float;
         int32 default_value_int;
@@ -231,6 +232,14 @@ private:
 public:
     constexpr const static int INVALID_IMAGE_HANDLE = 0;
     constexpr const static int UNLOADED_IMAGE_HANDLE = -1;
+    static uint32 global_steamid_call_count;
+
+    // Alt steamId for Denuvo / AccountId protected saves.
+    CSteamID alt_steamid{};
+    uint32 alt_steamid_count = 0;
+    
+    // Custom encrypted app ticket for Denuvo games.
+    std::vector<uint8_t> customEncryptedAppTicket{};
 
     //Depots
     std::vector<DepotId_t> depots{};
@@ -365,6 +374,8 @@ public:
 
     CSteamID get_local_steam_id();
     CGameID get_local_game_id();
+    
+    CSteamID get_current_steam_id();
 
     const char *get_local_name();
     void set_local_name(const char *name);
@@ -427,7 +438,6 @@ public:
     void addFriendToOverlayAutoAccept(uint64_t friend_id);
     bool hasOverlayAutoAcceptInviteFromFriend(uint64_t friend_id) const;
     size_t overlayAutoAcceptInvitesCount() const;
-
 };
 
 #endif // SETTINGS_INCLUDE_H

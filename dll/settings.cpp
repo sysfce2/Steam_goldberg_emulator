@@ -18,6 +18,9 @@
 #include "dll/settings.h"
 #include "dll/steam_app_ids.h"
 
+// Global Steam ID call counter for savegame system
+uint32 Settings::global_steamid_call_count = 0;
+
 
 std::string Settings::sanitize(const std::string &name)
 {
@@ -96,6 +99,23 @@ CSteamID Settings::get_local_steam_id()
 CGameID Settings::get_local_game_id()
 {
     return game_id;
+}
+
+// alt or local steam id
+CSteamID Settings::get_current_steam_id()
+{
+    if (global_steamid_call_count < UINT32_MAX)
+        global_steamid_call_count++;
+
+    if (alt_steamid_count == 0 || !alt_steamid.IsValid()) {
+        return steam_id;
+    }
+
+    if (global_steamid_call_count > alt_steamid_count) {
+        return alt_steamid;
+    }
+
+    return steam_id;
 }
 
 const char *Settings::get_local_name()
@@ -222,6 +242,7 @@ void Settings::addModDetails(PublishedFileId_t id, const Mod_entry &details)
         f->total_files_sizes = details.total_files_sizes;
         f->min_game_branch = details.min_game_branch;
         f->max_game_branch = details.max_game_branch;
+        f->metadata = details.metadata;
     }
 }
 

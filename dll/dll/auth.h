@@ -76,6 +76,7 @@ class Auth_Manager {
     std::vector<struct Auth_Data> outbound{};
 
     void launch_callback(CSteamID id, EAuthSessionResponse resp, double delay=0);
+    void launch_callback_gs_steam2(CSteamID steam_id, uint32_t user_id, bool approved);
     void launch_callback_gs(CSteamID id, bool approved);
 
     static void ticket_callback(void *object, Common_Message *msg);
@@ -94,6 +95,7 @@ public:
 
     uint32 countInboundAuth();
 
+    bool SendSteam2UserConnect( uint32 unUserID, const void *pvRawKey, uint32 unKeyLen, uint32 unIPPublic, uint16 usPort, const void *pvCookie, uint32 cubCookie, CSteamID *pSteamIDUser );
     bool SendUserConnectAndAuthenticate( uint32 unIPClient, const void *pvAuthBlob, uint32 cubAuthBlobSize, CSteamID *pSteamIDUser );
 
     CSteamID fakeUser();

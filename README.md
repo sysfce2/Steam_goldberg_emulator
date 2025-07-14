@@ -50,17 +50,6 @@ You can also find instructions here in [README.release.md](./post_build/README.r
 ## One time setup
 ### **Cloning the repo**
 
- Disable automatic CRLF handling:  
- *Locally*
- ```shell
- git config --local core.autocrlf false
- ```
- *Or globally/system wide*
- ```shell
- git config --system core.autocrlf false
- git config --global core.autocrlf false
- ```
-
  Clone the repo and its submodules **recursively**
  ```shell
  git clone --recurse-submodules -j8 https://github.com/Detanup01/gbe_fork.git

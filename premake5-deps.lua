@@ -93,6 +93,16 @@ newoption {
     trigger = "ext-ingame_overlay",
     description = "Extract ingame_overlay",
 }
+newoption {
+    category = "extract",
+    trigger = "ext-opus",
+    description = "Extract opus",
+}
+newoption {
+    category = "extract",
+    trigger = "ext-portaudio",
+    description = "Extract portaudio",
+}
 
 -- build
 newoption {
@@ -146,7 +156,16 @@ newoption {
     trigger = "build-ingame_overlay",
     description = "Build ingame_overlay",
 }
-
+newoption {
+    category = "build",
+    trigger = "build-opus",
+    description = "Build opus",
+}
+newoption {
+    category = "build",
+    trigger = "build-portaudio",
+    description = "Build portaudio",
+}
 
 local function merge_list(src, dest)
     local src_count = #src
@@ -213,6 +232,7 @@ local cmake_common_defs = {
     'CMAKE_POSITION_INDEPENDENT_CODE=True',
     'BUILD_SHARED_LIBS=OFF',
     'CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
+    "CMAKE_CXX_STANDARD=17",
 }
 
 
@@ -426,6 +446,12 @@ if _OPTIONS["ext-mbedtls"] or _OPTIONS["all-ext"] then
 end
 if _OPTIONS["ext-ingame_overlay"] or _OPTIONS["all-ext"] then
     table.insert(deps_to_extract, { 'ingame_overlay/ingame_overlay.tar.gz', 'ingame_overlay' })
+end
+if _OPTIONS["ext-opus"] or _OPTIONS["all-ext"] then
+    table.insert(deps_to_extract, { 'opus/opus.tar.gz', 'opus' })
+end
+if _OPTIONS["ext-portaudio"] or _OPTIONS["all-ext"] then
+    table.insert(deps_to_extract, { 'portaudio/portaudio.tar.gz', 'portaudio' })
 end
 
 -- start extraction
@@ -662,14 +688,15 @@ if _OPTIONS["build-protobuf"] or _OPTIONS["all-build"] then
         "ABSL_PROPAGATE_CXX_STD=ON",
         "protobuf_BUILD_PROTOBUF_BINARIES=ON",
         "protobuf_BUILD_PROTOC_BINARIES=ON",
-        "protobuf_BUILD_LIBPROTOC=OFF",
-        "protobuf_BUILD_LIBUPB=OFF",
+        "protobuf_BUILD_LIBPROTOC=ON",
+        "protobuf_BUILD_LIBUPB=ON",
         "protobuf_BUILD_TESTS=OFF",
         "protobuf_BUILD_EXAMPLES=OFF",
         "protobuf_DISABLE_RTTI=ON",
         "protobuf_BUILD_CONFORMANCE=OFF",
         "protobuf_BUILD_SHARED_LIBS=OFF",
         "protobuf_WITH_ZLIB=ON",
+        "protobuf_FORCE_FETCH_DEPENDENCIES=ON",
     }
     if os.target() == 'windows' and string.match(_ACTION, 'gmake.*') then
         table.insert(proto_common_defs, 'protobuf_MSVC_STATIC_RUNTIME=ON')
@@ -735,5 +762,48 @@ if _OPTIONS["build-ingame_overlay"] or _OPTIONS["all-build"] then
             'MINIDETOUR_DYNAMIC_RUNTIME=OFF',
         })
         cmake_build('ingame_overlay', false, ingame_overlay_common_defs, nil, ingame_overlay_fixes)
+    end
+end
+
+if _OPTIONS["build-opus"] or _OPTIONS["all-build"] then
+    local opus_common_defs = {
+        "OPUS_BUILD_SHARED_LIBRARY=OFF",
+        "OPUS_BUILD_TESTING=OFF",
+        "OPUS_BUILD_PROGRAMS=OFF",
+        "OPUS_CUSTOM_MODES=OFF",
+        "OPUS_STATIC_RUNTIME=ON",
+    }
+
+    if _OPTIONS["32-build"] then
+        cmake_build('opus', true, opus_common_defs)
+    end
+    if _OPTIONS["64-build"] then
+        cmake_build('opus', false, opus_common_defs)
+    end
+end
+
+if _OPTIONS["build-portaudio"] or _OPTIONS["all-build"] then
+    local portaudio_common_defs = {
+        "PA_BUILD_SHARED_LIBS=OFF",
+        "PA_BUILD_TESTS=OFF",
+        "PA_BUILD_EXAMPLES=OFF",
+        "PA_ENABLE_DEBUG_OUTPUT=OFF",
+        "PA_USE_SKELETON=OFF", -- skeleton idk what that means
+        -- Win dependent stuff
+        "PA_USE_ASIO=OFF",
+        "PA_USE_DS=ON",
+        "PA_USE_WMME=ON",
+        "PA_USE_WASAPI=ON",
+        "PA_USE_WDMKS=ON",
+        "PA_USE_WDMKS_DEVICE_INFO=ON",
+        -- linux specific stuff
+        "PA_ALSA_DYNAMIC=OFF",
+    }
+
+    if _OPTIONS["32-build"] then
+        cmake_build('portaudio', true, portaudio_common_defs)
+    end
+    if _OPTIONS["64-build"] then
+        cmake_build('portaudio', false, portaudio_common_defs)
     end
 end

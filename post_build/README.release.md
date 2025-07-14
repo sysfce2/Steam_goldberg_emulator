@@ -427,3 +427,22 @@ Also, match making servers will return the info of the server from the incoming 
 **This is currently broken**  
 
 ---
+
+## **EncryptedAppTicket Support**
+
+* Add encrypted app tickets without modifying code
+* Create `configs.user.ini` in your game's settings folder
+* Add a line starting with `ticket=` followed by your Base64-encoded ticket
+* Example: `ticket=CAI...`
+
+**Why use this?**
+* For apps that require specific ticket formats
+* When you need to use tickets from real Steam client
+
+To generate a Base64 ticket from an existing file:
+```python
+import base64
+with open('ticket.bin', 'rb') as f:
+    print(base64.b64encode(f.read()).decode('utf-8'))
+```
+---

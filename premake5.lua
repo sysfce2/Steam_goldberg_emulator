@@ -205,6 +205,8 @@ local x32_deps_include = {
     path.join(deps_dir, "protobuf/install32/include"),
     path.join(deps_dir, "zlib/install32/include"),
     path.join(deps_dir, "mbedtls/install32/include"),
+    path.join(deps_dir, "opus/install32/include"),
+    path.join(deps_dir, "portaudio/install32/include"),
 }
 
 local x32_deps_overlay_include = {
@@ -219,6 +221,8 @@ local x64_deps_include = {
     path.join(deps_dir, "protobuf/install64/include"),
     path.join(deps_dir, "zlib/install64/include"),
     path.join(deps_dir, "mbedtls/install64/include"),
+    path.join(deps_dir, "opus/install64/include"),
+    path.join(deps_dir, "portaudio/install64/include"),
 }
 
 local x64_deps_overlay_include = {
@@ -279,6 +283,8 @@ local deps_link = {
     "mbedcrypto"         .. static_postfix,
     "mbedtls"            .. static_postfix,
     "mbedx509"           .. static_postfix,
+    "opus"               .. static_postfix,
+    "portaudio"          .. static_postfix,
 }
 -- add protobuf libs
 table_append(deps_link, {
@@ -335,11 +341,13 @@ table_append(deps_link, {
     "absl_log_internal_message"                   .. static_postfix,
     "absl_log_internal_nullguard"                 .. static_postfix,
     "absl_log_internal_proto"                     .. static_postfix,
+    "absl_log_internal_structured_proto"          .. static_postfix,
     "absl_log_severity"                           .. static_postfix,
     "absl_log_sink"                               .. static_postfix,
     "absl_low_level_hash"                         .. static_postfix,
     "absl_malloc_internal"                        .. static_postfix,
     "absl_periodic_sampler"                       .. static_postfix,
+    "absl_poison"                                 .. static_postfix,
     "absl_random_distributions"                   .. static_postfix,
     "absl_random_internal_distribution_test_util" .. static_postfix,
     "absl_random_internal_platform"               .. static_postfix,
@@ -368,9 +376,11 @@ table_append(deps_link, {
     "absl_throw_delegate"                         .. static_postfix,
     "absl_time"                                   .. static_postfix,
     "absl_time_zone"                              .. static_postfix,
+    "absl_tracing_internal"                       .. static_postfix,
+    "absl_utf8_for_code_point"                    .. static_postfix,
     "absl_vlog_config_internal"                   .. static_postfix,
-    "utf8_range"                                  .. static_postfix,
-    "utf8_validity"                               .. static_postfix,
+    lib_prefix .."utf8_range"                     .. static_postfix,
+    lib_prefix .."utf8_validity"                  .. static_postfix,
 })
 
 local common_link_win = {
@@ -423,6 +433,8 @@ local x32_deps_libdir = {
     path.join(deps_dir, "protobuf/install32/lib"),
     path.join(deps_dir, "zlib/install32/lib"),
     path.join(deps_dir, "mbedtls/install32/lib"),
+    path.join(deps_dir, "opus/install32/lib"),
+    path.join(deps_dir, "portaudio/install32/lib"),
 }
 
 local x32_deps_overlay_libdir = {
@@ -438,6 +450,8 @@ local x64_deps_libdir = {
     path.join(deps_dir, "zlib/install64/lib"),
     path.join(deps_dir, "mbedtls/install64/lib"),
     path.join(deps_dir, "ingame_overlay/install64/lib"),
+    path.join(deps_dir, "opus/install64/lib"),
+    path.join(deps_dir, "portaudio/install64/lib"),
 }
 
 local x64_deps_overlay_libdir = {

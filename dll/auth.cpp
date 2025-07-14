@@ -631,6 +631,35 @@ void Auth_Manager::launch_callback(CSteamID id, EAuthSessionResponse resp, doubl
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), delay);
 }
 
+void Auth_Manager::launch_callback_gs_steam2(CSteamID steam_id, uint32_t user_id, bool approved)
+{
+    if (approved) {
+        // Fire Steam2 callback.
+        GSClientSteam2Accept_t data2{};
+        data2.m_UserID = user_id;
+        data2.m_SteamID = steam_id.ConvertToUint64();
+        callbacks->addCBResult(data2.k_iCallback, &data2, sizeof(data2));
+
+        // Fire Steam3 callback.
+        GSClientApprove_t data3{};
+        data3.m_SteamID = data3.m_OwnerSteamID = steam_id;
+        callbacks->addCBResult(data3.k_iCallback, &data3, sizeof(data3));
+    } else {
+        // Fire Steam2 callback. This will kick the client so no need to send Steam3 callback.
+        GSClientSteam2Deny_t data2{};
+        data2.m_UserID = user_id;
+        data2.m_eSteamError = k_EDenyNotLoggedOn;
+        callbacks->addCBResult(data2.k_iCallback, &data2, sizeof(data2));
+
+        /*
+        GSClientDeny_t data3{};
+        data3.m_SteamID = steam_id;
+        data3.m_eDenyReason = k_EDenyNotLoggedOn; //TODO: other reasons?
+        callbacks->addCBResult(data3.k_iCallback, &data3, sizeof(data3));
+        */
+    }
+}
+
 void Auth_Manager::launch_callback_gs(CSteamID id, bool approved)
 {
     if (approved) {
@@ -794,6 +823,36 @@ void Auth_Manager::cancelTicket(uint32 number)
     network->sendToAll(&msg, true);
 
     outbound.erase(ticket);
+}
+
+bool Auth_Manager::SendSteam2UserConnect( uint32 unUserID, const void *pvRawKey, uint32 unKeyLen, uint32 unIPPublic, uint16 usPort, const void *pvCookie, uint32 cubCookie, CSteamID *pSteamIDUser )
+{
+    // pvRawKey is Steam2 auth ticket, it comes from Steam.dll.
+    // pvCookie is Steam3 auth ticket, it comes from us.
+    // Steam3 ticket is technically optional but it should always be there if the client is using Goldberg
+    // so there's no real need to check Steam2 ticket.
+    if (cubCookie < STEAM_TICKET_MIN_SIZE) return false;
+
+    Auth_Data data;
+    uint64 id;
+    memcpy(&id, (char *)pvCookie + STEAM_ID_OFFSET_TICKET, sizeof(id));
+    uint32 number;
+    memcpy(&number, ((char *)pvCookie) + sizeof(uint64), sizeof(number));
+    data.id = CSteamID(id);
+    data.number = number;
+    if (pSteamIDUser) *pSteamIDUser = data.id;
+
+    for (auto & t : inbound) {
+        if (t.id == data.id) {
+            //Should this return false?
+            launch_callback_gs_steam2(id, unUserID, true);
+            return true;
+        }
+    }
+
+    inbound.push_back(data);
+    launch_callback_gs_steam2(id, unUserID, true);
+    return true;
 }
 
 bool Auth_Manager::SendUserConnectAndAuthenticate( uint32 unIPClient, const void *pvAuthBlob, uint32 cubAuthBlobSize, CSteamID *pSteamIDUser )

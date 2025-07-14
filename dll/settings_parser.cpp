@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/settings_parser.h"
+#include "dll/base64.h"
 
 #define SI_CONVERT_GENERIC
 #define SI_SUPPORT_IOSTREAMS
@@ -662,6 +663,37 @@ static CSteamID parse_user_steam_id(class Local_Storage *local_storage)
     return user_id;
 }
 
+// user::general::alt_steamid
+static CSteamID parse_alt_steam_id(class Local_Storage* local_storage)
+{
+    CSteamID alt_steam_id((uint64)std::atoll(ini.GetValue("user::general", "alt_steamid", "0")));
+    if (!alt_steam_id.IsValid()) {
+        return CSteamID();
+    }
+
+    PRINT_DEBUG("Alt Steam ID: %llu", alt_steam_id);
+    return alt_steam_id;
+}
+
+// user::general::alt_steamid_count
+static uint32 parse_alt_steamid_count(class Local_Storage* local_storage)
+{
+    uint32 count = static_cast<uint32>(ini.GetLongValue("user::general", "alt_steamid_count"));
+    PRINT_DEBUG("Alt Steam ID count: %u", (uint32)count);
+    return (uint32)count;
+}
+
+// user::general::ticket
+static void parse_encrypted_app_ticket(class Settings *settings_client, class Settings *settings_server)
+{
+    std::string ticketValue(common_helpers::string_strip(ini.GetValue("user::general", "ticket", "")));
+    if (ticketValue.size()) {
+        std::vector<uint8_t> ticket = base64_decode(ticketValue);
+        settings_client->customEncryptedAppTicket = ticket;
+        settings_server->customEncryptedAppTicket = ticket;
+    }
+}
+
 // user::general::language
 // valid list: https://partner.steamgames.com/doc/store/localization/languages
 static std::string parse_current_language(class Local_Storage *local_storage)
@@ -859,15 +891,15 @@ static void parse_stats(class Settings *settings_client, class Settings *setting
 
             try {
                 if (stat_type == "float") {
-                    config.type = GameServerStats_Messages::StatInfo::STAT_TYPE_FLOAT;
+                    config.type = StatInfo::STAT_TYPE_FLOAT;
                     config.default_value_float = std::stof(stat_default_value);
                     config.global_value_double = std::stod(stat_global_value);
                 } else if (stat_type == "int") {
-                    config.type = GameServerStats_Messages::StatInfo::STAT_TYPE_INT;
+                    config.type = StatInfo::STAT_TYPE_INT;
                     config.default_value_int = std::stol(stat_default_value);
                     config.global_value_int64 = std::stoll(stat_global_value);
                 } else if (stat_type == "avgrate") {
-                    config.type = GameServerStats_Messages::StatInfo::STAT_TYPE_AVGRATE;
+                    config.type = StatInfo::STAT_TYPE_AVGRATE;
                     config.default_value_float = std::stof(stat_default_value);
                     config.global_value_double = std::stod(stat_global_value);
                 } else {
@@ -1078,6 +1110,7 @@ static void try_parse_mods_file(class Settings *settings_client, Settings *setti
             newMod.total_files_sizes = mod.value().value("total_files_sizes", newMod.primaryFileSize);
             newMod.min_game_branch = mod.value().value("min_game_branch", "");
             newMod.max_game_branch = mod.value().value("max_game_branch", "");
+            newMod.metadata = mod.value().value("metadata", "");
             
             newMod.workshopItemURL = mod.value().value("workshop_item_url", "https://steamcommunity.com/sharedfiles/filedetails/?id=" + std::string(mod.key()));
             newMod.votesUp = mod.value().value("upvotes", (uint32)500);
@@ -1110,6 +1143,7 @@ static void try_parse_mods_file(class Settings *settings_client, Settings *setti
             PRINT_DEBUG("    total_files_sizes: %llu", settings_client->getMod(newMod.id).total_files_sizes);
             PRINT_DEBUG("    min_game_branch: '%s'", settings_client->getMod(newMod.id).min_game_branch.c_str());
             PRINT_DEBUG("    max_game_branch: '%s'", settings_client->getMod(newMod.id).max_game_branch.c_str());
+            PRINT_DEBUG("    metadata: '%s'", settings_client->getMod(newMod.id).metadata.c_str());
             PRINT_DEBUG("    workshop_item_url: '%s'", newMod.workshopItemURL.c_str());
             PRINT_DEBUG("    preview_url: '%s'", newMod.previewURL.c_str());
         } catch (std::exception& e) {
@@ -1178,6 +1212,7 @@ static void try_detect_mods_folder(class Settings *settings_client, Settings *se
             PRINT_DEBUG("    total_files_sizes: '%llu'", newMod.total_files_sizes);
             PRINT_DEBUG("    min_game_branch: '%s'", newMod.min_game_branch.c_str());
             PRINT_DEBUG("    max_game_branch: '%s'", newMod.max_game_branch.c_str());
+            PRINT_DEBUG("    metadata: '%s'", newMod.metadata.c_str());
             PRINT_DEBUG("    workshop_item_url: '%s'", newMod.workshopItemURL.c_str());
             PRINT_DEBUG("    preview_url: '%s'", newMod.previewURL.c_str());
         } catch (...) {}
@@ -1764,6 +1799,11 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     std::string name(parse_account_name(local_storage));
     // Steam ID
     CSteamID user_id = parse_user_steam_id(local_storage);
+    
+    // Alt Steam ID for savegame system
+    CSteamID alt_steamid = parse_alt_steam_id(local_storage);
+    uint32 alt_steamid_count = parse_alt_steamid_count(local_storage);
+
     // Language
     std::string language(parse_current_language(local_storage));
     // Supported languages, this will change the current language if needed
@@ -1775,6 +1815,11 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     }
     Settings *settings_client = new Settings(user_id, CGameID(appid), name, language, steam_offline_mode);
     Settings *settings_server = new Settings(generate_steam_id_server(), CGameID(appid), name, language, steam_offline_mode);
+
+    settings_client->alt_steamid = alt_steamid;
+    settings_client->alt_steamid_count = alt_steamid_count;
+    settings_server->alt_steamid = alt_steamid;
+    settings_server->alt_steamid_count = alt_steamid_count;
 
     // listen port
     settings_client->set_port(port);
@@ -1807,6 +1852,8 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     load_gamecontroller_settings(settings_client);
     parse_auto_accept_invite(settings_client, settings_server);
     parse_ip_country(local_storage, settings_client, settings_server);
+
+    parse_encrypted_app_ticket(settings_client, settings_server);
     
     // try local "steam_settings" then saves path, on second trial force load defaults
     if (!parse_branches_file(steam_settings_path, false, settings_client, settings_server, local_storage)) {
