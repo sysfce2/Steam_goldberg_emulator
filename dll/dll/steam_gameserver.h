@@ -73,6 +73,8 @@ public ISteamGameServer
     std::vector<struct Gameserver_Outgoing_Packet> outgoing_packets{};
 
     void set_version(const char *pchVersionString);
+    void add_player(CSteamID steamID);
+    void remove_player(CSteamID steamID);
 
 
 public:

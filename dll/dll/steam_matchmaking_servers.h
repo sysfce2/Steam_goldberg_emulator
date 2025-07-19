@@ -79,6 +79,7 @@ public ISteamMatchmakingServers
     void server_details(Gameserver *g, gameserveritem_t *server);
     void server_details_players(Gameserver *g, Steam_Matchmaking_Servers_Direct_IP_Request *r);
     void server_details_rules(Gameserver *g, Steam_Matchmaking_Servers_Direct_IP_Request *r);
+    HServerListRequest get_server_list_request(EMatchMakingType type);
     void Callback(Common_Message *msg);
 
 public:

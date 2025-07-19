@@ -28,8 +28,8 @@ Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class N
     this->callbacks = callbacks;
     this->callback_results = callback_results;
     
-    recording = false;
     auth_manager = new Auth_Manager(settings, network, callbacks);
+    voicechat = new VoiceChat();
 }
 
 Steam_User::~Steam_User()
@@ -147,7 +147,17 @@ bool Steam_User::SetEmail( const char *pchEmail )
 int Steam_User::GetSteamGameConnectToken( void *pBlob, int cbMaxBlob )
 {
     PRINT_DEBUG_ENTRY();
-    return 0;
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (cbMaxBlob < STEAM_TICKET_MIN_SIZE) return 0;
+    if (!pBlob) return 0;
+
+    uint32 out_size = STEAM_AUTH_TICKET_SIZE;
+    auth_manager->getTicketData(pBlob, cbMaxBlob, &out_size);
+
+    if (out_size > STEAM_AUTH_TICKET_SIZE)
+        return 0;
+    return out_size;
 }
 
 bool Steam_User::SetRegistryString( EConfigSubTree eRegistrySubTree, const char *pchKey, const char *pchValue )
@@ -262,19 +272,18 @@ bool Steam_User::GetRegistryInt( EConfigSubTree eRegistrySubTree, const char *pc
 //
 // return value - returns the number of bytes written to pBlob. If the return is 0, then the buffer passed in was too small, and the call has failed
 // The contents of pBlob should then be sent to the game server, for it to use to complete the authentication process.
-
-//steam returns 206 bytes
-#define INITIATE_GAME_CONNECTION_TICKET_SIZE 206
-
 int Steam_User::InitiateGameConnection( void *pAuthBlob, int cbMaxAuthBlob, CSteamID steamIDGameServer, uint32 unIPServer, uint16 usPortServer, bool bSecure )
 {
     PRINT_DEBUG("%i %llu %u %u %u %p", cbMaxAuthBlob, steamIDGameServer.ConvertToUint64(), unIPServer, usPortServer, bSecure, pAuthBlob);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (cbMaxAuthBlob < INITIATE_GAME_CONNECTION_TICKET_SIZE) return 0;
+
+    if (cbMaxAuthBlob < STEAM_TICKET_MIN_SIZE) return 0;
     if (!pAuthBlob) return 0;
-    uint32 out_size = INITIATE_GAME_CONNECTION_TICKET_SIZE;
-    auth_manager->getTicketData(pAuthBlob, INITIATE_GAME_CONNECTION_TICKET_SIZE, &out_size);
-    if (out_size > INITIATE_GAME_CONNECTION_TICKET_SIZE)
+
+    uint32 out_size = STEAM_AUTH_TICKET_SIZE;
+    auth_manager->getTicketData(pAuthBlob, cbMaxAuthBlob, &out_size);
+
+    if (out_size > STEAM_AUTH_TICKET_SIZE)
         return 0;
     return out_size;
 }
@@ -471,10 +480,7 @@ bool Steam_User::GetUserDataFolder( char *pchBuffer, int cubBuffer )
 void Steam_User::StartVoiceRecording( )
 {
     PRINT_DEBUG_ENTRY();
-    last_get_voice = std::chrono::high_resolution_clock::now();
-    recording = true;
-    //TODO:fix
-    recording = false;
+    voicechat->StartVoiceRecording();
 }
 
 // Stops voice recording. Because people often release push-to-talk keys early, the system will keep recording for
@@ -483,7 +489,7 @@ void Steam_User::StartVoiceRecording( )
 void Steam_User::StopVoiceRecording( )
 {
     PRINT_DEBUG_ENTRY();
-    recording = false;
+    voicechat->StopVoiceRecording();
 }
 
 // Determine the size of captured audio data that is available from GetVoice.
@@ -493,14 +499,7 @@ void Steam_User::StopVoiceRecording( )
 EVoiceResult Steam_User::GetAvailableVoice( uint32 *pcbCompressed, uint32 *pcbUncompressed_Deprecated, uint32 nUncompressedVoiceDesiredSampleRate_Deprecated  )
 {
     PRINT_DEBUG_ENTRY();
-    if (pcbCompressed) *pcbCompressed = 0;
-    if (pcbUncompressed_Deprecated) *pcbUncompressed_Deprecated = 0;
-    if (!recording) return k_EVoiceResultNotRecording;
-    double seconds = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - last_get_voice).count();
-    if (pcbCompressed) *pcbCompressed = static_cast<uint32>(seconds * 1024.0 * 64.0 / 8.0);
-    if (pcbUncompressed_Deprecated) *pcbUncompressed_Deprecated = static_cast<uint32>(seconds * (double)nUncompressedVoiceDesiredSampleRate_Deprecated * 2.0);
-
-    return k_EVoiceResultOK;
+    return voicechat->GetAvailableVoice(pcbCompressed);
 }
 
 EVoiceResult Steam_User::GetAvailableVoice(uint32 *pcbCompressed, uint32 *pcbUncompressed)
@@ -533,22 +532,7 @@ EVoiceResult Steam_User::GetAvailableVoice(uint32 *pcbCompressed, uint32 *pcbUnc
 EVoiceResult Steam_User::GetVoice( bool bWantCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, bool bWantUncompressed_Deprecated, void *pUncompressedDestBuffer_Deprecated , uint32 cbUncompressedDestBufferSize_Deprecated , uint32 *nUncompressBytesWritten_Deprecated , uint32 nUncompressedVoiceDesiredSampleRate_Deprecated  )
 {
     PRINT_DEBUG_ENTRY();
-    if (!recording) return k_EVoiceResultNotRecording;
-
-    double seconds = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - last_get_voice).count();
-    if (bWantCompressed) {
-        uint32 towrite = static_cast<uint32>(seconds * 1024.0 * 64.0 / 8.0);
-        if (cbDestBufferSize < towrite) towrite = cbDestBufferSize;
-        if (pDestBuffer) memset(pDestBuffer, 0, towrite);
-        if (nBytesWritten) *nBytesWritten = towrite;
-    }
-
-    if (bWantUncompressed_Deprecated) {
-        PRINT_DEBUG("Wanted Uncompressed");
-    }
-
-    last_get_voice = std::chrono::high_resolution_clock::now();
-    return k_EVoiceResultOK;
+    return voicechat->GetVoice(bWantCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten);
 }
 
 EVoiceResult Steam_User::GetVoice( bool bWantCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, bool bWantUncompressed, void *pUncompressedDestBuffer, uint32 cbUncompressedDestBufferSize, uint32 *nUncompressBytesWritten )
@@ -572,14 +556,7 @@ EVoiceResult Steam_User::GetCompressedVoice( void *pDestBuffer, uint32 cbDestBuf
 EVoiceResult Steam_User::DecompressVoice( const void *pCompressed, uint32 cbCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, uint32 nDesiredSampleRate )
 {
     PRINT_DEBUG_ENTRY();
-    if (!recording) return k_EVoiceResultNotRecording;
-
-    uint32 uncompressed = static_cast<uint32>((double)cbCompressed * ((double)nDesiredSampleRate / 8192.0));
-    if(nBytesWritten) *nBytesWritten = uncompressed;
-    if (uncompressed > cbDestBufferSize) uncompressed = cbDestBufferSize;
-    if (pDestBuffer) memset(pDestBuffer, 0, uncompressed);
-
-    return k_EVoiceResultOK;
+    return voicechat->DecompressVoice(pCompressed, cbCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten, nDesiredSampleRate);
 }
 
 EVoiceResult Steam_User::DecompressVoice( const void *pCompressed, uint32 cbCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten )

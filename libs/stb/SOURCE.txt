@@ -2,7 +2,7 @@
 
 https://github.com/nothings/stb
 
-VERSION: https://github.com/nothings/stb/tree/f75e8d1cad7d90d72ef7a4661f1b994ef78b4e31
+VERSION: https://github.com/nothings/stb/tree/f58f558c120e9b32c217290b80bad1a0729fbb2c
 
 #### LICENSE
 

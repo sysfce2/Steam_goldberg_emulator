@@ -1,15 +1,7 @@
 #include "dll/auth.h"
 
 #define STEAM_ID_OFFSET_TICKET (4 + 8)
-#define STEAM_TICKET_MIN_SIZE  (4 + 8 + 8)
-#define STEAM_TICKET_MIN_SIZE_NEW 170
-
 #define STEAM_TICKET_PROCESS_TIME 0.03
-
-//Conan Exiles doesn't work with 512 or 128, 256 seems to be the good size
-// Usually steam send as 1024 (or recommend sending as that)
-//Steam returns 234
-#define STEAM_AUTH_TICKET_SIZE 256 //234
 
 
 static inline int generate_random_int() {
@@ -739,7 +731,7 @@ Auth_Data Auth_Manager::getTicketData( void *pTicket, int cbMaxTicket, uint32 *p
         ((char *)pTicket)[3] = 0;
         uint64 steam_id_buff = steam_id.ConvertToUint64();
         memcpy((char *)pTicket + STEAM_ID_OFFSET_TICKET, &steam_id_buff, sizeof(steam_id_buff));
-        *pcbTicket = cbMaxTicket;
+        *pcbTicket = STEAM_TICKET_MIN_SIZE;
         uint32 ttt = generate_steam_ticket_id();
         ticket_data.id = steam_id;
         ticket_data.number = ttt;

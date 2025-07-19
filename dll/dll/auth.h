@@ -7,6 +7,11 @@
 #include "base.h"
 #include "include.wrap.mbedtls.h"
 
+#define STEAM_TICKET_MIN_SIZE  (4 + 8 + 8)
+#define STEAM_TICKET_MIN_SIZE_NEW 170
+
+// Steam recommends sending 1024 byte buffer. It returns 234 byte ticket.
+#define STEAM_AUTH_TICKET_SIZE 1024
 
 // the data type is important, we depend on sizeof() for each one of them
 constexpr const static uint32_t STEAM_APPTICKET_SIGLEN = 128;
