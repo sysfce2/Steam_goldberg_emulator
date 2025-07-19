@@ -18,6 +18,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <cstdint>
 
 // Decodes a base64 encoded string into a byte vector
 std::vector<uint8_t> base64_decode(const std::string& encoded_string);
