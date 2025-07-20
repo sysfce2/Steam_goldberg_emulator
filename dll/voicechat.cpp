@@ -1,12 +1,14 @@
 #include "dll/voicechat.h"
 
+static std::atomic<bool> isInited{ false };
+
 bool VoiceChat::InitVoiceSystem() {
-    static std::atomic<int> initCount{ 0 };
-    if (initCount++ == 0) {
+    if (!isInited) {
         if (Pa_Initialize() != paNoError) {
             PRINT_DEBUG("PortAudio initialization failed");
             return false;
         }
+        isInited = true;
     }
     isRecording = false;
     isPlaying = false;
@@ -17,9 +19,9 @@ bool VoiceChat::InitVoiceSystem() {
 }
 
 void VoiceChat::ShutdownVoiceSystem() {
-    static std::atomic<int> initCount{ 1 };
-    if (--initCount == 0) {
+    if (isInited) {
         Pa_Terminate();
+        isInited = false;
     }
 }
 

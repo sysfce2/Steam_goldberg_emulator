@@ -121,9 +121,25 @@ bool SteamCallResults::callback_result(SteamAPICall_t api_call, void *copy_to, u
     });
     if (cb_result != callresults.end()) {
         if (!cb_result->call_completed()) return false;
-        if (cb_result->result.size() > size) return false;
 
-        memcpy(copy_to, &(cb_result->result[0]), cb_result->result.size());
+        // Real Steam just does nothing and returns true if nullptr is passed.
+        if (!copy_to) return true;
+
+        memset(copy_to, 0, size);
+
+        size_t resultsize = cb_result->result.size();
+        if (size > resultsize) {
+            PRINT_DEBUG("provided buffer is larger than callback data (%u > %u), code should possibly be updated to new sdk",
+                size,
+                resultsize);
+        }
+
+        // Output buffer being too small is not a failure condition.
+        // This behavior is needed for RemoteStorageFileShareResult_t which was made larger in sdk v1.28x
+        // without even the interface version being bumped.
+        size_t outsize = std::min(resultsize, static_cast<size_t>(size));
+
+        memcpy(copy_to, cb_result->result.data(), outsize);
         cb_result->to_delete = true;
         return true;
     } else {

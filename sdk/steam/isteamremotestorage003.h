@@ -54,4 +54,13 @@ public:
 	virtual	UGCHandle_t GetCachedUGCHandle( int32 iCachedContent ) = 0;
 };
 
+//-----------------------------------------------------------------------------
+// Purpose: The result of a call to FileShare()
+//-----------------------------------------------------------------------------
+struct RemoteStorageFileShareResult001_t {
+    enum { k_iCallback = k_iSteamRemoteStorageCallbacks + 7 };
+    EResult m_eResult;			// The result of the operation
+    UGCHandle_t m_hFile;		// The handle that can be shared with users and features
+};
+
 #endif // ISTEAMREMOTESTORAGE003_H
