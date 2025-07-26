@@ -140,11 +140,8 @@ uint32 Steam_Apps::GetEarliestPurchaseUnixTime( AppId_t nAppID )
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (nAppID == 0) return 0; // steam returns 0
     if (nAppID == UINT32_MAX) return 0; // steam returns 0
-    auto t =
-        // 4 days ago
-        startup_time
-        - std::chrono::hours(24 * 4);
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(t.time_since_epoch());
+
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(settings->get_purchase_date().time_since_epoch());
     if (nAppID == settings->get_local_game_id().AppID() || settings->hasDLC(nAppID)) {
         return (uint32)duration.count();
     }
