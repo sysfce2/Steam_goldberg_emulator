@@ -8,6 +8,9 @@
 #include <mutex>
 #include <intrin.h>
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
 // MinGW doesn't implement _AddressOfReturnAddress(), throws linker error
 // https://gcc.gnu.org/onlinedocs/gcc/Return-Address.html
 // https://learn.microsoft.com/en-us/cpp/intrinsics/addressofreturnaddress
@@ -69,7 +72,7 @@ static const std::vector<BindSnrDetails_t> all_bind_details {
     {
         // bind_detection_patts[]
         {
-            "FF D? 44 0F B6 ?? 3C 30 0F 85", // appid: 537450 (rare, only found in this appid!)
+            "FF D? 44 0F B6 ?? 3C 30 0F 85", // appid: 537450, 427820
         },
         // stub_details[]
         {
@@ -86,9 +89,13 @@ static const std::vector<BindSnrDetails_t> all_bind_details {
                         "E8 ?? ?? ?? ?? 84 C0 75 ?? B0 3?",
                         "B8 01 00 00 00 ?? ?? EB",
                     },
-                    {
+                    { // 537450
                         "E8 ?? ?? ?? ?? 44 0F B6 ?? 3C 30 0F 84 ?? ?? ?? ?? 3C",
                         "B8 30 00 00 00 ?? ?? ?? ?? ?? ?? 90 E9",
+                    },
+                    { // 427820
+                        "E8 ?? ?? ?? ?? 0F B6 ?? 3C 30 7? ?? 3C",
+                        "B8 30 00 00 00 ?? ?? ?? ?? ?? EB",
                     },
                 },
             },
@@ -135,6 +142,34 @@ static const std::vector<BindSnrDetails_t> all_bind_details {
         },
         // stub_details[]
         {
+            { // appid 250180
+                // stub_detection_patt
+                "3? ?? ?? 7? ?? 6? ?? E9 ?? ?? ?? ?? 68 ?? ?? ?? ?? 5? 8? ?? ?? 5? 5?",
+                // change memory pages access to r/w/e
+                true, // appid 48000
+                // stub_snr_units[]
+                {
+                    {
+                        "F6 05 ?? ?? ?? ?? 02 89 ?? ?? 0F 85 ?? ?? ?? ?? 5? FF ?? 6?",
+                        "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 90 E9 03 03 00 00",
+                    },
+                },
+            },
+
+            { // appid 257220
+                // stub_detection_patt
+                "3? ?? ?? 7? ?? 6? ?? E9 ?? ?? ?? ?? 8? ?? ?? 5? 5?",
+                // change memory pages access to r/w/e
+                true, // appid 48000
+                // stub_snr_units[]
+                {
+                    {
+                        "F6 05 ?? ?? ?? ?? 02 89 ?? ?? 0F 85 ?? ?? ?? ?? 5? FF ?? 6?",
+                        "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 90 E9 FC 02 00 00",
+                    },
+                },
+            },
+
             {
                 // stub_detection_patt
                 "??",
@@ -149,10 +184,6 @@ static const std::vector<BindSnrDetails_t> all_bind_details {
                     {
                         "F6 C? 02 89 ?? ?? ?? ?? ?? A3 ?? ?? ?? ?? 0F 85",
                         "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 90 E9 00 03 00 00",
-                    },
-                    { // appid 250180
-                        "F6 05 ?? ?? ?? ?? 02 89 ?? ?? 0F 85 ?? ?? ?? ?? 5? FF ?? 6?",
-                        "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 90 E9 03 03",
                     },
                 },
             },
@@ -180,6 +211,10 @@ static const std::vector<BindSnrDetails_t> all_bind_details {
                     },
                     {
                         "5? E8 ?? ?? ?? ?? 8? ?? 83 C4 ?? 8? F? 30 74 ?? 8?",
+                        "?? B8 30 00 00 00 ?? ?? ?? ?? ?? ?? ?? ?? EB",
+                    },
+                    { // appid 250320
+                        "5? E8 ?? ?? ?? ?? 83 C4 ?? 88 45 ?? 3C 30 74",
                         "?? B8 30 00 00 00 ?? ?? ?? ?? ?? ?? ?? ?? EB",
                     },
                 },
@@ -219,7 +254,7 @@ static const std::vector<BindSnrDetails_t> all_bind_details {
                         "F6 C? 02 89 ?? ?? ?? ?? ?? A3 ?? ?? ?? ?? 0F 85",
                         "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 90 E9 2A 02 00 00",
                     },
-                    {
+                    { // 94530, 94590
                         "6A 04 5? 5? 8D",
                         "?? ?? ?? E9 BF 00 00 00",
                     },
@@ -255,27 +290,32 @@ static void change_mem_pages_access()
     auto sections = pe_helpers::get_section_headers((HMODULE)exe_addr_base);
     if (!sections.count) return;
     
-    constexpr const static unsigned ANY_EXECUTE_RIGHT = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    constexpr const static unsigned PAGE_ANY_EXECUTE_RIGHT = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
     for (size_t i = 0; i < sections.count; ++i) {
         auto section = sections.ptr[i];
         uint8_t *section_base_addr = exe_addr_base + section.VirtualAddress;
         MEMORY_BASIC_INFORMATION mbi{};
         if (VirtualQuery((LPCVOID)section_base_addr, &mbi, sizeof(mbi)) && // function succeeded
-            (mbi.Protect & ANY_EXECUTE_RIGHT)) { // this page (not entire section) has execute rights
+            (mbi.Protect & PAGE_ANY_EXECUTE_RIGHT)) { // this page (not entire section) has execute rights
             DWORD current_protection = 0;
             auto res = VirtualProtect(section_base_addr, mbi.RegionSize, PAGE_EXECUTE_READWRITE, &current_protection);
-            // if (!res) {
-            //     MessageBoxA(
-            //         nullptr,
-            //         (std::string("Failed to change access of page '") + (char *)section.Name + "' ").c_str(),
-            //         "Failed",
-            //         MB_OK
-            //     );
-            // }
+#ifdef STUB_EXTRA_DEBUG
+            if (!res) {
+                std::string msg = std::string("Failed to change access of mem page '") + (char *)section.Name + "' @" + std::to_string((unsigned long long)section_base_addr);
+                MessageBoxA(nullptr, msg.c_str(), "Mem pages access change failed", MB_OK | MB_ICONERROR);
+            }
+#endif
         }
     }
 
 
+}
+
+extern "C" __declspec(dllexport) void __cdecl patch_done()
+{
+#ifdef STUB_EXTRA_DEBUG
+    MessageBoxA(nullptr, "You can hook a debugger here!", "Patch done", MB_OK | MB_ICONASTERISK);
+#endif
 }
 
 static void call_cleanup_cb()
@@ -293,55 +333,59 @@ static void patch_if_possible(void *ret_addr)
     auto page_details = pe_helpers::get_mem_page_details(ret_addr);
     if (!page_details.BaseAddress || page_details.AllocationProtect != PAGE_READWRITE) return;
 
-    // find stub variant
-    const StubSnrDetails_t *current_stub = nullptr;
+    bool anything_found = false;
+    bool change_mem_access = false;
+
     const auto &bind_details = all_bind_details[current_bind_idx];
     for (const auto &stub_details : bind_details.stub_details) {
-        auto mem = pe_helpers::search_memory(
-            (uint8_t *)page_details.BaseAddress,
+        // find stub variant
+        auto stub_variant_mem = pe_helpers::search_memory(
+            reinterpret_cast<uint8_t *>(page_details.BaseAddress),
             page_details.RegionSize,
             stub_details.stub_detection_patt);
         
-        if (mem) {
-            current_stub = &stub_details;
-            break;
+        if (!stub_variant_mem) {
+            continue;
         }
-    }
-
-    if (!current_stub) {
-        // we can't remove hooks here, the drm allocates many pages with read/write access to decrypt other parts
-        // and their code also gets here, if we restore hooks then we can't patch the actual stub page (which comes much later)
-        return;
-    }
-
-    // patch all snr units inside stub
-    bool anything_found = false;
-    for (const auto &snr_unit : current_stub->stub_snr_units) {
-        auto mem = pe_helpers::search_memory(
-            (uint8_t *)page_details.BaseAddress,
-            page_details.RegionSize,
-            snr_unit.search_patt);
         
-        if (mem) {
-            anything_found = true;
+        // patch all snr units inside stub
+        for (const auto &snr_unit : stub_details.stub_snr_units) {
+            auto search_patt_mem = pe_helpers::search_memory(
+                reinterpret_cast<uint8_t *>(page_details.BaseAddress),
+                page_details.RegionSize,
+                snr_unit.search_patt);
             
-            auto size_until_match = mem - (uint8_t *)page_details.BaseAddress;
-            bool ok = pe_helpers::replace_memory(
-                mem,
-                page_details.RegionSize - size_until_match,
-                snr_unit.replace_patt,
-                GetCurrentProcess());
-            // if (!ok) return;
+            if (search_patt_mem) {
+                anything_found = true;
+                change_mem_access |= stub_details.change_mem_access;
+                
+                auto size_before_match = search_patt_mem - (uint8_t *)page_details.BaseAddress;
+                bool ok = pe_helpers::replace_memory(
+                    search_patt_mem,
+                    page_details.RegionSize - size_before_match,
+                    snr_unit.replace_patt,
+                    GetCurrentProcess());
+#ifdef STUB_EXTRA_DEBUG
+                if (!ok) {
+                    std::string msg = std::string("Failed to patch pattern @") + std::to_string((unsigned long long)search_patt_mem) + " >> '" + snr_unit.search_patt + "'";
+                    MessageBoxA(nullptr, msg.c_str(), "SnR patch failed", MB_OK | MB_ICONERROR);
+                }
+#endif
+            }
         }
     }
 
     if (anything_found) {
         // MessageBoxA(NULL, ("ret addr = " + std::to_string((size_t)ret_addr)).c_str(), "Patched", MB_OK);
         restore_win32_apis();
-        if (current_stub->change_mem_access) {
+        if (change_mem_access) {
             change_mem_pages_access();
         }
+        patch_done();
         call_cleanup_cb();
+    } else {
+        // we can't remove hooks here, the drm allocates many pages with read/write access to decrypt other parts
+        // and their code also gets here, if we restore hooks then we can't patch the actual stub page (which executes much later)
     }
 }
 
@@ -363,9 +407,7 @@ static DWORD WINAPI GetTickCount_hook()
 
 static decltype(GetModuleHandleA) *actual_GetModuleHandleA = GetModuleHandleA;
 __declspec(noinline)
-static HMODULE WINAPI GetModuleHandleA_hook(
-  LPCSTR lpModuleName
-)
+static HMODULE WINAPI GetModuleHandleA_hook(LPCSTR lpModuleName)
 {
     if (GetModuleHandleA_hooked &&
         lpModuleName && lpModuleName[0] &&
@@ -382,11 +424,7 @@ static HMODULE WINAPI GetModuleHandleA_hook(
 
 static decltype(GetModuleHandleExA) *actual_GetModuleHandleExA = GetModuleHandleExA;
 __declspec(noinline)
-static BOOL WINAPI GetModuleHandleExA_hook(
-  DWORD   dwFlags,
-  LPCSTR  lpModuleName,
-  HMODULE *phModule
-)
+static BOOL WINAPI GetModuleHandleExA_hook(DWORD dwFlags, LPCSTR lpModuleName, HMODULE *phModule)
 {
     constexpr const static unsigned HANDLE_FROM_ADDR = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
     if (GetModuleHandleExA_hooked &&

@@ -17,6 +17,7 @@
 
 #include "dll/steam_client.h"
 #include "dll/settings_parser.h"
+#include "dll/dll.h"
 
 
 void Steam_Client::background_thread_proc()
@@ -133,6 +134,7 @@ Steam_Client::Steam_Client()
     callbacks_server = new SteamCallBacks(callback_results_server);
 
     steam_gameserver = new Steam_GameServer(settings_server, network, callbacks_server);
+    steam_gameserver_user = new Steam_User(settings_server, local_storage, network, callback_results_server, callbacks_server);
     steam_gameserver_utils = new Steam_Utils(settings_server, callback_results_server, callbacks_server, steam_overlay);
     steam_gameserverstats = new Steam_GameServerStats(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_networking = new Steam_Networking(settings_server, network, callbacks_server, run_every_runcb);
@@ -151,6 +153,7 @@ Steam_Client::Steam_Client()
     steam_app_ticket = new Steam_AppTicket(settings_client);
 
     gameserver_has_ipv6_functions = false;
+    steamclient_version = 6; // default for C exports
 
     last_cb_run = 0;
     PRINT_DEBUG("end *********");
@@ -940,6 +943,9 @@ void Steam_Client::RunCallbacks(bool runClientCB, bool runGameserverCB)
     // PRINT_DEBUG("steam_gameserver *********");
     steam_gameserver->RunCallbacks();
 
+    // PRINT_DEBUG("steam_user *********");
+    steam_gameserver_user->RunCallbacks();
+
     if (runClientCB) {
         // PRINT_DEBUG("callback_results_client *********");
         callback_results_client->runCallResults();
@@ -1014,4 +1020,110 @@ const char *Steam_Client::GetUniverseName( EUniverse eUniverse )
 
     return "Unknown";
 }
+
+HSteamUser Steam_Client::CreateGlobalInstance()
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = 0;
+    return CreateGlobalUser(&pipe);
+}
+
+HSteamUser Steam_Client::ConnectToGlobalInstance()
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = get_pipe_for_user(CLIENT_HSTEAMUSER);
+    if (!pipe) {
+        pipe = CreateSteamPipe();
+    }
+
+    return ConnectToGlobalUser(pipe);
+}
+
+HSteamUser Steam_Client::CreateLocalInstance()
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = 0;
+    return CreateLocalUser(&pipe);
+}
+
+void Steam_Client::ReleaseInstance( HSteamUser hSteamUser )
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
+    if (pipe) {
+        ReleaseUser(pipe, hSteamUser);
+        BReleaseSteamPipe(pipe);
+    }
+}
+
+ISteamUser *Steam_Client::GetISteamUser( HSteamUser hSteamUser, const char *pchVersion )
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
+    return GetISteamUser(hSteamUser, pipe, pchVersion);
+}
+
+ISteamGameServer *Steam_Client::GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion )
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
+    return GetISteamGameServer(hSteamUser, pipe, pchVersion);
+}
+
+bool Steam_Client::BMainLoop( uint64 time, bool unk )
+{
+    PRINT_DEBUG_ENTRY();
+    RunCallbacks(true, true);
+    return true;
+}
+
+bool Steam_Client::BMainLoop( uint64 time )
+{
+    PRINT_DEBUG_ENTRY();
+    RunCallbacks(true, true);
+    return true;
+}
+
+EUniverse Steam_Client::GetConnectedUniverse()
+{
+    PRINT_DEBUG_ENTRY();
+    return k_EUniversePublic;
+}
+
+void Steam_Client::SetEUniverse( EUniverse universe )
+{
+    PRINT_DEBUG_TODO();
+}
+
+bool Steam_Client::BGetCallback( HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg, int *unk )
+{
+    PRINT_DEBUG_ENTRY();
+    return steamclient_get_callback(hSteamPipe, pCallbackMsg);
+}
+
+void Steam_Client::FreeLastCallback( HSteamPipe hSteamPipe )
+{
+    PRINT_DEBUG_ENTRY();
+    steamclient_free_callback(hSteamPipe);
+}
+
+HSteamPipe Steam_Client::get_pipe_for_user(HSteamUser hUser)
+{
+    if (hUser == CLIENT_HSTEAMUSER) {
+        for (const auto &[pipe_handle, pipe_type] : steam_pipes) {
+            if (pipe_type == Steam_Pipe::CLIENT) {
+                return pipe_handle;
+            }
+        }
+    } else if (hUser == SERVER_HSTEAMUSER) {
+        for (const auto &[pipe_handle, pipe_type] : steam_pipes) {
+            if (pipe_type == Steam_Pipe::SERVER) {
+                return pipe_handle;
+            }
+        }
+    }
+
+    return 0;
+}
+
 // older sdk ----------------------------------------------------------

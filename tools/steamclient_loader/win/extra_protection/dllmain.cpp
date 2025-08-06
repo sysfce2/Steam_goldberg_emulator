@@ -9,16 +9,20 @@
 #include <thread>
 #include <string>
 
-#if defined(DEBUG) || defined(_DEBUG)
-    #define STUB_EXTRA_DEBUG
-#endif
-
 static std::mutex dll_unload_mtx{};
 static std::condition_variable dll_unload_cv{};
 static bool unload_dll = false;
 
 static HMODULE my_hModule = nullptr;
 static HANDLE unload_thread_handle = INVALID_HANDLE_VALUE;
+
+constexpr const auto UNLOAD_TIMEOUT =
+#ifdef STUB_EXTRA_DEBUG
+        std::chrono::minutes(5)
+#else
+        std::chrono::seconds(5)
+#endif
+    ;
 
 
 static void send_unload_signal()
@@ -32,14 +36,6 @@ static void send_unload_signal()
 
 DWORD WINAPI self_unload(LPVOID lpParameter)
 {
-    constexpr const auto UNLOAD_TIMEOUT =
-#ifdef STUB_EXTRA_DEBUG
-        std::chrono::minutes(5)
-#else
-        std::chrono::seconds(5)
-#endif
-    ;
-
     {
 #ifdef STUB_EXTRA_DEBUG
         auto t1 = std::chrono::high_resolution_clock::now();
@@ -61,14 +57,10 @@ DWORD WINAPI self_unload(LPVOID lpParameter)
     FreeLibraryAndExitThread(my_hModule, 0);
 }
 
-BOOL APIENTRY DllMain(
-    HMODULE hModule,
-    DWORD  reason,
-    LPVOID lpReserved)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD  reason, LPVOID lpReserved)
 {
-    switch (reason)
-    {
-    case DLL_PROCESS_ATTACH:
+    switch (reason) {
+    case DLL_PROCESS_ATTACH: {
         stubdrm::set_cleanup_cb(send_unload_signal);
         my_hModule = hModule;
         if (!stubdrm::patch()) {
@@ -82,12 +74,13 @@ BOOL APIENTRY DllMain(
             return FALSE;
         }
         unload_thread_handle = CreateThread(nullptr, 0, self_unload, nullptr, 0, nullptr);
-        break;
+    }
+    break;
         
-    case DLL_PROCESS_DETACH:
+    case DLL_PROCESS_DETACH: {
         if (!unload_dll) { // not unloaded yet, just an early exit, or thread timed out
 #ifdef STUB_EXTRA_DEBUG
-            MessageBoxA(nullptr, "Unclean exit", "Main", MB_OK | MB_ICONERROR);
+            MessageBoxA(nullptr, "Unclean exit; dll unloaded or thread timed out)", "Main", MB_OK | MB_ICONERROR);
 #endif
 
             stubdrm::restore();
@@ -95,7 +88,8 @@ BOOL APIENTRY DllMain(
                 TerminateThread(unload_thread_handle, 0);
             }
         }
-        break;
+    }
+    break;
     }
 
     return TRUE;

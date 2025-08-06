@@ -38,7 +38,8 @@ struct Gameserver_Player_Info_t {
     uint32 score{};
 };
 
-class Steam_GameServer : 
+class Steam_GameServer :
+public ISteamGameServer001,
 public ISteamGameServer002,
 public ISteamGameServer003,
 public ISteamGameServer004,
@@ -73,15 +74,14 @@ public ISteamGameServer
     std::vector<struct Gameserver_Outgoing_Packet> outgoing_packets{};
 
     void set_version(const char *pchVersionString);
-    void add_player(CSteamID steamID);
-    void remove_player(CSteamID steamID);
-
 
 public:
     Steam_GameServer(class Settings *settings, class Networking *network, class SteamCallBacks *callbacks);
     ~Steam_GameServer();
 
     std::vector<std::pair<CSteamID, Gameserver_Player_Info_t>>* get_players();
+    void add_player(CSteamID steamID);
+    void remove_player(CSteamID steamID);
 
 //
 // Basic server data.  These properties, if set, must be set before before calling LogOn.  They
@@ -398,6 +398,9 @@ public:
     bool GSSetServerType( int32 nGameAppId, uint32 unServerFlags, uint32 unGameIP, uint16 unGamePort, uint16 unSpectatorPort, uint16 usQueryPort, const char *pchGameDir, const char *pchVersion, bool bLANMode );
     bool GSUpdateStatus( int cPlayers, int cPlayersMax, int cBotPlayers, const char *pchServerName, const char *pSpectatorServerName, const char *pchMapName );
     bool GSGetUserAchievementStatus( CSteamID steamID, const char *pchAchievementName );
+
+    bool GSSendUserConnect( CSteamID steamID, uint32 unIPPublic, uint32 unk );
+    bool GSSendUserDisconnect( CSteamID steamID );
     // older sdk -----------------------------------------------
 
 };

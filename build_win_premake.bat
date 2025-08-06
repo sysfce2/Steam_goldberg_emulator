@@ -12,12 +12,15 @@ if defined NUMBER_OF_PROCESSORS (
 )
 
 set /a "BUILD_DEPS=0"
+set /a "GEN_PROJECT=1"
 
 :args_loop
   if "%~1" equ "" (
     goto :args_loop_end
   ) else if "%~1" equ "--deps" (
     set /a "BUILD_DEPS=1"
+  ) else if "%~1" equ "--nogen" (
+    set /a "GEN_PROJECT=0"
   ) else if "%~1" equ "--help" (
     goto :help_page
   ) else (
@@ -63,9 +66,13 @@ set /a "BUILD_DEPS=0"
   )
 
   :: create .sln
+  if %GEN_PROJECT% equ 0 (
+    goto :gen_project_end
+  )
   call "%PREMAKE_EXE%" --file="premake5.lua" --genproto --dosstub --winrsrc --winsign --os=windows vs2022 || (
     goto :end_script_with_err
   )
+:gen_project_end
 
   :: check .sln
   set "SLN_FILE=build\project\vs2022\win\gbe.sln"
@@ -108,5 +115,6 @@ set /a "BUILD_DEPS=0"
   echo:"%~nx0" [switches]
   echo:switches:
   echo:  --deps: rebuild third-party dependencies
+  echo:  --nogen: don't regenerate build files
   echo:  --help: show this page
   goto :end_script

@@ -107,6 +107,13 @@ newoption {
 -- build
 newoption {
     category = "build",
+    trigger = "deps-dir",
+    description = "Base directory to build dependencies inside (if overridden it MUST be absolute)",
+    value = '/absolute/path/to/my-deps-dir/',
+    default = path.getabsolute(path.join('build', 'deps', os_iden, _ACTION), _MAIN_SCRIPT_DIR),
+}
+newoption {
+    category = "build",
     trigger = "all-build",
     description = "Build all deps",
 }
@@ -189,7 +196,7 @@ end
 
 -- common defs
 ---------
-local deps_dir = path.getabsolute(path.join('build', 'deps', os_iden, _ACTION), _MAIN_SCRIPT_DIR)
+local deps_dir = _OPTIONS["deps-dir"]
 local third_party_dir = path.getabsolute('third-party')
 local third_party_deps_dir = path.join(third_party_dir, 'deps', os_iden)
 local third_party_common_dir = path.join(third_party_dir, 'deps', 'common')
@@ -233,6 +240,11 @@ local cmake_common_defs = {
     'BUILD_SHARED_LIBS=OFF',
     'CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',
     "CMAKE_CXX_STANDARD=17",
+
+    -- https://cmake.org/cmake/help/latest/command/install.html
+    'CMAKE_INSTALL_LIBDIR=lib',         -- on Fedora this is set to 'lib64'
+    'CMAKE_INSTALL_BINDIR=bin',         -- |_ ensure consistency on different Linux distros
+    'CMAKE_INSTALL_INCLUDEDIR=include', -- |_ ensure consistency on different Linux distros
 }
 
 
@@ -520,11 +532,14 @@ if _OPTIONS["build-ssq"] or _OPTIONS["all-build"] then
     end
 end
 if _OPTIONS["build-zlib"] or _OPTIONS["all-build"] then
+    local zlib_common_defs = {
+        "ZLIB_BUILD_EXAMPLES=OFF",
+    }
     if _OPTIONS["32-build"] then
-        cmake_build('zlib', true)
+        cmake_build('zlib', true, zlib_common_defs)
     end
     if _OPTIONS["64-build"] then
-        cmake_build('zlib', false)
+        cmake_build('zlib', false, zlib_common_defs)
     end
 end
 

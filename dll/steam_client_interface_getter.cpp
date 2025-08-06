@@ -111,46 +111,69 @@ ISteamUser *Steam_Client::GetISteamUser( HSteamUser hSteamUser, HSteamPipe hStea
         return NULL;
     }
 
-    if (strcmp(pchVersion, "SteamUser004") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser004 *>(steam_user)); // sdk 0.99u
+
+    Steam_User *steam_user_tmp{};
+
+    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+        steam_user_tmp = steam_gameserver_user;
+    } else {
+        steam_user_tmp = steam_user;
+    }
+
+    if (strcmp(pchVersion, "SteamUser001") == 0) {
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser001 *>(steam_user_tmp));
+    } else if (strcmp(pchVersion, "SteamUser002") == 0) {
+        // Ugh...
+        if (steamclient_version < 2) {
+            return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser002_old *>(steam_user_tmp));
+        } else {
+            return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser002 *>(steam_user_tmp));
+        }
+    } else if (strcmp(pchVersion, "SteamUser004") == 0) {
+        // Double ugh...
+        if (steamclient_version < 5) {
+            return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser004_old *>(steam_user_tmp));
+        } else {
+            return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser004 *>(steam_user_tmp)); // sdk 0.99u
+        }
     } else if (strcmp(pchVersion, "SteamUser005") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser005 *>(steam_user)); // sdk 0.99v
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser005 *>(steam_user_tmp)); // sdk 0.99v
     } else if (strcmp(pchVersion, "SteamUser006") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser006 *>(steam_user)); // sdk 0.99w
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser006 *>(steam_user_tmp)); // sdk 0.99w
     } else if (strcmp(pchVersion, "SteamUser007") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser007 *>(steam_user)); // sdk 0.99x
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser007 *>(steam_user_tmp)); // sdk 0.99x
     } else if (strcmp(pchVersion, "SteamUser008") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser008 *>(steam_user)); // sdk 0.99y
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser008 *>(steam_user_tmp)); // sdk 0.99y
     } else if (strcmp(pchVersion, "SteamUser009") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser009 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser009 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser010") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser010 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser010 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser011") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser011 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser011 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser012") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser012 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser012 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser013") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser013 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser013 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser014") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser014 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser014 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser015") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser015 *>(steam_user)); // SteamUser015 Not found in public Archive, must be between 1.12-1.13 
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser015 *>(steam_user_tmp)); // SteamUser015 Not found in public Archive, must be between 1.12-1.13 
     } else if (strcmp(pchVersion, "SteamUser016") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser016 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser016 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser017") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser017 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser017 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser018") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser018 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser018 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser019") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser019 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser019 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser020") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser020 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser020 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser021") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser021 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser021 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, "SteamUser022") == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser022 *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser022 *>(steam_user_tmp));
     } else if (strcmp(pchVersion, STEAMUSER_INTERFACE_VERSION) == 0) {
-        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser *>(steam_user));
+        return reinterpret_cast<ISteamUser *>(static_cast<ISteamUser *>(steam_user_tmp));
     }
 
     report_missing_impl_and_exit(pchVersion, EMU_FUNC_NAME);
@@ -164,7 +187,7 @@ ISteamGameServer *Steam_Client::GetISteamGameServer( HSteamUser hSteamUser, HSte
 
 
     if (strcmp(pchVersion, "SteamGameServer001") == 0) {
-        return nullptr;
+        return reinterpret_cast<ISteamGameServer *>(static_cast<ISteamGameServer001 *>(steam_gameserver));
     } else if (strcmp(pchVersion, "SteamGameServer002") == 0) {
         return reinterpret_cast<ISteamGameServer *>(static_cast<ISteamGameServer002 *>(steam_gameserver)); // not found in public archives, from proton repo src
     } else if (strcmp(pchVersion, "SteamGameServer003") == 0) {

@@ -54,6 +54,7 @@ extern const std::unordered_set<std::string> client_known_interfaces = {
   "SteamFriends017",
   "SteamFriends018",
   "SteamGameCoordinator001",
+  "SteamGameServer001", // not present in the current steamclient.dll
   "SteamGameServer002",
   "SteamGameServer003",
   "SteamGameServer004",
@@ -182,6 +183,8 @@ extern const std::unordered_set<std::string> client_known_interfaces = {
   "STEAMUGC_INTERFACE_VERSION020",
   "STEAMUGC_INTERFACE_VERSION021",
   "STEAMUNIFIEDMESSAGES_INTERFACE_VERSION001",
+  "SteamUser001", // not present in the current steamclient.dll
+  "SteamUser002", // not present in the current steamclient.dll
   "SteamUser004",
   "SteamUser005",
   "SteamUser006",

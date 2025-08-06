@@ -23,6 +23,10 @@
 #include "voicechat.h"
 
 class Steam_User :
+public ISteamUser001,
+public ISteamUser002_old,
+public ISteamUser002,
+public ISteamUser004_old,
 public ISteamUser004,
 public ISteamUser005,
 public ISteamUser006,
@@ -55,6 +59,14 @@ public ISteamUser
     VoiceChat* voicechat{};
     std::map<std::string, std::string> registry{};
     std::string registry_nullptr{};
+
+    ICMCallback001 *callbacks_old1{};
+    ICMCallback *callbacks_old2{};
+    bool call_logged_on{};
+    std::chrono::high_resolution_clock::time_point logon_time{};
+    bool call_logged_off{};
+    std::chrono::high_resolution_clock::time_point logoff_time{};
+    std::vector<std::pair<CSteamID, std::chrono::high_resolution_clock::time_point>> player_auths{};
 
 public:
     Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks);
@@ -313,6 +325,51 @@ public:
     // playtime limits.
     bool BSetDurationControlOnlineState( EDurationControlOnlineState eNewState );
 
+    // called by steam_client::runcallbacks
+    void RunCallbacks();
+
+    // older sdk -----------------------------------------------
+    void Init( ICMCallback001 *cmcallback, ISteam2Auth *steam2auth );
+    void Init( ICMCallback *cmcallback, ISteam2Auth *steam2auth );
+    int ProcessCall( int unk );
+    virtual void LogOn( CSteamID *steamID );
+    virtual int CreateAccount( const char *unk1, void *unk2, void *unk3, const char *unk4, int unk5, void *unk6 );
+    virtual bool GSSendLogonRequest( CSteamID *steamID );
+    virtual bool GSSendDisconnect( CSteamID *steamID );
+    virtual bool GSSendStatusResponse( CSteamID *steamID, int nSecondsConnected, int nSecondsSinceLast );
+    virtual bool GSSetStatus( int32 nAppIdServed, uint32 unServerFlags, int cPlayers, int cPlayersMax );
+    virtual bool GSSetStatus( int32 nAppIdServed, uint32 unServerFlags, int cPlayers, int cPlayersMax, int cBotPlayers, int unGamePort, const char *pchServerName, const char *pchGameDir, const char *pchMapName, const char *pchVersion );
+
+    bool BGetCallback( int *piCallback, uint8 **ppubParam, int *unk );
+    void FreeLastCallback();
+    int GetSteamTicket( void *pBlob, int cbMaxBlob );
+
+    const char *GetPlayerName();
+    void SetPlayerName( const char *pchPersonaName );
+    EPersonaState GetFriendStatus();
+    void SetFriendStatus( EPersonaState ePersonaState );
+    bool AddFriend( CSteamID steamIDFriend );
+    bool RemoveFriend( CSteamID steamIDFriend );
+    bool HasFriend( CSteamID steamIDFriend );
+    EFriendRelationship GetFriendRelationship( CSteamID steamIDFriend );
+    EPersonaState GetFriendStatus( CSteamID steamIDFriend );
+    bool GetFriendGamePlayed( CSteamID steamIDFriend, int32 *pnGameID, uint32 *punGameIP, uint16 *pusGamePort );
+    const char *GetPlayerName( CSteamID steamIDFriend );
+    int32 AddFriendByName( const char *pchEmailOrAccountName );
+
+    virtual void Test_SuspendActivity() {}
+    virtual void Test_ResumeActivity() {}
+    virtual void Test_SendVACResponse( int unk1, void *unk2, int unk3 ) {}
+    virtual void Test_SetFakePrivateIP( uint32 ip ) {}
+    virtual void Test_SendBigMessage() {}
+    virtual bool Test_BBigMessageResponseReceived() { return true; }
+    virtual void Test_SetPktLossPct( int unk1 ) {}
+    virtual void Test_SetForceTCP( bool unk1 ) {}
+    virtual void Test_SetMaxUDPConnectionAttempts( int unk1 ) {}
+    virtual void Test_Heartbeat() {}
+    virtual void Test_FakeDisconnect() {}
+    virtual EUniverse Test_GetEUniverse() { return k_EUniversePublic; }
+    // older sdk -----------------------------------------------
 };
 
 #endif // __INCLUDED_STEAM_USER_H__

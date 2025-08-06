@@ -5,12 +5,9 @@
 #pragma once
 #endif
 
-enum EConfigSubTree {
-    EConfigSubTree_stub
-};
-
-enum ELogonState {
-    ELogonState_stub
+enum EConfigSubTree
+{
+	EConfigSubTree_stub
 };
 
 class ISteamUser004

@@ -128,6 +128,7 @@ static inline void reset_LastError()
     #include <netinet/in.h>
     #include <netinet/tcp.h>
     #include <linux/netdevice.h>
+    #include <sys/vfs.h>
 
     #include <fcntl.h>
     #include <unistd.h>
@@ -208,7 +209,7 @@ static inline void reset_LastError()
 
 // Emulator defines
 #define CLIENT_HSTEAMUSER 1
-#define SERVER_HSTEAMUSER 1
+#define SERVER_HSTEAMUSER 2
 
 #define DEFAULT_NAME "gse orca"
 #define DEFAULT_LANGUAGE "english"

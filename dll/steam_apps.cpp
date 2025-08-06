@@ -18,6 +18,50 @@
 #include "dll/steam_apps.h"
 #include "sha/sha1.hpp"
 
+
+void Steam_Apps::FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse_t& data, AppId_t nAppID, bool ok_result, std::string key )
+{
+    data.m_nAppID = nAppID;
+    if (ok_result) {
+        // TODO maybe read this from a config file "purchased_keys.txt":
+        // 480=AAAAA-BBBBB-CCCCC-DDDDD
+        // 218620=XYZFJ-13370-98765
+        size_t min_len = key.size() < k_cubAppProofOfPurchaseKeyMax
+            ? key.size()
+            : k_cubAppProofOfPurchaseKeyMax - 1; // -1 because we need space for null
+        data.m_eResult = EResult::k_EResultOK;
+        data.m_cchKeyLength = static_cast<uint32>(min_len);
+        memcpy(data.m_rgchKey, key.c_str(), min_len);
+        data.m_rgchKey[min_len] = 0;
+    } else {
+        data.m_eResult = EResult::k_EResultFail;
+        data.m_cchKeyLength = 0;
+        data.m_rgchKey[0] = 0;
+        data.m_rgchKey[1] = 0;
+    }
+}
+
+void Steam_Apps::FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse007_t& data, AppId_t nAppID, bool ok_result, std::string key )
+{
+    data.m_nAppID = nAppID;
+    if (ok_result) {
+        // TODO maybe read this from a config file "purchased_keys.txt":
+        // 480=AAAAA-BBBBB-CCCCC-DDDDD
+        // 218620=XYZFJ-13370-98765
+        size_t min_len = key.size() < k_cubAppProofOfPurchaseKeyMax
+            ? key.size()
+            : k_cubAppProofOfPurchaseKeyMax - 1; // -1 because we need space for null
+        data.m_eResult = EResult::k_EResultOK;
+        memcpy(data.m_rgchKey, key.c_str(), min_len);
+        data.m_rgchKey[min_len] = 0;
+    } else {
+        data.m_eResult = EResult::k_EResultFail;
+        data.m_rgchKey[0] = 0;
+        data.m_rgchKey[1] = 0;
+    }
+}
+
+
 Steam_Apps::Steam_Apps(Settings *settings, class SteamCallResults *callback_results, class SteamCallBacks *callbacks)
 {
     this->settings = settings;
@@ -217,28 +261,6 @@ void Steam_Apps::UninstallDLC( AppId_t nAppID )
 }
 
 
-static void FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse_t& data, AppId_t nAppID, bool ok_result, std::string key = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd" )
-{
-    data.m_nAppID = nAppID;
-    if (ok_result) {
-        // TODO maybe read this from a config file "purchased_keys.txt":
-        // 480=AAAAA-BBBBB-CCCCC-DDDDD
-        // 218620=XYZFJ-13370-98765
-        size_t min_len = key.size() < k_cubAppProofOfPurchaseKeyMax
-            ? key.size() < k_cubAppProofOfPurchaseKeyMax
-            : k_cubAppProofOfPurchaseKeyMax - 1; // -1 because we need space for null
-        data.m_eResult = EResult::k_EResultOK;
-        data.m_cchKeyLength = static_cast<uint32>(min_len);
-        memcpy(data.m_rgchKey, key.c_str(), min_len);
-        data.m_rgchKey[min_len] = 0;
-    } else {
-        data.m_eResult = EResult::k_EResultFail;
-        data.m_cchKeyLength = 0;
-        data.m_rgchKey[0] = 0;
-        data.m_rgchKey[1] = 0;
-    }
-}
-
 // Request legacy cd-key for yourself or owned DLC. If you are interested in this
 // data then make sure you provide us with a list of valid keys to be distributed
 // to users when they purchase the game, before the game ships.
@@ -264,6 +286,28 @@ void Steam_Apps::RequestAppProofOfPurchaseKey( AppId_t nAppID )
 
     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
 }
+
+void Steam_Apps::RequestAppProofOfPurchaseKey_OLD( AppId_t nAppID )
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    AppProofOfPurchaseKeyResponse007_t data{};
+    data.m_nAppID = nAppID;
+    
+    // check Steam_Apps::BIsAppInstalled()
+    if (nAppID == 0 || nAppID == UINT32_MAX) {
+        FillProofOfPurchaseKey(data, nAppID, false);
+    } else if (nAppID == settings->get_local_game_id().AppID() || settings->hasDLC(nAppID)) {
+        FillProofOfPurchaseKey(data, nAppID, true);
+    } else {
+        //TODO what to do here?
+        FillProofOfPurchaseKey(data, nAppID, false);
+    }
+
+    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+}
+
 
 // returns current beta branch name, 'public' is the default branch
 // "true if the user is on a beta branch; otherwise, false"
@@ -420,15 +464,15 @@ void Steam_Apps::RequestAllProofOfPurchaseKeys()
 
     // DLCs
     const auto count = settings->DLCCount();
-    for (unsigned int i = 0; i < settings->DLCCount(); i++) {
-        AppId_t app_id;
-        bool available;
-        std::string name;
-        settings->getDLC(i, app_id, available, name);
-
-        AppProofOfPurchaseKeyResponse_t data{};
-        FillProofOfPurchaseKey(data, app_id, true);
-        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    for (unsigned i = 0; i < settings->DLCCount(); i++) {
+        AppId_t app_id{};
+        bool available{};
+        std::string name{};
+        if (settings->getDLC(i, app_id, available, name)) {
+            AppProofOfPurchaseKeyResponse_t data{};
+            FillProofOfPurchaseKey(data, app_id, true);
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+        }
     }
     
     // termination entry
@@ -451,7 +495,7 @@ SteamAPICall_t Steam_Apps::GetFileDetails( const char* pszFileName )
     if (file_exists_(pszFileName)) {
         data.m_eResult = k_EResultOK; //
         std::ifstream stream(std::filesystem::u8path(pszFileName), std::ios::binary);
-        SHA1 checksum;
+        SHA1 checksum{};
         checksum.update(stream);
         checksum.final().copy((char *)data.m_FileSHA, sizeof(data.m_FileSHA));
         data.m_ulFileSize = file_size_(pszFileName);

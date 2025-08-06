@@ -33,6 +33,9 @@ public ISteamApps
     class Settings *settings{};
     class SteamCallResults *callback_results{};
     class SteamCallBacks *callbacks{};
+	
+	void FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse_t& data, AppId_t nAppID, bool ok_result, std::string key = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd" );
+	void FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse007_t& data, AppId_t nAppID, bool ok_result, std::string key = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd" );
 
 public:
     Steam_Apps(Settings *settings, class SteamCallResults *callback_results, class SteamCallBacks *callbacks);
@@ -83,6 +86,7 @@ public:
 	// You'll receive an AppProofOfPurchaseKeyResponse_t callback when
 	// the key is available (which may be immediately).
 	void RequestAppProofOfPurchaseKey( AppId_t nAppID );
+	void RequestAppProofOfPurchaseKey_OLD( AppId_t nAppID );
 
 	bool GetCurrentBetaName( char *pchName, int cchNameBufferSize ); // returns current beta branch name, 'public' is the default branch
 	bool MarkContentCorrupt( bool bMissingFilesOnly ); // signal Steam that game files seems corrupt or missing

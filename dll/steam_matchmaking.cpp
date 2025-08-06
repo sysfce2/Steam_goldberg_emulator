@@ -1005,14 +1005,23 @@ int Steam_Matchmaking::GetLobbyChatEntry( CSteamID steamIDLobby, int iChatID, ST
 {
     PRINT_DEBUG("%llu %i %p %p %i %p", steamIDLobby.ConvertToUint64(), iChatID, pSteamIDUser, pvData, cubData, peChatEntryType);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (iChatID < 0 || cubData < 0 || static_cast<size_t>(iChatID) >= chat_entries.size()) return 0;
-    if (chat_entries[iChatID].lobby_id != steamIDLobby) return 0;
-    if (pSteamIDUser) *pSteamIDUser = chat_entries[iChatID].user_id;
-    if (peChatEntryType) *peChatEntryType = chat_entries[iChatID].type;
+    
+    if (pSteamIDUser) *pSteamIDUser = k_steamIDNil;
+    if (peChatEntryType) *peChatEntryType = EChatEntryType::k_EChatEntryTypeInvalid;
+
+    if (iChatID <= 0 || cubData < 0 || static_cast<size_t>(iChatID) > chat_entries.size()) return 0;
+    
+    Chat_Entry &chat_entry = chat_entries[iChatID - 1];
+
+    if (pSteamIDUser) *pSteamIDUser = chat_entry.user_id;
+    if (peChatEntryType) *peChatEntryType = chat_entry.type;
+
+    if (chat_entry.lobby_id != steamIDLobby) return 0;
+    
     if (pvData) {
-        if (chat_entries[iChatID].message.size() <= static_cast<size_t>(cubData)) {
-            cubData = static_cast<int>(chat_entries[iChatID].message.size());
-            memcpy(pvData, chat_entries[iChatID].message.data(), cubData);
+        if (chat_entry.message.size() <= static_cast<size_t>(cubData)) {
+            cubData = static_cast<int>(chat_entry.message.size());
+            memcpy(pvData, chat_entry.message.data(), cubData);
             PRINT_DEBUG("  Returned chat of len: %i", cubData);
             return cubData;
         }
@@ -1681,19 +1690,26 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
 
             if (msg->lobby_messages().type() == Lobby_Messages::CHAT_MESSAGE) {
                 PRINT_DEBUG("LOBBY MESSAGE: CHAT MESSAGE");
+                EChatEntryType entry_type = EChatEntryType::k_EChatEntryTypeChatMsg;
+
                 if (we_are_in_lobby) {
-                    struct Chat_Entry entry{};
-                    entry.type = k_EChatEntryTypeChatMsg;
-                    entry.message = msg->lobby_messages().bdata();
-                    entry.lobby_id = CSteamID((uint64)msg->lobby_messages().id());
-                    entry.user_id = CSteamID((uint64)msg->source_id());
-                    LobbyChatMsg_t data{};
-                    data.m_ulSteamIDLobby = msg->lobby_messages().id();
-                    data.m_ulSteamIDUser = msg->source_id();
-                    data.m_eChatEntryType = entry.type;
-                    data.m_iChatID = static_cast<uint32>(chat_entries.size());
-                    chat_entries.push_back(entry);
-                    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+                    {
+                        struct Chat_Entry entry{};
+                        entry.type = entry_type;
+                        entry.message = msg->lobby_messages().bdata();
+                        entry.lobby_id = CSteamID((uint64)msg->lobby_messages().id());
+                        entry.user_id = CSteamID((uint64)msg->source_id());
+                        chat_entries.push_back(entry);
+                    }
+
+                    {
+                        LobbyChatMsg_t data{};
+                        data.m_ulSteamIDLobby = msg->lobby_messages().id();
+                        data.m_ulSteamIDUser = msg->source_id();
+                        data.m_eChatEntryType = entry_type;
+                        data.m_iChatID = static_cast<uint32>(chat_entries.size()); // avoid ID=0 since most steam APIs use that as a notation for error
+                        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+                    }
                 }
             }
         }

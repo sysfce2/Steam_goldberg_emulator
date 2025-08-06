@@ -160,6 +160,7 @@ static DWORD Size1_hkcu = sizeof(OrgSteamCDir_hkcu);
 static WCHAR OrgSteamCDir64_hkcu[8192] = { 0 };
 static DWORD Size2_hkcu = sizeof(OrgSteamCDir64_hkcu);
 static DWORD OrgSteamActiveUser_hkcu = 0;
+static DWORD OrgSteamPid_hkcu = 0;
 static WCHAR OrgSteamUniverse_hkcu[8192] = { 0 };
 static DWORD Size4_hkcu = sizeof(OrgSteamUniverse_hkcu);
 static bool patch_registry_hkcu()
@@ -172,7 +173,9 @@ static bool patch_registry_hkcu()
         RegQueryValueExW(Registrykey, L"SteamClientDll", 0, &keyType, (LPBYTE)OrgSteamCDir_hkcu, &Size1_hkcu);
         RegQueryValueExW(Registrykey, L"SteamClientDll64", 0, &keyType, (LPBYTE)OrgSteamCDir64_hkcu, &Size2_hkcu);
         DWORD SizeActiveUser_hkcu = sizeof(DWORD);
+        DWORD SizePid_hkcu = sizeof(DWORD);
         RegQueryValueExW(Registrykey, L"ActiveUser", 0, &keyType, (LPBYTE)&OrgSteamActiveUser_hkcu, &SizeActiveUser_hkcu);
+        RegQueryValueExW(Registrykey, L"pid", 0, &keyType, (LPBYTE)&OrgSteamPid_hkcu, &SizePid_hkcu);
         RegQueryValueExW(Registrykey, L"Universe", 0, &keyType, (LPBYTE)OrgSteamUniverse_hkcu, &Size4_hkcu);
         logger.write("Found previous registry entry (HKCU) for Steam");
     } else if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam\\ActiveProcess", 0, 0, REG_OPTION_NON_VOLATILE,
@@ -205,6 +208,7 @@ static void cleanup_registry_hkcu()
         RegSetValueExW(Registrykey, L"SteamClientDll", NULL, REG_SZ, (const BYTE *)OrgSteamCDir_hkcu, Size1_hkcu);
         RegSetValueExW(Registrykey, L"SteamClientDll64", NULL, REG_SZ, (const BYTE *)OrgSteamCDir64_hkcu, Size2_hkcu);
         RegSetValueExW(Registrykey, L"ActiveUser", NULL, REG_DWORD, (const BYTE *)&OrgSteamActiveUser_hkcu, sizeof(DWORD));
+        RegSetValueExW(Registrykey, L"pid", NULL, REG_DWORD, (const BYTE *)&OrgSteamPid_hkcu, sizeof(DWORD));
         RegSetValueExW(Registrykey, L"Universe", NULL, REG_SZ, (const BYTE *)OrgSteamUniverse_hkcu, Size4_hkcu);
 
         // Close the HKEY Handle.
@@ -403,7 +407,7 @@ static void cleanup_registry_hkcs()
 
 
 
-static void set_steam_env_vars(const std::string &AppId)
+static void set_steam_env_vars()
 {
     SetEnvironmentVariableA("SteamAppId", AppId.c_str());
     SetEnvironmentVariableA("SteamGameId", AppId.c_str());
@@ -417,6 +421,55 @@ static void set_steam_env_vars(const std::string &AppId)
     SetEnvironmentVariableW(L"SteamClientLaunch", L"1");
     SetEnvironmentVariableW(L"SteamEnv", L"1");
     SetEnvironmentVariableW(L"SteamPath", common_helpers::to_wstr(pe_helpers::get_current_exe_path()).c_str());
+}
+
+
+static void read_steam_settings_appid()
+{
+    static const auto try_read_file = [](const std::filesystem::path &appid_file) -> std::string {
+        try {
+            if (!common_helpers::file_exist(appid_file)) return {};
+
+            auto fr = std::ifstream(appid_file, std::ios::in | std::ios::binary);
+            if (!fr) return {};
+
+            std::string content{};
+            std::getline(fr, content);
+            fr.close();
+
+            return common_helpers::string_strip(content);
+        } catch(...) {}
+
+        return {};
+    };
+
+    const auto steam_settings_folder = std::filesystem::u8path("steam_settings");
+    const auto current_folder = std::filesystem::u8path(pe_helpers::get_current_exe_path());
+    const auto exe_folder = std::filesystem::u8path(ExeFile).parent_path();
+    const auto exe_run_dir_folder = std::filesystem::u8path(ExeRunDir);
+    const std::vector<std::filesystem::path> search_folders {
+        current_folder / steam_settings_folder,
+        exe_folder / steam_settings_folder,
+        exe_run_dir_folder / steam_settings_folder,
+
+        current_folder,
+        exe_folder,
+        exe_run_dir_folder,
+    };
+    
+    for (const auto &folder : search_folders) {
+        
+        const auto appid_file = folder / std::filesystem::u8path("steam_appid.txt");
+        const auto content = try_read_file(appid_file);
+        if (!content.empty()) {
+            AppId = content;
+            logger.write(
+                "Read appid file '%s', content '%s'",
+                appid_file.u8string().c_str(), AppId.c_str()
+            );
+            return;
+        }
+    }
 }
 
 
@@ -624,20 +677,24 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
     }
 
     if (PersistentMode != 2) {
-        if (AppId.size() && AppId[0]) {
-            try {
-                (void)std::stoul(AppId);
-            } catch(...) {
-                logger.write("AppId is not a valid number");
-                MessageBoxA(NULL, "AppId is not a valid number.", "ColdClientLoader", MB_ICONERROR);
+        if (AppId.empty()) {
+            read_steam_settings_appid();
+            if (AppId.empty()) {
+                logger.write("You forgot to set the AppId");
+                MessageBoxA(NULL, "You forgot to set the AppId.", "ColdClientLoader", MB_ICONERROR);
                 return 1;
             }
-            set_steam_env_vars(AppId);
-        } else {
-            logger.write("You forgot to set the AppId");
-            MessageBoxA(NULL, "You forgot to set the AppId.", "ColdClientLoader", MB_ICONERROR);
+        }
+
+        try {
+            (void)std::stoul(AppId);
+        } catch(...) {
+            logger.write("AppId is not a valid number");
+            MessageBoxA(NULL, "AppId is not a valid number.", "ColdClientLoader", MB_ICONERROR);
             return 1;
         }
+
+        set_steam_env_vars();
     } else { // steam://run/
         constexpr const static wchar_t STEAM_LAUNCH_CMD_1[] = L"-- \"steam://run/";
         constexpr const static wchar_t STEAM_LAUNCH_CMD_2[] = L"-- \"steam://rungameid/";
@@ -658,7 +715,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
         }
 
         if (AppId.size()) {
-            set_steam_env_vars(AppId);
+            set_steam_env_vars();
             logger.write("persistent mode 2 will use app id = " + AppId);
         } else {
             logger.write("persistent mode 2 didn't find app id");

@@ -1837,7 +1837,7 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
         PRINT_DEBUG("setting emu to offline mode");
     }
     Settings *settings_client = new Settings(user_id, CGameID(appid), name, language, steam_offline_mode);
-    Settings *settings_server = new Settings(generate_steam_id_server(), CGameID(appid), name, language, steam_offline_mode);
+    Settings *settings_server = new Settings(generate_steam_id_server(), CGameID(appid), name, language, true); // server starts logged out
 
     settings_client->alt_steamid = alt_steamid;
     settings_client->alt_steamid_count = alt_steamid_count;

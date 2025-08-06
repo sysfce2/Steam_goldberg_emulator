@@ -86,7 +86,70 @@ else
     error('Unsupported os target: "' .. os.target() .. '"')
 end
 
-local deps_dir = path.getabsolute(path.join('build', 'deps', os_iden, _ACTION), _MAIN_SCRIPT_DIR)
+newoption {
+    category = 'protobuf files',
+    trigger = "genproto",
+    description = "Generate .cc/.h files from .proto file",
+}
+
+newoption {
+    category = 'build',
+    trigger = "emubuild",
+    description = "Set the EMU_BUILD_STRING",
+    value = "your_string",
+    default = os.date("%Y_%m_%d-%H_%M_%S"),
+}
+newoption {
+    category = "build",
+    trigger = "deps-dir",
+    description = "Base directory where dependencies were built (if overridden it MUST be absolute)",
+    value = '/absolute/path/to/my-deps-dir/',
+    default = path.getabsolute(path.join('build', 'deps', os_iden, _ACTION), _MAIN_SCRIPT_DIR),
+}
+newoption {
+    category = "build",
+    trigger = "build-dir",
+    description = "Base directory to build the project inside (if overridden it MUST be absolute)",
+    value = '/absolute/path/to/build-dir/',
+    default = "build",
+}
+newoption {
+    category = 'visual-includes',
+    trigger = "incexamples",
+    description = "Add all example files in the projects (no impact on build)",
+}
+newoption {
+    category = 'visual-includes',
+    trigger = "incdeps",
+    description = "Add all header files from the third-party dependencies in the projects (no impact on build)",
+}
+
+-- windows options
+if os.target() == 'windows' then
+
+newoption {
+    category = "build",
+    trigger = "dosstub",
+    description = "Change the DOS stub of the Windows builds",
+}
+
+newoption {
+    category = "build",
+    trigger = "winsign",
+    description = "Sign Windows builds with a fake certificate",
+}
+
+newoption {
+    category = "build",
+    trigger = "winrsrc",
+    description = "Add resources to Windows builds",
+}
+
+end
+-- End windows options
+
+local deps_dir = _OPTIONS["deps-dir"]
+local build_dir = _OPTIONS["build-dir"]
 
 local function genproto()
     local deps_install_prefix = ''
@@ -129,55 +192,6 @@ local function genproto()
 
     return os.execute(protoc_exe .. ' dll/net.proto -I./dll/ --cpp_out=' .. out_dir)
 end
-
-newoption {
-    category = 'protobuf files',
-    trigger = "genproto",
-    description = "Generate .cc/.h files from .proto file",
-}
-
-newoption {
-    category = 'build',
-    trigger = "emubuild",
-    description = "Set the EMU_BUILD_STRING",
-    value = "your_string",
-    default = os.date("%Y_%m_%d-%H_%M_%S"),
-}
-
-newoption {
-    category = 'visual-includes',
-    trigger = "incexamples",
-    description = "Add all example files in the projects (no impact on build)",
-}
-newoption {
-    category = 'visual-includes',
-    trigger = "incdeps",
-    description = "Add all header files from the third-party dependencies in the projects (no impact on build)",
-}
-
--- windows options
-if os.target() == 'windows' then
-
-newoption {
-    category = "build",
-    trigger = "dosstub",
-    description = "Change the DOS stub of the Windows builds",
-}
-
-newoption {
-    category = "build",
-    trigger = "winsign",
-    description = "Sign Windows builds with a fake certificate",
-}
-
-newoption {
-    category = "build",
-    trigger = "winrsrc",
-    description = "Add resources to Windows builds",
-}
-
-end
--- End windows options
 
 
 -- common defines
@@ -398,6 +412,7 @@ local common_link_win = {
     -- imgui / overlay
     "Gdi32"    .. static_postfix,
     "Dwmapi"   .. static_postfix,
+    "OpenGL32" .. static_postfix,
 }
 -- add deps to win
 table_append(common_link_win, deps_link)
@@ -542,6 +557,7 @@ filter { "platforms:x32", }
     architecture "x86" 
 filter { "platforms:x64", }
     architecture "x86_64"
+filter {} -- reset the filter and remove all active keywords
 
 
 -- debug/optimization flags
@@ -554,6 +570,7 @@ filter { "configurations:*debug", }
 filter { "configurations:*release", }
     symbols "Off"
     optimize "On"
+filter {} -- reset the filter and remove all active keywords
 
 
 --- common compiler/linker options
@@ -611,6 +628,7 @@ filter { "system:not windows" }
     defines {
         "GNUC",
     }
+filter {} -- reset the filter and remove all active keywords
 
 
 -- MinGw on Windows
@@ -639,6 +657,7 @@ filter { "system:windows", "action:gmake*", "files:**/detours/creatwth.cpp" }
     buildoptions  {
         "-include intsafe.h",
     }
+filter {} -- reset the filter and remove all active keywords
 
 
 -- add extra files for clearance
@@ -716,7 +735,7 @@ workspace "gbe"
 project "api_regular"
     kind "SharedLib"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/regular/%{cfg.platform}")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/regular/%{cfg.platform}"))
 
 
     -- name
@@ -803,7 +822,7 @@ project "api_regular"
 project "api_experimental"
     kind "SharedLib"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/experimental/%{cfg.platform}")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/experimental/%{cfg.platform}"))
 
 
     -- name
@@ -936,9 +955,9 @@ project "steamclient_experimental"
     -- targetdir
     ---------
     filter { "system:windows", }
-        targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/steamclient_experimental")
+        targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/steamclient_experimental"))
     filter { "system:not windows", }
-        targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/experimental/%{cfg.platform}")
+        targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/experimental/%{cfg.platform}"))
 
 
     -- name
@@ -990,6 +1009,7 @@ project "steamclient_experimental"
     }
     removefiles {
         'libs/detours/uimports.cc',
+        'dll/flat.cpp',
     }
     -- deps
     filter { 'options:incdeps', "platforms:x32", }
@@ -1067,7 +1087,7 @@ project "steamclient_experimental"
 project "tool_lobby_connect"
     kind "ConsoleApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/tools/lobby_connect")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/lobby_connect"))
     targetname "lobby_connect_%{cfg.platform}"
 
 
@@ -1108,6 +1128,7 @@ project "tool_lobby_connect"
     removefiles {
         "libs/gamepad/**",
         detours_files,
+        'dll/flat.cpp',
     }
     -- Windows x32 common source files
     filter { "system:windows", "platforms:x32", "options:winrsrc", }
@@ -1156,14 +1177,16 @@ project "tool_lobby_connect"
 project "tool_generate_interfaces"
     kind "ConsoleApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/tools/generate_interfaces")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tools/generate_interfaces"))
     targetname "generate_interfaces_%{cfg.platform}"
 
 
     -- common source & header files
     ---------
     files {
-        "tools/generate_interfaces/generate_interfaces.cpp"
+        "tools/generate_interfaces/generate_interfaces.cpp",
+        'helpers/common_helpers.cpp', 'helpers/common_helpers/**',
+        'libs/utfcpp/**',
     }
 -- End tool_generate_interfaces
 
@@ -1172,8 +1195,8 @@ project "tool_generate_interfaces"
 project "lib_steamnetworkingsockets"
     kind "SharedLib"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/steamnetworkingsockets/%{cfg.platform}")
-    targetname "steamnetworkingsockets"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/steamnetworkingsockets/%{cfg.platform}"))
+    targetname "libsteamnetworkingsockets"
 
 
     -- common source & header files
@@ -1182,6 +1205,7 @@ project "lib_steamnetworkingsockets"
         "networking_sockets_lib/**",
         "helpers/dbg_log.cpp", "helpers/dbg_log/**",
         'helpers/common_helpers.cpp', 'helpers/common_helpers/**',
+        'libs/utfcpp/**',
     }
 
 
@@ -1197,9 +1221,9 @@ project "lib_game_overlay_renderer"
     -- targetdir
     ---------
     filter { "system:windows", }
-        targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/steamclient_experimental")
+        targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/steamclient_experimental"))
     filter { "system:not windows", }
-        targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/gameoverlayrenderer/%{cfg.platform}")
+        targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/gameoverlayrenderer/%{cfg.platform}"))
 
 
     -- name
@@ -1231,7 +1255,9 @@ project "lib_game_overlay_renderer"
     ---------
     filter {} -- reset the filter and remove all active keywords
     files {
-        "game_overlay_renderer_lib/**"
+        "game_overlay_renderer_lib/**",
+        "dll/common_includes.h",
+        "common_helpers/os_detector.h",
     }
     -- x32 common source files
     filter { "system:windows", "platforms:x32", "options:winrsrc", }
@@ -1257,7 +1283,7 @@ project "steamclient_experimental_stub"
     -- https://stackoverflow.com/a/63228027
     kind "SharedLib"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/experimental/%{cfg.platform}")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/experimental/%{cfg.platform}"))
 
 
     -- name
@@ -1291,7 +1317,7 @@ project "steamclient_experimental_stub"
 project "steamclient_experimental_extra"
     kind "SharedLib"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/steamclient_experimental/extra_dlls")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/steamclient_experimental/extra_dlls"))
     targetname "steamclient_extra_%{cfg.platform}"
 
 
@@ -1316,6 +1342,7 @@ project "steamclient_experimental_extra"
         "tools/steamclient_loader/win/extra_protection/**",
         "helpers/pe_helpers.cpp", "helpers/pe_helpers/**",
         "helpers/common_helpers.cpp", "helpers/common_helpers/**",
+        'libs/utfcpp/**',
         -- detours
         detours_files,
     }
@@ -1339,7 +1366,7 @@ project "steamclient_experimental_extra"
 project "steamclient_experimental_loader"
     kind "WindowedApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/steamclient_experimental")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/steamclient_experimental"))
     targetname "steamclient_loader_%{cfg.platform}"
 
 
@@ -1362,6 +1389,7 @@ project "steamclient_experimental_loader"
         "helpers/pe_helpers.cpp", "helpers/pe_helpers/**",
         "helpers/common_helpers.cpp", "helpers/common_helpers/**",
         "helpers/dbg_log.cpp", "helpers/dbg_log/**",
+        'libs/utfcpp/**',
         "libs/simpleini/**",
     }
     -- x32 common source files
@@ -1390,7 +1418,7 @@ project "steamclient_experimental_loader"
 project "tool_file_dos_stub_changer"
     kind "ConsoleApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/file_dos_stub_changer")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/file_dos_stub_changer"))
     targetname "file_dos_stub_%{cfg.platform}"
 
 
@@ -1401,6 +1429,7 @@ project "tool_file_dos_stub_changer"
         "resources/win/file_dos_stub/file_dos_stub.cpp",
         "helpers/pe_helpers.cpp", "helpers/pe_helpers/**",
         "helpers/common_helpers.cpp", "helpers/common_helpers/**",
+        'libs/utfcpp/**',
     }
 -- End tool_file_dos_stub_changer
 
@@ -1410,7 +1439,7 @@ project "tool_file_dos_stub_changer"
 project "test_crash_printer"
     kind "ConsoleApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/tests/crash_printer")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tests/crash_printer"))
     targetname "test_crash_printer_%{cfg.platform}"
 
 
@@ -1421,6 +1450,7 @@ project "test_crash_printer"
         'crash_printer/' .. os_iden .. '.cpp', 'crash_printer/crash_printer/' .. os_iden .. '.hpp',
         -- helpers
         'helpers/common_helpers.cpp', 'helpers/common_helpers/**',
+        'libs/utfcpp/**',
         -- test files
         'crash_printer/tests/test_win.cpp',
     }
@@ -1460,7 +1490,7 @@ if os.target() == "linux" then
 project "steamclient_regular"
     kind "SharedLib"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/regular/%{cfg.platform}")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/regular/%{cfg.platform}"))
     targetname "steamclient"
 
 
@@ -1494,6 +1524,7 @@ project "steamclient_regular"
     }
     removefiles {
         detours_files,
+        'dll/flat.cpp',
     }
 
 
@@ -1524,7 +1555,7 @@ project "steamclient_regular"
 project "test_crash_printer_sa_handler"
     kind "ConsoleApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/tests/crash_printer")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tests/crash_printer"))
     targetname "test_crash_printer_sa_handler_%{cfg.platform}"
 
 
@@ -1535,6 +1566,7 @@ project "test_crash_printer_sa_handler"
         'crash_printer/' .. os_iden .. '.cpp', 'crash_printer/crash_printer/' .. os_iden .. '.hpp',
         -- helpers
         'helpers/common_helpers.cpp', 'helpers/common_helpers/**',
+        'libs/utfcpp/**',
         -- test files
         'crash_printer/tests/test_linux_sa_handler.cpp',
     }
@@ -1559,7 +1591,7 @@ project "test_crash_printer_sa_handler"
 project "test_crash_printer_sa_sigaction"
     kind "ConsoleApp"
     location "%{wks.location}/%{prj.name}"
-    targetdir("build/" .. os_iden .. "/%{_ACTION}/%{cfg.buildcfg}/tests/crash_printer")
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/tests/crash_printer"))
     targetname "test_crash_printer_sa_sigaction_%{cfg.platform}"
 
 
@@ -1570,6 +1602,7 @@ project "test_crash_printer_sa_sigaction"
         'crash_printer/' .. os_iden .. '.cpp', 'crash_printer/crash_printer/' .. os_iden .. '.hpp',
         -- helpers
         'helpers/common_helpers.cpp', 'helpers/common_helpers/**',
+        'libs/utfcpp/**',
         -- test files
         'crash_printer/tests/test_linux_sa_sigaction.cpp',
     }

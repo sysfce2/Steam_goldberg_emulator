@@ -30,6 +30,8 @@
 
 Steam_Client *get_steam_client();
 bool steamclient_has_ipv6_functions();
+bool steamclient_get_callback(HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg);
+void steamclient_free_callback(HSteamPipe hSteamPipe);
 
 HSteamUser flat_hsteamuser();
 HSteamPipe flat_hsteampipe();

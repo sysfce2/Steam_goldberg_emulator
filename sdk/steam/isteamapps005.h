@@ -44,7 +44,7 @@ public:
 	// to users when they purchase the game, before the game ships.
 	// You'll receive an AppProofOfPurchaseKeyResponse_t callback when
 	// the key is available (which may be immediately).
-	virtual void RequestAppProofOfPurchaseKey( AppId_t nAppID ) = 0;
+	virtual void RequestAppProofOfPurchaseKey_OLD( AppId_t nAppID ) = 0;
 
 	virtual bool GetCurrentBetaName( char *pchName, int cchNameBufferSize ) = 0; // returns current beta branch name, 'public' is the default branch
 	virtual bool MarkContentCorrupt( bool bMissingFilesOnly ) = 0; // signal Steam that game files seems corrupt or missing

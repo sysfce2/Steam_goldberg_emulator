@@ -107,3 +107,42 @@ S_API_EXPORT void S_CALLTYPE VulkanSteamOverlayProcessCapturedFrame(
 {
     
 }
+
+
+// some apps check the size of this file, original is: 1,214,824 (32-bit) | 1,462,632 (64-bit)
+#define BYTES_32          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+#define BYTES_256         BYTES_32, BYTES_32, BYTES_32, BYTES_32, BYTES_32, BYTES_32, BYTES_32, BYTES_32
+#define KILOBYTE          BYTES_256, BYTES_256, BYTES_256, BYTES_256
+#define KILOBYTES_8       KILOBYTE, KILOBYTE, KILOBYTE, KILOBYTE, KILOBYTE, KILOBYTE, KILOBYTE, KILOBYTE
+#define KILOBYTES_64      KILOBYTES_8, KILOBYTES_8, KILOBYTES_8, KILOBYTES_8, KILOBYTES_8, KILOBYTES_8, KILOBYTES_8, KILOBYTES_8
+#define KILOBYTES_128     KILOBYTES_64, KILOBYTES_64
+#define KILOBYTES_256     KILOBYTES_128, KILOBYTES_128
+#define KILOBYTES_512     KILOBYTES_256, KILOBYTES_256
+
+static volatile const uint8 size_padding_1[] = {
+    KILOBYTES_256,
+};
+static volatile const uint8 size_padding_2[] = {
+    KILOBYTES_512,
+};
+static volatile const uint8 size_padding_3[] = {
+    KILOBYTES_512,
+};
+static volatile const uint8 size_padding_4[] = {
+    KILOBYTES_512,
+};
+
+static void check_padding()
+{
+    static_assert(
+        // ~1.4MB
+        sizeof(size_padding_1) + sizeof(size_padding_2) + sizeof(size_padding_3) + sizeof(size_padding_4)
+            >=
+        (1ULL * 1024ULL * 1024ULL) + (410ULL * 1024ULL),
+        "bad padding size"
+    );
+    (void)size_padding_1;
+    (void)size_padding_2;
+    (void)size_padding_3;
+    (void)size_padding_4;
+}

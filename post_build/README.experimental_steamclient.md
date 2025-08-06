@@ -81,6 +81,11 @@ This dll is meant to be injected during **start-up** only, it must **NOT** be pl
 Some apps verify the existence of this dll, either on disk, or inside their memory space, that's why this dll exists.  
 It is **NOT** recommended to ignore this dll.  
 
+## Recommended path for apps/games
+Some apps check if their **root folder** is inside `steamapps/common`, so it is recommended to create this directory `steamapps/common` and put the app's **folder** there.  
+Example: `~/my apps/steamapps/common/my app/`  
+Example: `D:\my apps\steamapps\common\my app\`  
+
 ## Mods paths (source-engine games on Windows)
 On Windows, the registry key `SourceModInstallPath` is changed to the folder containing the loader.  
 ```

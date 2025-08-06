@@ -4,6 +4,7 @@ function help_page () {
   echo "./$(basename "$0") [switches]"
   echo "switches:"
   echo "  --deps: rebuild third-party dependencies"
+  echo "  --nogen: don't regenerate build files"
   echo "  --help: show this page"
 }
 
@@ -12,10 +13,13 @@ build_threads="$(( $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0) * 70 / 100
 [[ $build_threads -lt 2 ]] && build_threads=2
 
 BUILD_DEPS=0
+GEN_PROJECT=1
 for (( i=1; i<=$#; ++i )); do
   arg="${!i}"
   if [[ "$arg" = "--deps" ]]; then
     BUILD_DEPS=1
+  elif [[ "$arg" = "--nogen" ]]; then
+    GEN_PROJECT=0
   elif [[ "$arg" = "--help" ]]; then
     help_page
     exit 0
@@ -40,9 +44,11 @@ if [[ $BUILD_DEPS = 1 ]]; then
   }
 fi
 
-"$premake_exe" --genproto --os=linux gmake2 || {
-  exit 1;
-}
+if [[ $GEN_PROJECT = 1 ]]; then
+  "$premake_exe" --genproto --os=linux gmake2 || {
+    exit 1;
+  }
+fi
 
 pushd ./"build/project/gmake2/linux"
 

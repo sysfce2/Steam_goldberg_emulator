@@ -184,7 +184,9 @@ void Steam_GameServer::LogOn( const char *pszToken )
     PRINT_DEBUG("%s", pszToken);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     call_servers_connected = true;
+    call_servers_disconnected = false;
     logged_in = true;
+    settings->set_offline(false);
 }
 
 void Steam_GameServer::LogOn(
@@ -205,7 +207,9 @@ void Steam_GameServer::LogOnAnonymous()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     call_servers_connected = true;
+    call_servers_disconnected = false;
     logged_in = true;
+    settings->set_offline(false);
 }
 
 void Steam_GameServer::LogOn()
@@ -220,11 +224,13 @@ void Steam_GameServer::LogOff()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (logged_in) {
+        call_servers_connected = false;
         call_servers_disconnected = true;
     }
 
     policy_response_called = false;
     logged_in = false;
+    settings->set_offline(true);
 }
 
 
@@ -846,7 +852,7 @@ void Steam_GameServer::RunCallbacks()
         policy_response_called = true;
     }
 
-    if (logged_in && check_timedout(last_sent_server_info, SEND_SERVER_RATE)) {
+    if (logged_in && server_data.port() != 0 && check_timedout(last_sent_server_info, SEND_SERVER_RATE)) {
         PRINT_DEBUG("Sending Gameserver");
         Common_Message msg{};
         msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
@@ -855,7 +861,7 @@ void Steam_GameServer::RunCallbacks()
         if (server_data.mod_dir().empty())
             server_data.set_mod_dir(server_data.game_dir());
         msg.set_allocated_gameserver(new Gameserver(server_data));
-        msg.mutable_gameserver()->set_num_players(auth_manager->countInboundAuth());
+        //msg.mutable_gameserver()->set_num_players(auth_manager->countInboundAuth());
         network->sendToAllIndividuals(&msg, true);
         last_sent_server_info = std::chrono::high_resolution_clock::now();
     }
@@ -957,11 +963,22 @@ bool Steam_GameServer::Obsolete_GSSetStatus( int32 nAppIdServed, uint32 unServer
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
+    server_data.set_appid(nAppIdServed);
+    server_data.set_num_players(cPlayers);
+    server_data.set_max_player_count(cPlayersMax);
+    server_data.set_bot_player_count(cBotPlayers);
+    server_data.set_port(unGamePort);
+    server_data.set_query_port(0xFFFF);
+    server_data.set_server_name(pchServerName);
+    server_data.set_spectator_server_name("");
+    server_data.set_game_dir(pchGameDir ? pchGameDir : "");
+    server_data.set_map_name(pchMapName);
     set_version(pchVersion);
-    server_data.set_game_dir(pchGameDir);
+    server_data.set_offline(false);
+
+    if (!settings->get_local_game_id().AppID()) settings->set_game_id(CGameID(nAppIdServed));
     flags = unServerFlags;
 
-    UpdateServerStatus(cPlayers, cPlayersMax, cBotPlayers, pchServerName, "", pchMapName);
     return true;
 }
 
@@ -979,7 +996,7 @@ bool Steam_GameServer::GSSetServerType( int32 nGameAppId, uint32 unServerFlags, 
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    bool ret = BSetServerType(unServerFlags, unGameIP, unGamePort, 0, 0, pchGameDir, pchVersion, false);
+    bool ret = BSetServerType(unServerFlags, unGameIP, unGamePort, 0xFFFF, 0xFFFF, pchGameDir, pchVersion, false);
     server_data.set_appid(nGameAppId);
     return ret;
 }
@@ -1080,5 +1097,28 @@ bool Steam_GameServer::GSGetUserAchievementStatus( CSteamID steamID, const char 
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     return BGetUserAchievementStatus(steamID, pchAchievementName);
+}
+
+bool Steam_GameServer::GSSendUserConnect( CSteamID steamID, uint32 unIPPublic, uint32 unk )
+{
+    PRINT_DEBUG("%llu %u %u", steamID.ConvertToUint64(), unIPPublic, unk);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    // Note that SteamID passed into this comes from Steam.dll so it won't match the client's Goldberg SteamID.
+    // POINTLESS TO USE AUTH MANAGER.
+    GSClientApprove_t data{};
+    data.m_SteamID = data.m_OwnerSteamID = steamID;
+    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    add_player(steamID);
+    return true;
+}
+
+bool Steam_GameServer::GSSendUserDisconnect( CSteamID steamID )
+{
+    PRINT_DEBUG("%llu", steamID.ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    remove_player(steamID);
+    return true;
 }
 // older sdk -----------------------------------------------

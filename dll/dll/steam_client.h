@@ -69,6 +69,11 @@ enum Steam_Pipe {
 };
 
 class Steam_Client :
+public ISteamClient001,
+public ISteamClient002,
+public ISteamClient003,
+public ISteamClient004,
+public ISteamClient005,
 public ISteamClient006,
 public ISteamClient007,
 public ISteamClient008,
@@ -147,6 +152,7 @@ public:
     Steam_Billing *steam_billing{};
 
     Steam_GameServer *steam_gameserver{};
+    Steam_User *steam_gameserver_user{};
     Steam_Utils *steam_gameserver_utils{};
     Steam_GameServerStats *steam_gameserverstats{};
     Steam_Networking *steam_gameserver_networking{};
@@ -168,6 +174,7 @@ public:
     bool steamclient_server_inited = false;
 
     bool gameserver_has_ipv6_functions{};
+    int steamclient_version{};
     
     unsigned steam_pipe_counter = 1;
     std::map<HSteamPipe, enum Steam_Pipe> steam_pipes{};
@@ -362,10 +369,32 @@ public:
     // returns the name of a universe
     const char *GetUniverseName( EUniverse eUniverse );
     void *GetISteamBilling_old( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+
+    HSteamUser CreateGlobalInstance();
+    HSteamUser ConnectToGlobalInstance();
+    HSteamUser CreateLocalInstance();
+    void ReleaseInstance( HSteamUser hSteamUser );
+    ISteamUser *GetISteamUser( HSteamUser hSteamUser, const char *pchVersion );
+    ISteamGameServer *GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion );
+    bool BMainLoop( uint64 time );
+    bool BMainLoop( uint64 time, bool unk );
+    EUniverse GetConnectedUniverse();
+    bool BGetCallback( HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg, int *unk );
+    void FreeLastCallback( HSteamPipe hSteamPipe );
+    void SetEUniverse( EUniverse universe );
+    void Test_SetSpew( const char *unk1, int unk2 ) {}
+    void Test_SetSpewFunc( void *unk ) {}
+    void Test_OverrideIPs( uint32 unIPPublic, uint32 unIPPrivate ) {}
+    void Test_SetServerLoadState( bool unk1, bool unk2 ) {}
+    void Test_SetStressMode( bool unk ) {}
+    int Test_GetStatsVConn() { return 0; }
+    void Test_RemoveAllClients() {}
     // older sdk ----------------------------------------------------------
 
     void report_missing_impl(std::string_view itf, std::string_view caller);
     [[noreturn]] void report_missing_impl_and_exit(std::string_view itf, std::string_view caller);
+
+    HSteamPipe get_pipe_for_user(HSteamUser hUser);
 
 };
 

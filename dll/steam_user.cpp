@@ -19,6 +19,7 @@
 #include "dll/auth.h"
 #include "dll/appticket.h"
 #include "dll/base64.h"
+#include "dll/dll.h"
 
 Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks)
 {
@@ -42,19 +43,34 @@ Steam_User::~Steam_User()
 HSteamUser Steam_User::GetHSteamUser()
 {
     PRINT_DEBUG_ENTRY();
-    return CLIENT_HSTEAMUSER;
+    return (settings == get_steam_client()->settings_server) ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
 }
 
 void Steam_User::LogOn( CSteamID steamID )
 {
     PRINT_DEBUG_ENTRY();
     settings->set_offline(false);
+    logon_time = std::chrono::high_resolution_clock::now();
+    call_logged_on = true;
+    call_logged_off = false;
+
+    if (settings == get_steam_client()->settings_server) {
+        get_steam_client()->steam_gameserver->LogOnAnonymous();
+    }
 }
 
 void Steam_User::LogOff()
 {
     PRINT_DEBUG_ENTRY();
     settings->set_offline(true);
+    logoff_time = std::chrono::high_resolution_clock::now();
+    call_logged_on = false;
+    call_logged_off = true;
+    player_auths.clear();
+
+    if (settings == get_steam_client()->settings_server) {
+        get_steam_client()->steam_gameserver->LogOff();
+    }
 }
 
 // returns true if the Steam client current has a live connection to the Steam servers. 
@@ -862,4 +878,237 @@ bool Steam_User::BSetDurationControlOnlineState( EDurationControlOnlineState eNe
 {
     PRINT_DEBUG_ENTRY();
     return false;
+}
+
+// older sdk -----------------------------------------------
+void Steam_User::Init( ICMCallback001 *cmcallback, ISteam2Auth *steam2auth )
+{
+    PRINT_DEBUG_ENTRY();
+    callbacks_old1 = cmcallback;
+}
+
+void Steam_User::Init( ICMCallback *cmcallback, ISteam2Auth *steam2auth )
+{
+    PRINT_DEBUG_ENTRY();
+    callbacks_old2 = cmcallback;
+}
+
+int Steam_User::ProcessCall( int unk )
+{
+    PRINT_DEBUG_TODO();
+    return 0;
+}
+
+void Steam_User::LogOn( CSteamID *steamID )
+{
+    PRINT_DEBUG_ENTRY();
+    LogOn(*steamID);
+}
+
+int Steam_User::CreateAccount( const char *unk1, void *unk2, void *unk3, const char *unk4, int unk5, void *unk6 )
+{
+    PRINT_DEBUG_TODO();
+    return 0;
+}
+
+bool Steam_User::GSSendLogonRequest( CSteamID *steamID )
+{
+    PRINT_DEBUG("%llu", (*steamID).ConvertToUint64());
+
+    // Note that SteamID passed into this comes from Steam.dll so it won't match the client's Goldberg SteamID.
+    std::pair<CSteamID, std::chrono::high_resolution_clock::time_point> entry(*steamID, std::chrono::high_resolution_clock::now());
+    player_auths.push_back(entry);
+    get_steam_client()->steam_gameserver->add_player(*steamID);
+    return true;
+}
+
+bool Steam_User::GSSendDisconnect( CSteamID *steamID )
+{
+    PRINT_DEBUG("%llu", (*steamID).ConvertToUint64());
+    get_steam_client()->steam_gameserver->remove_player(*steamID);
+    return true;
+}
+
+bool Steam_User::GSSendStatusResponse( CSteamID *steamID, int nSecondsConnected, int nSecondsSinceLast )
+{
+    PRINT_DEBUG_TODO();
+    return false;
+}
+
+bool Steam_User::GSSetStatus( int32 nAppIdServed, uint32 unServerFlags, int cPlayers, int cPlayersMax )
+{
+    PRINT_DEBUG_TODO();
+    return true;
+}
+
+bool Steam_User::GSSetStatus( int32 nAppIdServed, uint32 unServerFlags, int cPlayers, int cPlayersMax, int cBotPlayers, int unGamePort, const char *pchServerName, const char *pchGameDir, const char *pchMapName, const char *pchVersion )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_gameserver->Obsolete_GSSetStatus(nAppIdServed, unServerFlags, cPlayers, cPlayersMax, cBotPlayers, unGamePort, pchServerName, pchGameDir, pchMapName, pchVersion);
+}
+
+bool Steam_User::BGetCallback( int *piCallback, uint8 **ppubParam, int *unk )
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamUser user = (settings == get_steam_client()->settings_server) ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
+    HSteamPipe pipe = get_steam_client()->get_pipe_for_user(user);
+    if (!pipe)
+        return false;
+
+    CallbackMsg_t msg;
+    if (!steamclient_get_callback(pipe, &msg))
+        return false;
+
+    *piCallback = msg.m_iCallback;
+    *ppubParam = msg.m_pubParam;
+    return true;
+}
+
+void Steam_User::FreeLastCallback()
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamUser user = (settings == get_steam_client()->settings_server) ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
+    HSteamPipe pipe = get_steam_client()->get_pipe_for_user(user);
+    if (!pipe)
+        return;
+
+    steamclient_free_callback(pipe);
+}
+
+int Steam_User::GetSteamTicket( void *pBlob, int cbMaxBlob )
+{
+    PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (cbMaxBlob < STEAM_TICKET_MIN_SIZE) return 0;
+    if (!pBlob) return 0;
+
+    uint32 out_size = STEAM_AUTH_TICKET_SIZE;
+    auth_manager->getTicketData(pBlob, cbMaxBlob, &out_size);
+
+    if (out_size > STEAM_AUTH_TICKET_SIZE)
+        return 0;
+    return out_size;
+}
+
+const char *Steam_User::GetPlayerName()
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->GetPersonaName();
+}
+
+void Steam_User::SetPlayerName( const char *pchPersonaName )
+{
+    PRINT_DEBUG_ENTRY();
+    get_steam_client()->steam_friends->SetPersonaName_old(pchPersonaName);
+}
+
+EPersonaState Steam_User::GetFriendStatus()
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->GetPersonaState();
+}
+
+void Steam_User::SetFriendStatus( EPersonaState ePersonaState )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->SetPersonaState(ePersonaState);
+}
+
+bool Steam_User::AddFriend( CSteamID steamIDFriend )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->AddFriend(steamIDFriend);
+}
+
+bool Steam_User::RemoveFriend( CSteamID steamIDFriend )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->RemoveFriend(steamIDFriend);
+}
+
+bool Steam_User::HasFriend( CSteamID steamIDFriend )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->HasFriend(steamIDFriend);
+}
+
+EFriendRelationship Steam_User::GetFriendRelationship( CSteamID steamIDFriend )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->GetFriendRelationship(steamIDFriend);
+}
+
+EPersonaState Steam_User::GetFriendStatus( CSteamID steamIDFriend )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->GetFriendPersonaState(steamIDFriend);
+}
+
+bool Steam_User::GetFriendGamePlayed( CSteamID steamIDFriend, int32 *pnGameID, uint32 *punGameIP, uint16 *pusGamePort )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->Deprecated_GetFriendGamePlayed(steamIDFriend, pnGameID, punGameIP, pusGamePort);
+}
+
+const char *Steam_User::GetPlayerName( CSteamID steamIDFriend )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->GetFriendPersonaName(steamIDFriend);
+}
+
+int32 Steam_User::AddFriendByName( const char *pchEmailOrAccountName )
+{
+    PRINT_DEBUG_ENTRY();
+    return get_steam_client()->steam_friends->AddFriendByName(pchEmailOrAccountName);
+}
+// older sdk -----------------------------------------------
+
+void Steam_User::RunCallbacks()
+{
+    if (callbacks_old1) {
+        if (call_logged_on && check_timedout(logon_time, 0.1)) {
+            PRINT_DEBUG("ICMCallback -> OnLogonSuccess");
+            callbacks_old1->OnLogonSuccess();
+            call_logged_on = false;
+        }
+
+        if (call_logged_off && check_timedout(logoff_time, 0.1)) {
+            PRINT_DEBUG("ICMCallback -> OnLoggedOff");
+            callbacks_old1->OnLoggedOff();
+            call_logged_off = false;
+        }
+
+        for (auto it = player_auths.begin(); it != player_auths.end();) {
+            if (check_timedout(it->second, 0.1)) {
+                PRINT_DEBUG("ICMCallback -> GSHandleClientApprove %llu", it->first.ConvertToUint64());
+                callbacks_old1->GSHandleClientApprove(&(it->first));
+                it = player_auths.erase(it);
+            } else {
+                it++;
+            }
+        }
+    } else if (callbacks_old2) {
+        if (call_logged_on && check_timedout(logon_time, 0.1)) {
+            PRINT_DEBUG("ICMCallback -> OnLogonSuccess");
+            callbacks_old2->OnLogonSuccess();
+            call_logged_on = false;
+        }
+
+        if (call_logged_off && check_timedout(logoff_time, 0.1)) {
+            PRINT_DEBUG("ICMCallback -> OnLoggedOff");
+            callbacks_old2->OnLoggedOff();
+            call_logged_off = false;
+        }
+
+        for (auto it = player_auths.begin(); it != player_auths.end();) {
+            if (check_timedout(it->second, 0.1)) {
+                PRINT_DEBUG("ICMCallback -> GSHandleClientApprove %llu", it->first.ConvertToUint64());
+                callbacks_old2->GSHandleClientApprove(&(it->first));
+                it = player_auths.erase(it);
+            } else {
+                it++;
+            }
+        }
+    }
 }

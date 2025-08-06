@@ -1,7 +1,12 @@
 #pragma once
 
-namespace stubdrm
-{
+#if !defined(STUB_EXTRA_DEBUG)
+    #if defined(DEBUG) || defined(_DEBUG)
+        #define STUB_EXTRA_DEBUG
+    #endif
+#endif
+
+namespace stubdrm {
     bool patch();
     bool restore();
 
