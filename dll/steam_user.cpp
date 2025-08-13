@@ -914,6 +914,7 @@ int Steam_User::CreateAccount( const char *unk1, void *unk2, void *unk3, const c
 bool Steam_User::GSSendLogonRequest( CSteamID *steamID )
 {
     PRINT_DEBUG("%llu", (*steamID).ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     // Note that SteamID passed into this comes from Steam.dll so it won't match the client's Goldberg SteamID.
     std::pair<CSteamID, std::chrono::high_resolution_clock::time_point> entry(*steamID, std::chrono::high_resolution_clock::now());
@@ -925,6 +926,8 @@ bool Steam_User::GSSendLogonRequest( CSteamID *steamID )
 bool Steam_User::GSSendDisconnect( CSteamID *steamID )
 {
     PRINT_DEBUG("%llu", (*steamID).ConvertToUint64());
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     get_steam_client()->steam_gameserver->remove_player(*steamID);
     return true;
 }

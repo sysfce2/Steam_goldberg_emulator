@@ -7,7 +7,7 @@
 #include "base.h"
 #include "include.wrap.mbedtls.h"
 
-#define STEAM_TICKET_MIN_SIZE  (4 + 8 + 8)
+#define STEAM_TICKET_MIN_SIZE  (4 + 8 + 8 + 4)
 #define STEAM_TICKET_MIN_SIZE_NEW 170
 
 // Steam recommends sending 1024 byte buffer. It returns 234 byte ticket.
@@ -30,6 +30,12 @@ struct AppTicketGC {
     uint64_t GCToken{};
     CSteamID id{};
     uint32_t ticketGenDate{}; //epoch
+
+public:
+    std::vector<uint8_t> Serialize() const;
+};
+
+struct AppTicketSession {
     uint32_t ExternalIP{};
     uint32_t InternalIP{};
     uint32_t TimeSinceStartup{};
@@ -60,7 +66,9 @@ struct AppTicket {
 
 struct Auth_Data {
     bool HasGC{};
+    bool HasSession{};
     AppTicketGC GC{};
+    AppTicketSession Session{};
     AppTicket Ticket{};
     //old data
     CSteamID id{};
@@ -95,6 +103,7 @@ public:
     HAuthTicket getWebApiTicket( const char *pchIdentity );
     void cancelTicket(uint32 number);
 
+    Auth_Data validateTicket(const void *pAuthTicket, uint32 cbAuthTicket, CSteamID fallbackID, CSteamID *pSteamIDUser);
     EBeginAuthSessionResult beginAuth(const void *pAuthTicket, int cbAuthTicket, CSteamID steamID);
     bool endAuth(CSteamID id);
 
@@ -105,7 +114,7 @@ public:
 
     CSteamID fakeUser();
     
-    Auth_Data getTicketData( void *pTicket, int cbMaxTicket, uint32 *pcbTicket );
+    Auth_Data getTicketData( void *pTicket, int cbMaxTicket, uint32 *pcbTicket, bool add_session_header = false);
 };
 
 #endif // AUTH_INCLUDE_H

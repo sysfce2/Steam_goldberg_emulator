@@ -122,8 +122,11 @@ bool SteamCallResults::callback_result(SteamAPICall_t api_call, void *copy_to, u
     if (cb_result != callresults.end()) {
         if (!cb_result->call_completed()) return false;
 
-        // Real Steam just does nothing and returns true if nullptr is passed.
-        if (!copy_to) return true;
+        // Real Steam just copies nothing and returns true if nullptr is passed.
+        if (!copy_to) {
+            cb_result->to_delete = true;
+            return true;
+        }
 
         memset(copy_to, 0, size);
 
@@ -138,7 +141,6 @@ bool SteamCallResults::callback_result(SteamAPICall_t api_call, void *copy_to, u
         // This behavior is needed for RemoteStorageFileShareResult_t which was made larger in sdk v1.28x
         // without even the interface version being bumped.
         size_t outsize = std::min(resultsize, static_cast<size_t>(size));
-
         memcpy(copy_to, cb_result->result.data(), outsize);
         cb_result->to_delete = true;
         return true;
