@@ -840,12 +840,8 @@ project "api_experimental"
     filter {} -- reset the filter and remove all active keywords
     defines { -- added to all filters, later defines will be appended
         "EMU_OVERLAY", "ImTextureID=ImU64",
+        "EMU_EXPERIMENTAL_BUILD",
     }
-    -- Windows defines
-    filter { "system:windows" }
-        defines {
-            "EMU_EXPERIMENTAL_BUILD",
-        }
 
 
     -- include dir
@@ -975,12 +971,8 @@ project "steamclient_experimental"
     filter {} -- reset the filter and remove all active keywords
     defines { -- added to all filters, later defines will be appended
         "STEAMCLIENT_DLL", "EMU_OVERLAY", "ImTextureID=ImU64",
+        "EMU_EXPERIMENTAL_BUILD",
     }
-    -- Windows defines
-    filter { "system:windows" }
-        defines {
-            "EMU_EXPERIMENTAL_BUILD",
-        }
 
 
     -- include dir

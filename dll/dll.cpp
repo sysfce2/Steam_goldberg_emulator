@@ -347,7 +347,7 @@ STEAMAPI_API steam_bool S_CALLTYPE SteamAPI_Init()
     // call this first since it loads old interfaces
     Steam_Client* client = get_steam_client();
 
-#ifdef EMU_EXPERIMENTAL_BUILD
+#if defined(EMU_EXPERIMENTAL_BUILD) && defined(__WINDOWS__)
     crack_SteamAPI_Init();
 #endif
 
@@ -446,10 +446,11 @@ STEAMAPI_API steam_bool S_CALLTYPE SteamAPI_RestartAppIfNecessary( uint32 unOwnA
     
     // call this first since it loads old interfaces
     Steam_Client* client = get_steam_client();
-    
-#ifdef EMU_EXPERIMENTAL_BUILD
+
+#if defined(EMU_EXPERIMENTAL_BUILD) && defined(__WINDOWS__)
     crack_SteamAPI_RestartAppIfNecessary(unOwnAppID);
 #endif
+
     client->setAppID(unOwnAppID);
     return false;
 }

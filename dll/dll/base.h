@@ -55,7 +55,7 @@ unsigned int file_size_(const std::string &full_path);
 void set_whitelist_ips(uint32_t *from, uint32_t *to, unsigned num_ips);
 
 
-#ifdef EMU_EXPERIMENTAL_BUILD
+#if defined(EMU_EXPERIMENTAL_BUILD) && defined(__WINDOWS__)
 bool crack_SteamAPI_RestartAppIfNecessary(uint32 unOwnAppID);
 bool crack_SteamAPI_Init();
 #endif

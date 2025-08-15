@@ -658,15 +658,25 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
 
 #else
 
-__attribute__((__constructor__)) static void lib_base_entry()
-{
-    load_dlls();
-}
 
-__attribute__((__destructor__)) static void lib_base_exit()
-{
-    unload_dlls();
-}
+// this acts as both an entry and an exit points for the library
+// avoid "__attribute__((__constructor__))" and "__attribute__((__destructor__))"
+// since they run before the C+++ runtime has been initialized
+// causing problems related to uninitialized global objects
+struct CppRuntimeTrick {
+    CppRuntimeTrick()
+    {
+        PRINT_DEBUG_ENTRY();
+        load_dlls();
+    }
+
+    ~CppRuntimeTrick()
+    {
+        PRINT_DEBUG_ENTRY();
+        unload_dlls();
+    }
+} static g_cpp_rt{};
+
 
 void set_whitelist_ips(uint32_t *from, uint32_t *to, unsigned num_ips)
 {

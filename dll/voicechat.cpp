@@ -15,6 +15,7 @@ bool VoiceChat::InitVoiceSystem() {
     encoder = nullptr;
     inputStream = nullptr;
     outputStream = nullptr;
+    PRINT_DEBUG("VoiceSystem initialized!");
     return true;
 }
 
@@ -22,6 +23,7 @@ void VoiceChat::ShutdownVoiceSystem() {
     if (isInited) {
         Pa_Terminate();
         isInited = false;
+        PRINT_DEBUG("VoiceSystem Terminated!");
     }
 }
 
@@ -188,6 +190,13 @@ EVoiceResult VoiceChat::GetAvailableVoice(uint32_t* pcbCompressed) {
 EVoiceResult VoiceChat::GetVoice(bool bWantCompressed, void* pDestBuffer, uint32_t cbDestBufferSize, uint32_t* nBytesWritten) {
     if (!pDestBuffer || !nBytesWritten) return k_EVoiceResultNotInitialized;
 
+    // if we does not recording dont do anything.
+    if (isRecording.load()) return k_EVoiceResultNotRecording;
+
+    // should we have this here ? -detanup
+    // some games might not initialize this. (?? FUCKING WHY? )
+    if (!InitVoiceSystem()) return k_EVoiceResultNotInitialized;
+
     std::unique_lock<std::mutex> lock(inputMutex);
     inputCond.wait_for(lock, std::chrono::milliseconds(20), [this] {
         return !this->encodedQueue.empty();
@@ -253,3 +262,4 @@ void VoiceChat::QueueIncomingVoice(uint64_t userId, const uint8_t* data, size_t 
     std::lock_guard<std::mutex> lock(playbackQueueMutex);
     playbackQueue.push({ userId, std::vector<uint8_t>(data, data + len) });
 }
+

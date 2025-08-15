@@ -13,10 +13,10 @@ LDR_FILE_STEAM_RUNTIME="ldr_steam_rt.txt"
 LDR_FILE_EXE_COMMAND_LINE="ldr_cmd.txt"
 
 # MUST be beside this script
-STEAM_CLIENT_SO=steamclient.so
-STEAM_CLIENT64_SO=steamclient64.so
+STEAM_CLIENT_SO=x32/steamclient.so
+STEAM_CLIENT64_SO=x64/steamclient.so
 
-script_dir=$( cd -- "$( dirname -- "${0}" )" &> /dev/null && pwd )
+script_dir="$( cd -- "$( dirname -- "$0" )" &> /dev/null && pwd || pwd )"
 steam_base_dir="$( echo ~/.steam )"
 
 function help_page () {
@@ -58,12 +58,12 @@ if [ ! -f "$script_dir/${STEAM_CLIENT64_SO}" ]; then
   exit 1
 fi
 
- # no args = help page
-if [[ $# = 0 ]]; then
-  echo "[?] No arguments provided"
-  help_page
-  exit 0
-fi
+# no args = help page
+# if [[ $# = 0 ]]; then
+#   echo "[?] No arguments provided"
+#   help_page
+#   exit 0
+# fi
 
 # try to load from config files first
 # unfortunately we need eval to expand stuff like ~/my_path
@@ -154,17 +154,19 @@ if [[ ! -z "$STEAM_RUNTIME" ]]; then
 fi
 
 # print everything
-echo EXE = "'$EXE'"
-echo APP_ID = $APP_ID
-echo EXE_RUN_DIR = "'$EXE_RUN_DIR'"
+echo "script_dir = '$script_dir'"
+echo "steam_base_dir = '$steam_base_dir'"
+echo "EXE = '$EXE'"
+echo "APP_ID = $APP_ID"
+echo "EXE_RUN_DIR = '$EXE_RUN_DIR'"
 
 if [[ -z "$STEAM_RUNTIME" ]]; then
   echo "STEAM_RUNTIME was not set"
 else
-  echo STEAM_RUNTIME = "'$STEAM_RUNTIME'"
+  echo "STEAM_RUNTIME = '$STEAM_RUNTIME'"
 fi
 
-echo EXE_COMMAND_LINE = "${EXE_COMMAND_LINE[@]}"
+echo "EXE_COMMAND_LINE [count=${#EXE_COMMAND_LINE[@]}] = ${EXE_COMMAND_LINE[@]}"
 
 # prepare the required dirs
 if [[ ! -d "$steam_base_dir/sdk32" ]]; then
@@ -214,7 +216,20 @@ if [ ! -z "${STEAM_RUNTIME}" ]; then
   )
 fi
 
-GseAppPath="${EXE_RUN_DIR}" SteamAppId=$APP_ID SteamGameId=$APP_ID SteamAppUser='client_player' SteamUser='client_player' SteamClientLaunch='1' SteamEnv='1' SteamPath="$script_dir" "$TARGET_EXE" "${EXE_COMMAND_LINE[@]}"
+# pwd = EXE_RUN_DIR here
+# appid 340300 expects to be able to load the library "libSteamworksNative.so" from its root dir
+# just to be on the safe side, we add the exe dir, the run/working dir, and the script dir, to the LD path
+LD_LIBRARY_PATH="$(dirname "$EXE"):$(pwd):$script_dir:$LD_LIBRARY_PATH" \
+GseAppPath="$script_dir" \
+SteamPath="$script_dir" \
+SteamAppId="$APP_ID" \
+SteamGameId="$APP_ID" \
+SteamAppUser='client_player' \
+SteamUser='client_player' \
+SteamClientLaunch='1' \
+SteamEnv='1' \
+PROTON_DISABLE_LSTEAMCLIENT='1' \
+"$TARGET_EXE" "${EXE_COMMAND_LINE[@]}"
 
 popd
 
