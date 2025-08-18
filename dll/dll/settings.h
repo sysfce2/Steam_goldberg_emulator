@@ -294,6 +294,9 @@ public:
     // >0 == load icons in the background as mentioned above
     int paginated_achievements_icons = 10;
 
+    // whether to record playtime
+    bool record_playtime = false;
+
     // bypass to make SetAchievement() always return true, prevent some games from breaking
     bool achievement_bypass = false;
 

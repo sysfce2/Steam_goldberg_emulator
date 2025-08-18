@@ -33,6 +33,10 @@ void Steam_Client::background_thread_proc()
         last_cb_run = now_ms; // update the time counter just to avoid overlap
         network->Run(); // networking must run first since it receives messages used by each run_callback()
         run_every_runcb->run(); // call each run_callback()
+
+        if (settings_client->record_playtime) {
+            playtime_counter->tick(); // update playtime counter
+        }
     }
 }
 
@@ -152,6 +156,8 @@ Steam_Client::Steam_Client()
     PRINT_DEBUG("init AppTicket");
     steam_app_ticket = new Steam_AppTicket(settings_client);
 
+    playtime_counter = new PlaytimeCounter(local_storage);
+
     gameserver_has_ipv6_functions = false;
     steamclient_version = 6; // default for C exports
 
@@ -220,6 +226,8 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_overlay);
     
     DEL_INST(steam_app_ticket);
+
+    DEL_INST(playtime_counter);
 
     DEL_INST(ugc_bridge);
 

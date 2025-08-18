@@ -1596,6 +1596,9 @@ static void parse_stats_features(class Settings *settings_client, class Settings
         long val_server = ini.GetLongValue("main::stats", "paginated_achievements_icons", settings_server->paginated_achievements_icons);
         settings_server->paginated_achievements_icons = static_cast<int>(val_server);
     }
+
+    settings_client->record_playtime = ini.GetBoolValue("main::stats", "record_playtime", settings_client->record_playtime);
+    settings_server->record_playtime = ini.GetBoolValue("main::stats", "record_playtime", settings_server->record_playtime);
 }
 
 
