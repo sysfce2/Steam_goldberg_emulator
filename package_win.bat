@@ -56,6 +56,10 @@ if exist "%TARGET_DIR%\experimental\" (
   copy /y "%ROOT%\post_build\README.experimental.md" "%TARGET_DIR%\experimental\"
 )
 
+if exist "%TARGET_DIR%\steam_old_lib\" (
+  copy /y "%ROOT%\post_build\README.steam_old_lib.md" "%TARGET_DIR%\steam_old_lib\"
+)
+
 if exist "%TARGET_DIR%\steamclient_experimental\" (
   xcopy /y /s /e /r "%ROOT%\post_build\win\ColdClientLoader.EXAMPLE\" "%TARGET_DIR%\steamclient_experimental\dll_injection.EXAMPLE\"
   copy /y "%ROOT%\post_build\README.experimental_steamclient.md" "%TARGET_DIR%\steamclient_experimental\"

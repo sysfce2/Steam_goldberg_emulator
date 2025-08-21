@@ -43,12 +43,18 @@ jobs:
             "steamclient_experimental_loader",
             "steamclient_experimental_extra",
             "lib_game_overlay_renderer",
+            # steam old lib
+            "lib_steam_old",
             # tools
             "tool_lobby_connect",
             "tool_generate_interfaces",
           ]
         arch: ["x64", "Win32"]
         cfg: ["debug", "release"]
+
+        exclude:
+          - prj: lib_steam_old
+            arch: x64
 
     steps:
       # on Windows Git will auto change line ending to CRLF, not preferable
