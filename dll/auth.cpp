@@ -28,7 +28,7 @@ static uint32_t get_ticket_count() {
 
 
 // source: https://github.com/Detanup01/stmsrv/blob/main/Cert/AppTicket.key
-// thanks Detanup01
+// thanks Detanup01 | FAKE APP TICKET KEY
 const static std::string app_ticket_key =
     "-----BEGIN PRIVATE KEY-----\n"
     "MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAMITHOY6pfsvaGTI\n"
@@ -846,7 +846,7 @@ HAuthTicket Auth_Manager::getWebApiTicket( const char* pchIdentity )
     GetTicketForWebApiResponse_t data{};
 
     uint32 cbTicket = 0;
-    Auth_Data ticket_data = getTicketData(data.m_rgubTicket, sizeof(data.m_rgubTicket), &cbTicket);
+    Auth_Data ticket_data = getTicketData(data.m_rgubTicket, sizeof(data.m_rgubTicket), &cbTicket, true);
 
     if (cbTicket > sizeof(data.m_rgubTicket))
         return k_HAuthTicketInvalid;
