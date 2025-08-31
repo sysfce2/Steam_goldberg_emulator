@@ -163,6 +163,7 @@ public:
     void rmCallback(Callback_Ids id, CSteamID steam_id, void (*message_callback)(void *object, Common_Message *msg), void *object);
 
     uint32 getIP(CSteamID id);
+    uint16 getPort(CSteamID id);
     uint32 getOwnIP();
 
     void startQuery(IP_PORT ip_port);

@@ -35,8 +35,9 @@ bool set_env_variable(const std::string &name, const std::string &value);
 /// @brief Check for a timeout given some initial timepoint and a timeout in sec.
 /// @param old The initial timepoint which will be compared against current time
 /// @param timeout The max allowed time in seconds
+/// @param now Optional comparison time point, useful when called in a loop to maintain a consistent reference
 /// @return true if the timepoint has exceeded the max allowed timeout, false otherwise
-bool check_timedout(std::chrono::high_resolution_clock::time_point old, double timeout);
+bool check_timedout(std::chrono::high_resolution_clock::time_point old, double timeout, std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now());
 
 unsigned generate_account_id();
 CSteamID generate_steam_anon_user();

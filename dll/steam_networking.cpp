@@ -16,78 +16,12 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_networking.h"
+#include "dll/dll.h"
 
 
-//packet timeout in seconds for non connections
-#define ORPHANED_PACKET_TIMEOUT (20)
-#define NEW_CONNECTION_TIMEOUT (20.0)
-
-//kingdom 2 crowns doesn't work with a 0.3 delay or lower
-#define NEW_CONNECTION_DELAY (0.4)
 
 #define OLD_CHANNEL_NUMBER 1
 
-
-bool Steam_Networking::connection_exists(CSteamID id)
-{
-    std::lock_guard<std::recursive_mutex> lock(connections_edit_mutex);
-    return std::find_if(connections.begin(), connections.end(), [&id](struct Steam_Networking_Connection const& conn) { return conn.remote == id;}) != connections.end();
-}
-
-struct Steam_Networking_Connection* Steam_Networking::get_or_create_connection(CSteamID id)
-{
-    std::lock_guard<std::recursive_mutex> lock(connections_edit_mutex);
-    auto conn = std::find_if(connections.begin(), connections.end(), [&id](struct Steam_Networking_Connection const& conn) { return conn.remote == id;});
-
-    if (connections.end() == conn) {
-        struct Steam_Networking_Connection connection;
-        connection.remote = id;
-        connections.push_back(connection);
-        return &(connections[connections.size() - 1]);
-    } else {
-        return &(*conn);
-    }
-}
-
-void Steam_Networking::remove_connection(CSteamID id)
-{
-    {
-        std::lock_guard<std::recursive_mutex> lock(connections_edit_mutex);
-        auto conn = std::begin(connections);
-        while (conn != std::end(connections)) {
-            if (conn->remote == id) {
-
-                conn = connections.erase(conn);
-            } else {
-                ++conn;
-            }
-        }
-    }
-
-    //pretty sure steam also clears the entire queue of messages for that connection
-    {
-        std::lock_guard<std::recursive_mutex> lock(messages_mutex);
-        auto msg = std::begin(messages);
-        while (msg != std::end(messages)) {
-            if (msg->source_id() == id.ConvertToUint64()) {
-                msg = messages.erase(msg);
-            } else {
-                ++msg;
-            }
-        }
-    }
-
-    {
-        auto msg = std::begin(unprocessed_messages);
-        while (msg != std::end(unprocessed_messages)) {
-            if (msg->source_id() == id.ConvertToUint64()) {
-                msg = unprocessed_messages.erase(msg);
-            } else {
-                ++msg;
-            }
-        }
-    }
-}
 
 SNetSocket_t Steam_Networking::create_connection_socket(CSteamID target, int nVirtualPort, uint32 nIP, uint16 nPort, SNetListenSocket_t id, enum steam_socket_connection_status status, SNetSocket_t other_id)
 {
@@ -173,7 +107,7 @@ void Steam_Networking::steam_networking_callback(void *object, Common_Message *m
     steam_networking->Callback(msg);
 }
 
-void Steam_Networking::steam_networking_run_every_runcp(void *object)
+void Steam_Networking::steam_run_every_runcb(void *object)
 {
     // PRINT_DEBUG_ENTRY();
 
@@ -181,25 +115,26 @@ void Steam_Networking::steam_networking_run_every_runcp(void *object)
     steam_networking->RunCallbacks();
 }
 
-Steam_Networking::Steam_Networking(class Settings *settings, class Networking *network, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb)
+Steam_Networking::Steam_Networking(class Settings *settings, class Networking *network, class P2p_Manager *p2p_manager, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb)
 {
     this->settings = settings;
     this->network = network;
+    this->p2p_manager = p2p_manager;
     this->callbacks = callbacks;
     this->run_every_runcb = run_every_runcb;
 
     this->network->setCallback(CALLBACK_ID_NETWORKING, settings->get_local_steam_id(), &Steam_Networking::steam_networking_callback, this);
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking::steam_networking_callback, this);
-    this->run_every_runcb->add(&Steam_Networking::steam_networking_run_every_runcp, this);
+    this->run_every_runcb->add(&Steam_Networking::steam_run_every_runcb, this);
 
-    PRINT_DEBUG("user id %llu messages: %p", settings->get_local_steam_id().ConvertToUint64(), &messages);
+    PRINT_DEBUG("user id %llu", settings->get_local_steam_id().ConvertToUint64());
 }
 
 Steam_Networking::~Steam_Networking()
 {
     this->network->rmCallback(CALLBACK_ID_NETWORKING, settings->get_local_steam_id(), &Steam_Networking::steam_networking_callback, this);
     this->network->rmCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_Networking::steam_networking_callback, this);
-    this->run_every_runcb->remove(&Steam_Networking::steam_networking_run_every_runcp, this);
+    this->run_every_runcb->remove(&Steam_Networking::steam_run_every_runcb, this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -217,31 +152,15 @@ Steam_Networking::~Steam_Networking()
 // using different channels to talk to the same user will still use the same underlying p2p connection, saving on resources
 bool Steam_Networking::SendP2PPacket( CSteamID steamIDRemote, const void *pubData, uint32 cubData, EP2PSend eP2PSendType, int nChannel)
 {
-    PRINT_DEBUG("len %u sendtype: %u channel: %u to: %llu", cubData, eP2PSendType, nChannel, steamIDRemote.ConvertToUint64());
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    bool reliable = false;
-    if (eP2PSendType == k_EP2PSendReliable || eP2PSendType == k_EP2PSendReliableWithBuffering) reliable = true;
-    Common_Message msg;
-    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
-    msg.set_dest_id(steamIDRemote.ConvertToUint64());
-    msg.set_allocated_network(new Network_pb);
+    PRINT_DEBUG(
+        "size=[%u] sendtype: <%u> channel: [%u] from=[%llu] to=[%llu]",
+        cubData, eP2PSendType, nChannel, settings->get_local_steam_id().ConvertToUint64(), steamIDRemote.ConvertToUint64()
+    );
 
-    if (!connection_exists(steamIDRemote)) {
-        msg.mutable_network()->set_type(Network_pb::NEW_CONNECTION);
-        network->sendTo(&msg, true);
-    }
-
-    msg.mutable_network()->set_channel(nChannel);
-    msg.mutable_network()->set_data(pubData, cubData);
-    msg.mutable_network()->set_type(Network_pb::DATA);
-
-    struct Steam_Networking_Connection *conn = get_or_create_connection(steamIDRemote);
-    new_connection_times.erase(steamIDRemote);
-
-    conn->open_channels.insert(nChannel);
-    bool ret = network->sendTo(&msg, reliable);
-    PRINT_DEBUG("Sent message with size: %zu %u", msg.network().data().size(), ret);
-    return ret;
+    return p2p_manager->send_packet(
+        settings->get_local_steam_id(), steamIDRemote,
+        pubData, cubData, eP2PSendType, nChannel
+    );
 }
 
 bool Steam_Networking::SendP2PPacket( CSteamID steamIDRemote, const void *pubData, uint32 cubData, EP2PSend eP2PSendType )
@@ -253,26 +172,20 @@ bool Steam_Networking::SendP2PPacket( CSteamID steamIDRemote, const void *pubDat
 // returns true if any data is available for read, and the amount of data that will need to be read
 bool Steam_Networking::IsP2PPacketAvailable( uint32 *pcubMsgSize, int nChannel)
 {
-    PRINT_DEBUG("channel: %i", nChannel);
-    std::lock_guard<std::recursive_mutex> lock(messages_mutex);
+    PRINT_DEBUG(
+        "channel=[%i], my steam id=%llu (is server=%u)",
+        nChannel, settings->get_local_steam_id().ConvertToUint64(), settings->get_local_steam_id().BGameServerAccount()
+    );
+    
     //Not sure if this should be here because it slightly screws up games that don't like such low "pings"
     //Commenting it out for now because it looks like it causes a bug where 20xx gets stuck in an infinite receive packet loop
     //this->network->Run();
     //RunCallbacks();
 
-    PRINT_DEBUG("Messages %zu %p", messages.size(), &messages);
-    for (auto &msg : messages) {
-        if (connection_exists((uint64)msg.source_id()) && msg.mutable_network()->channel() == nChannel && msg.network().processed()) {
-            uint32 size = static_cast<uint32>(msg.mutable_network()->data().size());
-            if (pcubMsgSize) *pcubMsgSize = size;
-            PRINT_DEBUG("available with size: %u", size);
-            return true;
-        }
-    }
-
-    PRINT_DEBUG("(not available)");
-    if (pcubMsgSize) *pcubMsgSize = 0;
-    return false;
+    return p2p_manager->is_packet_available(
+        settings->get_local_steam_id(),
+        pcubMsgSize, nChannel
+    );
 }
 
 bool Steam_Networking::IsP2PPacketAvailable( uint32 *pcubMsgSize)
@@ -287,38 +200,17 @@ bool Steam_Networking::IsP2PPacketAvailable( uint32 *pcubMsgSize)
 // this call is not blocking, and will return false if no data is available
 bool Steam_Networking::ReadP2PPacket( void *pubDest, uint32 cubDest, uint32 *pcubMsgSize, CSteamID *psteamIDRemote, int nChannel)
 {
-    PRINT_DEBUG("%u %i", cubDest, nChannel);
-    std::lock_guard<std::recursive_mutex> lock(messages_mutex);
+    PRINT_DEBUG("%u %i %p", cubDest, nChannel, pubDest);
+
     //Not sure if this should be here because it slightly screws up games that don't like such low "pings"
     //Commenting it out for now because it looks like it causes a bug where 20xx gets stuck in an infinite receive packet loop
     //this->network->Run();
     //RunCallbacks();
 
-    bool read = false;
-    PRINT_DEBUG("Number messages %zu", messages.size());
-    auto msg = std::begin(messages);
-    while (msg != std::end(messages)) {
-        if (connection_exists((uint64)msg->source_id()) && msg->network().channel() == nChannel && msg->network().processed()) {
-            uint32 msg_size = static_cast<uint32>(msg->network().data().size());
-            if (msg_size > cubDest) msg_size = cubDest;
-            if (pcubMsgSize) *pcubMsgSize = msg_size;
-            memcpy(pubDest, msg->network().data().data(), msg_size);
-
-            PRINT_DEBUG("%s",
-                common_helpers::uint8_vector_to_hex_string(std::vector<uint8_t>((uint8_t*)pubDest, (uint8_t*)pubDest + msg_size)).c_str());
-            
-            *psteamIDRemote = CSteamID((uint64)msg->source_id());
-            PRINT_DEBUG("len %u channel: %u from: " "%" PRIu64 "", msg_size, nChannel, msg->source_id());
-            msg = messages.erase(msg);
-            return true;
-        }
-
-        ++msg;
-    }
-
-    if (pcubMsgSize) *pcubMsgSize = 0;
-    if (psteamIDRemote) *psteamIDRemote = k_steamIDNil;
-    return false;
+    return p2p_manager->read_packet(
+        settings->get_local_steam_id(),
+        pubDest, cubDest, pcubMsgSize, psteamIDRemote, nChannel
+    );
 }
 
 bool Steam_Networking::ReadP2PPacket( void *pubDest, uint32 cubDest, uint32 *pcubMsgSize, CSteamID *psteamIDRemote)
@@ -335,11 +227,15 @@ bool Steam_Networking::ReadP2PPacket( void *pubDest, uint32 cubDest, uint32 *pcu
 // (if you've called SendP2PPacket() on the other user, this implicitly accepts the session request)
 bool Steam_Networking::AcceptP2PSessionWithUser( CSteamID steamIDRemote )
 {
-    PRINT_DEBUG("%llu", steamIDRemote.ConvertToUint64());
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    struct Steam_Networking_Connection *conn = get_or_create_connection(steamIDRemote);
-    if (conn) new_connection_times.erase(steamIDRemote);
-    return !!conn;
+    PRINT_DEBUG("from [%llu], I am=[%llu]", steamIDRemote.ConvertToUint64(), settings->get_local_steam_id().ConvertToUint64());
+
+    if (p2p_manager->accept_session(settings->get_local_steam_id().ConvertToUint64(), steamIDRemote)) {
+        PRINT_DEBUG("  connection accepted");
+        return true;
+    }
+
+    PRINT_DEBUG("  [X] connection NOT accepted");
+    return false;
 }
 
 
@@ -348,15 +244,8 @@ bool Steam_Networking::AcceptP2PSessionWithUser( CSteamID steamIDRemote )
 bool Steam_Networking::CloseP2PSessionWithUser( CSteamID steamIDRemote )
 {
     PRINT_DEBUG("%llu", steamIDRemote.ConvertToUint64());
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!connection_exists(steamIDRemote)) {
-        
-        return false;
-    }
 
-    remove_connection(steamIDRemote);
-    
-    return true;
+    return p2p_manager->close_session(settings->get_local_steam_id().ConvertToUint64(), steamIDRemote);
 }
 
 
@@ -365,20 +254,9 @@ bool Steam_Networking::CloseP2PSessionWithUser( CSteamID steamIDRemote )
 // user will trigger a P2PSessionRequest_t callback
 bool Steam_Networking::CloseP2PChannelWithUser( CSteamID steamIDRemote, int nChannel )
 {
-    PRINT_DEBUG_ENTRY();
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!connection_exists(steamIDRemote)) {
-        return false;
-    }
+    PRINT_DEBUG("%llu", steamIDRemote.ConvertToUint64());
 
-    struct Steam_Networking_Connection *conn = get_or_create_connection(steamIDRemote);
-
-    conn->open_channels.erase(nChannel);
-    if (conn->open_channels.size() == 0) {
-        remove_connection(steamIDRemote);
-    }
-
-    return true;
+    return p2p_manager->close_channel(settings->get_local_steam_id().ConvertToUint64(), steamIDRemote, nChannel);
 }
 
 
@@ -388,36 +266,8 @@ bool Steam_Networking::CloseP2PChannelWithUser( CSteamID steamIDRemote, int nCha
 bool Steam_Networking::GetP2PSessionState( CSteamID steamIDRemote, P2PSessionState_t *pConnectionState )
 {
     PRINT_DEBUG("%llu", steamIDRemote.ConvertToUint64());
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!connection_exists(steamIDRemote) && (steamIDRemote != settings->get_local_steam_id())) {
-        if (pConnectionState) {
-            pConnectionState->m_bConnectionActive = false;
-            pConnectionState->m_bConnecting = false;
-            pConnectionState->m_eP2PSessionError = 0;
-            pConnectionState->m_bUsingRelay = false;
-            pConnectionState->m_nBytesQueuedForSend = 0;
-            pConnectionState->m_nPacketsQueuedForSend = 0;
-            pConnectionState->m_nRemoteIP = 0;
-            pConnectionState->m_nRemotePort = 0;
-        }
-
-        PRINT_DEBUG("No Connection");
-        return false;
-    }
-
-    if (pConnectionState) {
-        pConnectionState->m_bConnectionActive = true;
-        pConnectionState->m_bConnecting = false;
-        pConnectionState->m_eP2PSessionError = 0;
-        pConnectionState->m_bUsingRelay = false;
-        pConnectionState->m_nBytesQueuedForSend = 0;
-        pConnectionState->m_nPacketsQueuedForSend = 0;
-        pConnectionState->m_nRemoteIP = network->getIP(steamIDRemote);
-        pConnectionState->m_nRemotePort = 12345;
-    }
-
-    PRINT_DEBUG("Connection");
-    return true;
+    
+    return p2p_manager->get_session_state(settings->get_local_steam_id().ConvertToUint64(), steamIDRemote, pConnectionState);
 }
 
 
@@ -769,115 +619,18 @@ int Steam_Networking::GetMaxPacketSize( SNetSocket_t hSocket )
     return 1500;
 }
 
+
+
 void Steam_Networking::RunCallbacks()
 {
-    uint64 current_time = std::chrono::duration_cast<std::chrono::duration<uint64>>(std::chrono::system_clock::now().time_since_epoch()).count();
-
-    {
-    std::lock_guard<std::recursive_mutex> lock(messages_mutex);
-
-    {
-        auto msg = std::begin(unprocessed_messages);
-        while (msg != std::end(unprocessed_messages)) {
-            CSteamID source_id((uint64)msg->source_id());
-            if (!connection_exists(source_id)) {
-                if (new_connection_times.find(source_id) == new_connection_times.end()) {
-                    new_connections_to_call_cb.push(source_id);
-                    new_connection_times[source_id] = std::chrono::high_resolution_clock::now();
-                }
-            } else {
-                struct Steam_Networking_Connection *conn = get_or_create_connection(source_id);
-                conn->open_channels.insert(msg->network().channel());
-            }
-
-            msg->mutable_network()->set_processed(true);
-            msg->mutable_network()->set_time_processed(current_time);
-            messages.push_back(*msg);
-            msg = unprocessed_messages.erase(msg);
-        }
-    }
-
-    auto msg = std::begin(messages);
-    while (msg != std::end(messages)) {
-        bool deleted = false;
-        if (msg->network().processed()) {
-            if (!connection_exists((uint64)msg->source_id())) {
-                if (msg->network().time_processed() + ORPHANED_PACKET_TIMEOUT < current_time) {
-                    deleted = true;
-                }
-            }
-        }
-
-        if (deleted) {
-            msg = messages.erase(msg);
-        } else {
-            ++msg;
-        }
-    }
-
-    }
-
-    while (!new_connections_to_call_cb.empty()) {
-        CSteamID source_id = new_connections_to_call_cb.front();
-        auto t = new_connection_times.find(source_id);
-        if (t == new_connection_times.end()) {
-            new_connections_to_call_cb.pop();
-            continue;
-        }
-
-        if (!check_timedout(t->second, NEW_CONNECTION_DELAY)) {
-            break;
-        }
-
-        P2PSessionRequest_t data;
-        memset(&data, 0, sizeof(data));
-        data.m_steamIDRemote = source_id;
-        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
-        new_connections_to_call_cb.pop();
-    }
-
     //TODO: not sure if sockets should be wiped right away
     remove_killed_connection_sockets();
-
-    for(auto it = new_connection_times.begin(); it != new_connection_times.end(); ) {
-        if (std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - it->second).count() > NEW_CONNECTION_TIMEOUT) {
-            it = new_connection_times.erase(it);
-            //TODO send packet to other side to tell them connection has "failed".
-        } else {
-            ++it;
-        }
-    }
 }
 
 void Steam_Networking::Callback(Common_Message *msg)
 {
-    if (msg->has_network()) {
-        PRINT_DEBUG("got msg from: " "%" PRIu64 " to: " "%" PRIu64 " size %zu type %u | messages %p: %zu",
-            msg->source_id(), msg->dest_id(), msg->network().data().size(), msg->network().type(), &messages, messages.size()
-        );
-        PRINT_DEBUG("msg data: '%s'",
-            common_helpers::uint8_vector_to_hex_string(std::vector<uint8_t>(msg->network().data().begin(), msg->network().data().end())).c_str());
-
-        if (msg->network().type() == Network_pb::DATA) {
-            unprocessed_messages.push_back(Common_Message(*msg));
-        }
-
-        if (msg->network().type() == Network_pb::NEW_CONNECTION) {
-            std::lock_guard<std::recursive_mutex> lock(messages_mutex);
-            auto msg_temp = std::begin(messages);
-            while (msg_temp != std::end(messages)) {
-                //only delete processed to handle unreliable message arriving at the same time.
-                if (msg_temp->source_id() == msg->source_id() && msg_temp->network().processed()) {
-                    msg_temp = messages.erase(msg_temp);
-                } else {
-                    ++msg_temp;
-                }
-            }
-        }
-    }
-
     if (msg->has_network_old()) {
-        PRINT_DEBUG("got network socket msg %u", msg->network_old().type());
+        PRINT_DEBUG("got old network socket msg %u", msg->network_old().type());
         if (msg->network_old().type() == Network_Old::CONNECTION_REQUEST_IP) {
             for (auto & listen : listen_sockets) {
                 if (listen.nPort == msg->network_old().port()) {
@@ -944,17 +697,9 @@ void Steam_Networking::Callback(Common_Message *msg)
 
     if (msg->has_low_level()) {
         if (msg->low_level().type() == Low_Level::DISCONNECT) {
-            CSteamID source_id((uint64)msg->source_id());
-            if (connection_exists(source_id)) {
-                P2PSessionConnectFail_t data;
-                data.m_steamIDRemote = source_id;
-                data.m_eP2PSessionError = k_EP2PSessionErrorDestinationNotLoggedIn;
-                callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
-            }
-
             for (auto & socket : connection_sockets) {
                 if (socket.target.ConvertToUint64() == msg->source_id()) {
-                    struct SocketStatusCallback_t data;
+                    struct SocketStatusCallback_t data{};
                     socket.status = SOCKET_DISCONNECTED;
                     data.m_hSocket = socket.id;
                     data.m_hListenSocket = socket.listen_id;
@@ -963,9 +708,7 @@ void Steam_Networking::Callback(Common_Message *msg)
                     callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
                 }
             }
-        } else
-
-        if (msg->low_level().type() == Low_Level::CONNECT) {
+        } else if (msg->low_level().type() == Low_Level::CONNECT) {
             
         }
     }

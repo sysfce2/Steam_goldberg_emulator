@@ -81,18 +81,15 @@ message Low_Level {
 }
 
 message Network_pb {
-    uint32 channel = 1;
+    int32 channel = 1;
     bytes data = 2;
 
     enum Types {
         DATA = 0;
-        NEW_CONNECTION = 1;
+        FAILED_CONNECT = 1;
     }
 
     Types type = 3;
-
-    bool processed = 128;
-    uint64 time_processed = 129;
 }
 
 message Network_Old {

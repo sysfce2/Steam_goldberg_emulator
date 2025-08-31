@@ -19,11 +19,7 @@
 #define __INCLUDED_STEAM_NETWORKING_H__
 
 #include "base.h"
-
-struct Steam_Networking_Connection {
-    CSteamID remote{};
-    std::set<int> open_channels{};
-};
+#include "p2p_manager.hpp"
 
 struct steam_listen_socket {
     SNetListenSocket_t id{};
@@ -61,36 +57,25 @@ public ISteamNetworking
 {
     class Settings *settings{};
     class Networking *network{};
+    class P2p_Manager *p2p_manager{};
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
 
-    std::recursive_mutex messages_mutex{};
-    std::list<Common_Message> messages{};
-    std::list<Common_Message> unprocessed_messages{};
-
-    std::recursive_mutex connections_edit_mutex{};
-    std::vector<struct Steam_Networking_Connection> connections{};
 
     std::vector<struct steam_listen_socket> listen_sockets{};
     std::vector<struct steam_connection_socket> connection_sockets{};
 
-    std::map<CSteamID, std::chrono::high_resolution_clock::time_point> new_connection_times{};
-    std::queue<CSteamID> new_connections_to_call_cb{};
-    
     SNetListenSocket_t socket_number = 0;
 
-    bool connection_exists(CSteamID id);
-    struct Steam_Networking_Connection *get_or_create_connection(CSteamID id);
-    void remove_connection(CSteamID id);
     SNetSocket_t create_connection_socket(CSteamID target, int nVirtualPort, uint32 nIP, uint16 nPort, SNetListenSocket_t id=0, enum steam_socket_connection_status status=SOCKET_CONNECTING, SNetSocket_t other_id=0);
     struct steam_connection_socket *get_connection_socket(SNetSocket_t id);
     void remove_killed_connection_sockets();
 
     static void steam_networking_callback(void *object, Common_Message *msg);
-    static void steam_networking_run_every_runcp(void *object);
+    static void steam_run_every_runcb(void *object);
 
 public:
-    Steam_Networking(class Settings *settings, class Networking *network, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
+    Steam_Networking(class Settings *settings, class Networking *network, class P2p_Manager *p2p_manager, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
     ~Steam_Networking();
 
     ////////////////////////////////////////////////////////////////////////////////////////////

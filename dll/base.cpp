@@ -25,8 +25,8 @@
 
 std::recursive_mutex global_mutex{};
 // some arbitrary counter/time for reference
-const std::chrono::time_point<std::chrono::high_resolution_clock> startup_counter = std::chrono::high_resolution_clock::now();
-const std::chrono::time_point<std::chrono::system_clock> startup_time = std::chrono::system_clock::now();
+extern const std::chrono::time_point<std::chrono::high_resolution_clock> startup_counter = std::chrono::high_resolution_clock::now();
+extern const std::chrono::time_point<std::chrono::system_clock> startup_time = std::chrono::system_clock::now();
 
 #ifndef EMU_RELEASE_BUILD
 dbg_log dbg_logger(get_full_program_path() + "STEAM_LOG_" + std::to_string(common_helpers::rand_number(UINT32_MAX)) + ".log");
@@ -68,7 +68,7 @@ static int fd = -1;
 
 void randombytes(char *buf, size_t size)
 {
-  int i;
+  int i{};
 
   if (fd == -1) {
     for (;;) {
@@ -112,7 +112,7 @@ bool set_env_variable(const std::string &name, const std::string &value)
 
 unsigned generate_account_id()
 {
-    int a;
+    int a = 0;
     randombytes((char *)&a, sizeof(a));
     a = abs(a);
     if (!a) ++a;
@@ -154,11 +154,10 @@ CSteamID generate_steam_id_lobby()
     return CSteamID(generate_account_id(), k_EChatInstanceFlagLobby | k_EChatInstanceFlagMMSLobby, k_EUniversePublic, k_EAccountTypeChat);
 }
 
-bool check_timedout(std::chrono::high_resolution_clock::time_point old, double timeout)
+bool check_timedout(std::chrono::high_resolution_clock::time_point old, double timeout, std::chrono::high_resolution_clock::time_point now) // in seconds
 {
     if (timeout == 0.0) return true;
 
-    std::chrono::high_resolution_clock::time_point now = std::chrono::high_resolution_clock::now();
     if (std::chrono::duration_cast<std::chrono::duration<double>>(now - old).count() > timeout) {
         return true;
     }
