@@ -374,7 +374,7 @@ bool Steam_Utils::InitFilterText()
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return false;
+    return true;
 }
 
 // Initializes text filtering.
@@ -384,7 +384,7 @@ bool Steam_Utils::InitFilterText( uint32 unFilterOptions )
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return false;
+    return true;
 }
 
 // Filters the provided input message and places the filtered result into pchOutFilteredText.
@@ -411,8 +411,8 @@ int Steam_Utils::FilterText( ETextFilteringContext eContext, CSteamID sourceStea
 {
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    if (!nByteSizeOutFilteredText) return 0;
-    unsigned len = static_cast<unsigned>(strlen(pchInputMessage));
+    if (!nByteSizeOutFilteredText || !pchInputMessage || !pchOutFilteredText) return 0;
+    size_t len = strlen(pchInputMessage);
     if (!len) return 0;
     len += 1;
     if (len > nByteSizeOutFilteredText) len = nByteSizeOutFilteredText;
@@ -420,7 +420,7 @@ int Steam_Utils::FilterText( ETextFilteringContext eContext, CSteamID sourceStea
 
     memcpy(pchOutFilteredText, pchInputMessage, len);
     pchOutFilteredText[len] = 0;
-    return len;
+    return 0; // NOTE: "Returns the number of characters (not bytes) filtered". Since all characters are copied, no characters are filtered.
 }
 
 

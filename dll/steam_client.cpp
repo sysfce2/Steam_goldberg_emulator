@@ -33,12 +33,12 @@ void Steam_Client::background_thread_proc()
         network->Run(); // networking must run first since it receives messages used by each run_callback()
         run_every_runcb->run(); // call each run_callback()
 
-        if (settings_client->record_playtime) {
-            playtime_counter->tick(); // update playtime counter
-        }
-
         // update the time counter to avoid overlap
         last_cb_run = (unsigned long long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    if (settings_client->record_playtime) {
+        playtime_counter->tick(); // update playtime counter
     }
 }
 

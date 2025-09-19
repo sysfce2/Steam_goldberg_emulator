@@ -78,8 +78,7 @@ void PlaytimeCounter::load()
     playtime_seconds = 0;
 
     std::string data(32, '\0');
-    if (local_storage->get_data("", playtime_filename, data.data(), static_cast<unsigned int>(data.size()), 0) > 0 &&
-        std::all_of(data.begin(), data.end(), ::isdigit)) {
+    if (local_storage->get_data("", playtime_filename, data.data(), static_cast<unsigned int>(data.size()), 0) > 0) {
         try {
             playtime_seconds = std::stoull(data);
         } catch (...) {}
