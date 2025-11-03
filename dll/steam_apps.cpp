@@ -205,7 +205,8 @@ uint32 Steam_Apps::GetEarliestPurchaseUnixTime( AppId_t nAppID )
 bool Steam_Apps::BIsSubscribedFromFreeWeekend()
 {
     PRINT_DEBUG_ENTRY();
-    return false;
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return settings->free_weekend;
 }
 
 

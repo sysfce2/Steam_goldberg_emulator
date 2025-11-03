@@ -50,6 +50,11 @@ std::string Local_Storage::saves_folder_name = "GSE Saves";
 
 static const std::string empty_str{};
 
+std::string Local_Storage::get_exe_dir()
+{
+    return " ";
+}
+
 std::string Local_Storage::get_program_path()
 {
     return " ";
@@ -455,6 +460,11 @@ static std::vector<struct File_Data> get_filenames_recursive(std::string base_pa
 
 #endif
 
+std::string Local_Storage::get_exe_dir()
+{
+    return get_exe_dirname();
+}
+
 std::string Local_Storage::get_program_path()
 {
     return get_full_program_path();
@@ -565,7 +575,7 @@ void Local_Storage::setAppId(uint32 appid)
 
 int Local_Storage::store_file_data(std::string folder, std::string file, const char *data, unsigned int length)
 {
-    if (folder.back() != *PATH_SEPARATOR) {
+    if (!folder.empty() && folder.back() != *PATH_SEPARATOR) {
         folder.append(PATH_SEPARATOR);
     }
 

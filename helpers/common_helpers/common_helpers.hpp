@@ -108,6 +108,8 @@ std::string get_utc_time();
 std::wstring to_wstr(std::string_view str);
 std::string to_str(std::wstring_view wstr);
 
-std::string str_replace_all(std::string_view source, std::string_view substr, std::string_view replace);
+std::string str_replace_all(std::string_view source, std::string_view substr, std::string_view replace, bool case_insensitive = true);
+size_t str_find(std::string_view str_src, std::string_view str_query, size_t start = 0, bool case_insensitive = true);
+std::vector<std::string> str_split(std::string_view str, std::string_view splitter, bool ignore_empty = true, bool case_insensitive = true);
 
 }

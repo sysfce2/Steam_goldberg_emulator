@@ -472,7 +472,7 @@ std::string common_helpers::to_str(std::wstring_view wstr)
     return {};
 }
 
-std::string common_helpers::str_replace_all(std::string_view source, std::string_view substr, std::string_view replace)
+std::string common_helpers::str_replace_all(std::string_view source, std::string_view substr, std::string_view replace, bool case_insensitive)
 {
     if (source.empty() || substr.empty()) return std::string(source);
 
@@ -480,8 +480,8 @@ std::string common_helpers::str_replace_all(std::string_view source, std::string
     out.reserve(source.size() / 4); // out could be bigger or smaller than source, start small
 
     size_t start_offset = 0;
-    auto f_idx = source.find(substr);
-    while (std::string::npos != f_idx) {
+    auto f_idx = str_find(source, substr, 0, case_insensitive);
+    while (static_cast<size_t>(-1) != f_idx) {
         // copy the chars before the match
         auto chars_count_until_match = f_idx - start_offset;
         out.append(source, start_offset, chars_count_until_match);
@@ -491,11 +491,82 @@ std::string common_helpers::str_replace_all(std::string_view source, std::string
         // adjust the start offset to point at the char after this match
         start_offset = f_idx + substr.size();
         // search for next match
-        f_idx = source.find(substr, start_offset);
+        f_idx = str_find(source, substr, start_offset, case_insensitive);
     }
 
     // copy last remaining part
     out.append(source, start_offset, std::string::npos);
+
+    return out;
+}
+
+size_t common_helpers::str_find(std::string_view str_src, std::string_view str_query, size_t start, bool case_insensitive)
+{
+    if (start > str_src.size()) {
+        start = str_src.size();
+    }
+    if (start > 0) {
+        str_src = str_src.substr(start);
+    }
+
+    if (str_src.empty() != str_query.empty()) return static_cast<size_t>(-1);
+    if (str_src.empty() && str_query.empty()) return start;
+    if (str_src.size() < str_query.size()) return static_cast<size_t>(-1);
+
+    const auto cmp_fn = case_insensitive
+        ? [](const char c1, const char c2){
+            return std::toupper(c1) == std::toupper(c2);
+        }
+        : [](const char c1, const char c2){
+            return c1 == c2;
+        };
+
+    for (size_t idx = 0; idx < str_src.size(); ++idx) {
+        auto str_src_cbegin = str_src.cbegin() + idx;
+        auto str_src_cend = str_src_cbegin + str_query.size();
+        if (std::equal(str_src_cbegin, str_src_cend, str_query.cbegin(), cmp_fn)) {
+            return idx + start;
+        }
+
+        // if remaining str.length <= find.length
+        if ((str_src.size() - idx) <= str_query.size()) {
+            return static_cast<size_t>(-1);
+        }
+    }
+    return static_cast<size_t>(-1);
+}
+
+std::vector<std::string> common_helpers::str_split(std::string_view str, std::string_view splitter, bool ignore_empty, bool case_insensitive)
+{
+    if (str.empty()) return {};
+
+    if (splitter.empty()) return {
+        std::string(str)
+    };
+
+    std::vector<std::string> out{};
+    out.reserve(str.size() / 4); // start with a reasonable size
+
+    size_t start_offset = 0;
+    auto f_idx = str_find(str, splitter, 0, case_insensitive);
+    while (static_cast<size_t>(-1) != f_idx) {
+        // copy the chars before the match
+        auto chars_count_until_match = f_idx - start_offset;
+        if (chars_count_until_match > 0 || !ignore_empty) {
+            out.emplace_back(std::string(str, start_offset, chars_count_until_match));
+        }
+
+        // adjust the start offset to point at the char after this match
+        start_offset = f_idx + splitter.size();
+        // search for next match
+        f_idx = str_find(str, splitter, start_offset, case_insensitive);
+    }
+
+    // copy last remaining part
+    auto chars_count_until_end = str.size() - start_offset;
+    if (chars_count_until_end > 0 || !ignore_empty) {
+        out.emplace_back(std::string(str, start_offset, str.size()));
+    }
 
     return out;
 }

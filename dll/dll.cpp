@@ -22,6 +22,62 @@
 #include "dll/capicmcallback.h"
 
 
+// https://github.com/ValveSoftware/source-sdk-2013/blob/a36ead80b3ede9f269314c08edd3ecc23de4b160/src/public/steam/steam_api_internal.h#L30-L32
+// SteamInternal_ContextInit takes a base pointer for the equivalent of
+// struct { void (*pFn)(void* pCtx); uintptr_t counter; void *ptr; }
+// Do not change layout or add non-pointer aligned data!
+struct ContextInitData {
+    void (*pFn)(void* pCtx) = nullptr;
+    uintp counter{};
+    CSteamAPIContext ctx{};
+};
+
+class steam_lifetime_counters {
+private:
+    // increases when steam is initialized,
+    // and decreases when steam is deinitialized
+    uintp init_counter{};
+
+    // always increasing whenever init/deinit is called
+    uintp context_counter{};
+
+
+public:
+    uintp get_init_counter() const
+    {
+        return init_counter;
+    }
+
+    uintp get_context_counter() const
+    {
+        return context_counter;
+    }
+
+    bool update(bool is_init_request)
+    {
+        bool ok_to_update_context = true;
+        if (is_init_request) {
+            ++init_counter;
+        } else {
+            if (init_counter > 0) {
+                --init_counter;
+            } else {
+                ok_to_update_context = false;
+                PRINT_DEBUG("[X] attempted to decrease the steam init counter but it is 0");
+            }
+        }
+
+        // on each successful init/deinit we declare that the context-init struct is invalidated by simply increasing this counter
+        // so that next call to SteamInternal_ContextInit() will detect the change and init the struct
+        // this is required since some games like appid 1449110 keep shutting down then re-initializing the steam SDK
+        // and expect it to initialize the context-init struct after each pair of calls to SteamAPI_Shutdown()/SteamAPI_Init()
+        if (ok_to_update_context) {
+            ++context_counter;
+        }
+        return ok_to_update_context;
+    }
+} static sdk_lifetime_counters;
+
 static char old_client[128] = STEAMCLIENT_INTERFACE_VERSION; //"SteamClient017";
 static char old_gameserver_stats[128] = STEAMGAMESERVERSTATS_INTERFACE_VERSION; //"SteamGameServerStats001";
 static char old_gameserver[128] = STEAMGAMESERVER_INTERFACE_VERSION; //"SteamGameServer012";
@@ -277,24 +333,36 @@ STEAMAPI_API void * S_CALLTYPE SteamInternal_CreateInterface( const char *ver )
     return create_client_interface(ver);
 }
 
-static uintp global_counter{};
-struct ContextInitData {
-    void (*pFn)(void* pCtx) = nullptr;
-    uintp counter{};
-    CSteamAPIContext ctx{};
-};
-
+// https://github.com/ValveSoftware/source-sdk-2013/blob/a36ead80b3ede9f269314c08edd3ecc23de4b160/src/public/steam/steam_api_internal.h#L30-L32
+// SteamInternal_ContextInit takes a base pointer for the equivalent of
+// struct { void (*pFn)(void* pCtx); uintptr_t counter; void *ptr; }
+// Do not change layout or add non-pointer aligned data!
 STEAMAPI_API void * S_CALLTYPE SteamInternal_ContextInit( void *pContextInitData )
 {
+    static std::recursive_mutex ctx_lock{}; // original .dll/.so has a dedicated lock just for this function
+
     //PRINT_DEBUG_ENTRY();
-    struct ContextInitData *contextInitData = (struct ContextInitData *)pContextInitData;
-    if (contextInitData->counter != global_counter) {
-        PRINT_DEBUG("initializing");
-        contextInitData->pFn(&contextInitData->ctx);
-        contextInitData->counter = global_counter;
+    auto contextInitData = reinterpret_cast<struct ContextInitData *>(pContextInitData);
+    void *local_ctx = &contextInitData->ctx;
+    if (sdk_lifetime_counters.get_context_counter() == contextInitData->counter) {
+        return local_ctx;
     }
 
-    return &contextInitData->ctx;
+    std::lock_guard lock(ctx_lock);
+    // check again in case a different thread requested context init with the **same struct**
+    // and the other thread already initialized this context struct
+    if (sdk_lifetime_counters.get_context_counter() != contextInitData->counter) {
+        PRINT_DEBUG(
+            "initializing context @ %p, local context counter=%llu, global/current context counter=%llu",
+            pContextInitData,
+            (unsigned long long)contextInitData->counter,
+            (unsigned long long)sdk_lifetime_counters.get_context_counter()
+        );
+        contextInitData->pFn(local_ctx);
+        contextInitData->counter = sdk_lifetime_counters.get_context_counter();
+    }
+
+    return local_ctx;
 }
 
 //steam_api.h
@@ -353,7 +421,8 @@ STEAMAPI_API steam_bool S_CALLTYPE SteamAPI_Init()
 
     user_steam_pipe = client->CreateSteamPipe();
     client->ConnectToGlobalUser(user_steam_pipe);
-    global_counter++;
+    sdk_lifetime_counters.update(true);
+
     return true;
 }
 
@@ -383,7 +452,7 @@ STEAMAPI_API void S_CALLTYPE SteamAPI_Shutdown()
     get_steam_client()->BShutdownIfAllPipesClosed();
 
     user_steam_pipe = 0;
-    --global_counter;
+    sdk_lifetime_counters.update(false);
 
     old_user_instance = NULL;
     old_friends_interface = NULL;
@@ -407,7 +476,7 @@ STEAMAPI_API void S_CALLTYPE SteamAPI_Shutdown()
     old_parental_instance = NULL;
     old_unified_instance = NULL;
 
-    if (global_counter == 0) {
+    if (sdk_lifetime_counters.get_init_counter() <= 0) {
         destroy_client();
     }
 }
@@ -919,7 +988,7 @@ STEAMAPI_API steam_bool S_CALLTYPE SteamInternal_GameServer_Init( uint32 unIP, u
     Steam_Client* client = get_steam_client();
     if (!server_steam_pipe) {
         client->CreateLocalUser(&server_steam_pipe, k_EAccountTypeGameServer);
-        ++global_counter;
+        sdk_lifetime_counters.update(true);
         //g_pSteamClientGameServer is only used in pre 1.37 (where the interface versions are not provided by the game)
         g_pSteamClientGameServer = SteamGameServerClient();
     }
@@ -1002,7 +1071,7 @@ STEAMAPI_API void SteamGameServer_Shutdown()
     get_steam_client()->BShutdownIfAllPipesClosed();
 
     server_steam_pipe = 0;
-    --global_counter;
+    sdk_lifetime_counters.update(false);
     g_pSteamClientGameServer = NULL; // old steam_api.dll sets this to null when SteamGameServer_Shutdown is called
     old_gameserver_instance = NULL;
     old_gamserver_utils_instance = NULL;
@@ -1014,7 +1083,7 @@ STEAMAPI_API void SteamGameServer_Shutdown()
     old_gamserver_apps_instance = NULL;
     old_gamserver_masterupdater_instance = NULL;
 
-    if (global_counter == 0) {
+    if (sdk_lifetime_counters.get_init_counter() <= 0) {
         destroy_client();
     }
 }

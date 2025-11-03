@@ -165,6 +165,66 @@ bool check_timedout(std::chrono::high_resolution_clock::time_point old, double t
     return false;
 }
 
+std::string get_full_exe_path()
+{
+    // https://github.com/gpakosz/whereami/blob/master/src/whereami.c
+    // https://stackoverflow.com/q/1023306
+
+    static std::string exe_path{};
+    static std::recursive_mutex mtx{};
+
+    if (!exe_path.empty()) {
+        return exe_path;
+    }
+
+    std::lock_guard lock(mtx);
+    // check again in case we didn't win this thread arbitration
+    if (!exe_path.empty()) {
+        return exe_path;
+    }
+
+#if defined(__WINDOWS__)
+    static wchar_t path[8192]{};
+    auto ret = ::GetModuleFileNameW(nullptr, path, _countof(path));
+    if (ret >= _countof(path) || 0 == ret) {
+        path[0] = '.';
+        path[1] = 0;
+    }
+    exe_path = canonical_path(utf8_encode(path));
+#else
+    // https://man7.org/linux/man-pages/man5/proc.5.html
+    // https://linux.die.net/man/5/proc
+    // https://man7.org/linux/man-pages/man2/readlink.2.html
+    // https://linux.die.net/man/3/readlink
+    static char path[8192]{};
+    auto read = ::readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (-1 == read) {
+        path[0] = '.';
+        read = 1;
+    }
+    path[read] = 0;
+    exe_path = canonical_path(path);
+#endif // __WINDOWS__
+
+    return exe_path;
+}
+
+std::string get_exe_dirname()
+{
+    std::string env_exe_dir = get_env_variable("GseExeDir");
+    if (!env_exe_dir.empty()) {
+        if (env_exe_dir.back() != PATH_SEPARATOR[0]) {
+            env_exe_dir = env_exe_dir.append(PATH_SEPARATOR);
+        }
+
+        return env_exe_dir;
+    }
+
+    std::string full_exe_path = get_full_exe_path();
+    return full_exe_path.substr(0, full_exe_path.rfind(PATH_SEPARATOR)).append(PATH_SEPARATOR);
+
+}
+
 #ifdef __LINUX__
 std::string get_lib_path()
 {
@@ -692,4 +752,3 @@ void set_whitelist_ips(uint32_t *from, uint32_t *to, unsigned num_ips)
 }
 
 #endif // EMU_EXPERIMENTAL_BUILD
-

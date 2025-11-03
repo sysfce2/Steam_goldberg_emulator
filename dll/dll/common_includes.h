@@ -136,6 +136,7 @@ static inline void reset_LastError()
     #include <netdb.h>
     #include <dlfcn.h>
     #include <utime.h>
+    #include <pwd.h>
 
     #include "crash_printer/linux.hpp"
 

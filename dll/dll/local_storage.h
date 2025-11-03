@@ -53,6 +53,7 @@ public:
     static constexpr char screenshots_folder[]         = "screenshots";
     static constexpr char game_settings_folder[]       = "steam_settings";
 
+    static std::string get_exe_dir();
     static std::string get_program_path();
     static std::string get_game_settings_path();
     static std::string get_user_appdata_path();

@@ -46,6 +46,8 @@ CSteamID generate_steam_id_user();
 CSteamID generate_steam_id_server();
 CSteamID generate_steam_id_anonserver();
 CSteamID generate_steam_id_lobby();
+std::string get_full_exe_path();
+std::string get_exe_dirname();
 std::string get_full_lib_path();
 std::string get_full_program_path();
 std::string get_current_path();

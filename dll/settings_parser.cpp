@@ -15,13 +15,14 @@
    License along with the Goldberg Emulator; if not, see
    <http://www.gnu.org/licenses/>.  */
 
-#include "dll/settings_parser.h"
-#include "dll/base64.h"
-
 #define SI_CONVERT_GENERIC
 #define SI_SUPPORT_IOSTREAMS
 #define SI_NO_MBCS
 #include "simpleini/SimpleIni.h"
+
+#include "dll/settings_parser.h"
+#include "dll/settings_parser_ufs.h"
+#include "dll/base64.h"
 
 
 constexpr const static char config_ini_app[]     = "configs.app.ini";
@@ -1527,6 +1528,9 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->disable_account_avatar = !ini.GetBoolValue("main::general", "enable_account_avatar", !settings_client->disable_account_avatar);
     settings_server->disable_account_avatar = !ini.GetBoolValue("main::general", "enable_account_avatar", !settings_server->disable_account_avatar);
 
+    settings_client->enable_voice_chat = ini.GetBoolValue("main::general", "enable_voice_chat", settings_client->enable_voice_chat);
+    settings_server->enable_voice_chat = ini.GetBoolValue("main::general", "enable_voice_chat", settings_server->enable_voice_chat);
+
     settings_client->steam_deck = ini.GetBoolValue("main::general", "steam_deck", settings_client->steam_deck);
     settings_server->steam_deck = ini.GetBoolValue("main::general", "steam_deck", settings_server->steam_deck);
 
@@ -1572,6 +1576,9 @@ static void parse_simple_features(class Settings *settings_client, class Setting
 
     settings_client->enable_builtin_preowned_ids = ini.GetBoolValue("main::misc", "enable_steam_preowned_ids", settings_client->enable_builtin_preowned_ids);
     settings_server->enable_builtin_preowned_ids = ini.GetBoolValue("main::misc", "enable_steam_preowned_ids", settings_server->enable_builtin_preowned_ids);
+
+    settings_client->free_weekend = ini.GetBoolValue("main::misc", "free_weekend", settings_client->free_weekend);
+    settings_server->free_weekend = ini.GetBoolValue("main::misc", "free_weekend", settings_server->free_weekend);
 }
 
 // [main::stats]
@@ -1894,6 +1901,7 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     parse_overlay_general_config(settings_client, settings_server);
     load_overlay_appearance(settings_client, settings_server, local_storage);
     parse_steam_game_stats_reports_dir(settings_client, settings_server);
+    parse_cloud_save(&ini, settings_client, settings_server, local_storage);
 
     *settings_client_out = settings_client;
     *settings_server_out = settings_server;

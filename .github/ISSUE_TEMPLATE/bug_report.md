@@ -19,6 +19,10 @@ Please upload the debug log somewhere.
 **steam_settings file**
 Please upload the steam settings file somewhere.
 
+**Infos**
+The game SteamAppId: 0
+The game using Denuvo: Yes/No
+
 **Requirement**
 Set x what you completed
 - [x] like this

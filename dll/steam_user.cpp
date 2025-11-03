@@ -36,6 +36,7 @@ Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class N
 Steam_User::~Steam_User()
 {
     delete auth_manager;
+    delete voicechat;
 }
 
 // returns the HSteamUser this interface represents
@@ -495,8 +496,15 @@ bool Steam_User::GetUserDataFolder( char *pchBuffer, int cubBuffer )
 // Starts voice recording. Once started, use GetVoice() to get the data
 void Steam_User::StartVoiceRecording( )
 {
-    PRINT_DEBUG_ENTRY();
-    voicechat->StartVoiceRecording();
+    if (!settings->enable_voice_chat) return;
+
+    if (!voicechat->IsRecordingActive()) {
+        PRINT_DEBUG_ENTRY();
+
+        if (voicechat->InitVoiceSystem()) {
+            voicechat->StartVoiceRecording();
+        }
+    }
 }
 
 // Stops voice recording. Because people often release push-to-talk keys early, the system will keep recording for
@@ -505,6 +513,8 @@ void Steam_User::StartVoiceRecording( )
 void Steam_User::StopVoiceRecording( )
 {
     PRINT_DEBUG_ENTRY();
+    if (!settings->enable_voice_chat) return;
+
     voicechat->StopVoiceRecording();
 }
 
@@ -515,6 +525,13 @@ void Steam_User::StopVoiceRecording( )
 EVoiceResult Steam_User::GetAvailableVoice( uint32 *pcbCompressed, uint32 *pcbUncompressed_Deprecated, uint32 nUncompressedVoiceDesiredSampleRate_Deprecated  )
 {
     PRINT_DEBUG_ENTRY();
+
+    if (pcbCompressed) *pcbCompressed = 0;
+    if (pcbUncompressed_Deprecated) *pcbUncompressed_Deprecated = 0;
+    if (!settings->enable_voice_chat) return k_EVoiceResultNoData;
+
+    // some games like appid 34330 don't call this
+    StartVoiceRecording();
     return voicechat->GetAvailableVoice(pcbCompressed);
 }
 
@@ -548,6 +565,14 @@ EVoiceResult Steam_User::GetAvailableVoice(uint32 *pcbCompressed, uint32 *pcbUnc
 EVoiceResult Steam_User::GetVoice( bool bWantCompressed, void *pDestBuffer, uint32 cbDestBufferSize, uint32 *nBytesWritten, bool bWantUncompressed_Deprecated, void *pUncompressedDestBuffer_Deprecated , uint32 cbUncompressedDestBufferSize_Deprecated , uint32 *nUncompressBytesWritten_Deprecated , uint32 nUncompressedVoiceDesiredSampleRate_Deprecated  )
 {
     PRINT_DEBUG_ENTRY();
+    if (nBytesWritten) *nBytesWritten = 0;
+    if (nUncompressBytesWritten_Deprecated) *nUncompressBytesWritten_Deprecated = 0;
+    if (!settings->enable_voice_chat) return k_EVoiceResultNoData;
+
+    // should we have this here ? -detanup
+    // some games might not initialize this.
+    // example appid 34330
+    StartVoiceRecording();
     return voicechat->GetVoice(bWantCompressed, pDestBuffer, cbDestBufferSize, nBytesWritten);
 }
 
@@ -597,7 +622,7 @@ EVoiceResult Steam_User::DecompressVoice( void *pCompressed, uint32 cbCompressed
 uint32 Steam_User::GetVoiceOptimalSampleRate()
 {
     PRINT_DEBUG_ENTRY();
-    return 48000;
+    return SAMPLE_RATE;
 }
 
 // Retrieve ticket to be sent to the entity who wishes to authenticate you. 
