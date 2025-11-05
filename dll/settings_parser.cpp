@@ -607,6 +607,17 @@ static uint32 parse_steam_app_id(const std::string &program_path)
 // user::saves::local_save_path
 static bool parse_local_save(std::string &save_path)
 {
+    std::string env_save_path = get_env_variable("GseSavePath");
+    if (env_save_path.length()) {
+        if (env_save_path.back() != *PATH_SEPARATOR) {
+            env_save_path.push_back(*PATH_SEPARATOR);
+        }
+
+        save_path = env_save_path;
+        PRINT_DEBUG("using local save path '%s'", save_path.c_str());
+        return true;
+    }
+
     auto ptr = ini.GetValue("user::saves", "local_save_path");
     if (!ptr || !ptr[0]) return false;
     
