@@ -44,6 +44,8 @@
 #include "isteamclient018.h"
 #include "isteamclient019.h"
 #include "isteamclient020.h"
+#include "isteamclient021.h"
+#include "isteamclient022.h"
 #include "isteamuser.h"
 #include "isteamuser001.h"
 #include "isteamuser002_old.h"

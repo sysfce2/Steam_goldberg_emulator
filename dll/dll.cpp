@@ -317,6 +317,10 @@ static void *create_client_interface(const char *ver)
         steamclient_has_ipv6_functions_flag = true;
         if (strcmp(ver, "SteamClient020") == 0) {
             return static_cast<ISteamClient020 *>(client_ptr);
+        } else if (strcmp(ver, "SteamClient021") == 0) {
+            return static_cast<ISteamClient021 *>(client_ptr);
+        } else if (strcmp(ver, "SteamClient022") == 0) {
+            return static_cast<ISteamClient022 *>(client_ptr);
         } else if (strcmp(ver, STEAMCLIENT_INTERFACE_VERSION) == 0) {
             return static_cast<ISteamClient *>(client_ptr);
         }

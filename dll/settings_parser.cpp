@@ -1320,6 +1320,38 @@ static void parse_auto_accept_invite(class Settings *settings_client, class Sett
     }
 }
 
+// auto_send_invite.txt
+static void parse_auto_send_invite(class Settings *settings_client, class Settings *settings_server)
+{
+    std::string auto_send_list_path = Local_Storage::get_game_settings_path() + "auto_send_invite.txt";
+    std::ifstream input( std::filesystem::u8path(auto_send_list_path) );
+    if (input.is_open()) {
+        bool send_any_invite = true;
+        common_helpers::consume_bom(input);
+        for( std::string line; getline( input, line ); ) {
+            line = common_helpers::string_strip(line);
+            if (!line.empty()) {
+                send_any_invite = false;
+                try {
+                    auto friend_id = std::stoull(line);
+                    settings_client->addFriendToOverlayAutoSend((uint64_t)friend_id);
+                    settings_server->addFriendToOverlayAutoSend((uint64_t)friend_id);
+                    PRINT_DEBUG("Adding user with ID (SteamID64) = %llu to auto invite list", friend_id);
+                } catch (...) {}
+            }
+        }
+
+        if (send_any_invite) {
+            PRINT_DEBUG("Auto sending any overlay invitation");
+            settings_client->autoSendAnyOverlayInvites(true);
+            settings_server->autoSendAnyOverlayInvites(true);
+        } else {
+            settings_client->autoSendAnyOverlayInvites(false);
+            settings_server->autoSendAnyOverlayInvites(false);
+        }
+    }
+}
+
 // branches.json
 static bool parse_branches_file(
     const std::string &base_path, const bool force_load,
@@ -1900,6 +1932,7 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     parse_mods_folder(settings_client, settings_server, local_storage);
     load_gamecontroller_settings(settings_client);
     parse_auto_accept_invite(settings_client, settings_server);
+    parse_auto_send_invite(settings_client, settings_server);
     parse_ip_country(local_storage, settings_client, settings_server);
 
     parse_encrypted_app_ticket(settings_client, settings_server);

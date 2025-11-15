@@ -221,7 +221,10 @@ bool Steam_Utils::IsOverlayEnabled()
 {
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    return overlay->Ready();
+    if (overlay->Ready()) return true;
+    else if (settings->auto_send_any_overlay_invites || settings->overlayAutoSendInvitesCount() > 0) return true;
+
+    return false;
 }
 
 

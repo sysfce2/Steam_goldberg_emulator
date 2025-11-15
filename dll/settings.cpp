@@ -455,3 +455,26 @@ size_t Settings::overlayAutoAcceptInvitesCount() const
 {
     return auto_accept_overlay_invites_friends.size();
 }
+
+void Settings::autoSendAnyOverlayInvites(bool value)
+{
+    auto_send_any_overlay_invites = value;
+}
+
+void Settings::addFriendToOverlayAutoSend(uint64_t friend_id)
+{
+    auto_send_overlay_invites_friends.insert(friend_id);
+}
+
+bool Settings::hasOverlayAutoSendToFriend(uint64_t friend_id) const
+{
+    if (auto_send_any_overlay_invites) {
+        return true;
+    }
+    return !!auto_send_overlay_invites_friends.count(friend_id);
+}
+
+size_t Settings::overlayAutoSendInvitesCount() const
+{
+    return auto_send_overlay_invites_friends.size();
+}

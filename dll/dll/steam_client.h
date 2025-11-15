@@ -90,6 +90,8 @@ public ISteamClient017,
 public ISteamClient018,
 public ISteamClient019,
 public ISteamClient020,
+public ISteamClient021,
+public ISteamClient022,
 public ISteamClient
 {
 private:
