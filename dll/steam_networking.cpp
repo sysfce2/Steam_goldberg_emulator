@@ -278,6 +278,7 @@ bool Steam_Networking::GetP2PSessionState( CSteamID steamIDRemote, P2PSessionSta
 // P2P packet relay is allowed by default
 bool Steam_Networking::AllowP2PPacketRelay( bool bAllow )
 {
+    PRINT_DEBUG_TODO();
     PRINT_DEBUG("%u", bAllow);
     return true;
 }

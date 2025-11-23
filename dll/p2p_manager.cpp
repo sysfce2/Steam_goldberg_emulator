@@ -196,7 +196,7 @@ P2p_Manager::~P2p_Manager()
 }
 
 
-void P2p_Manager::store_packet(CSteamID my_id, CSteamID steamIDRemote, const void *pubData, uint32 cubData, int nChannel)
+bool P2p_Manager::store_packet(CSteamID my_id, CSteamID steamIDRemote, const void *pubData, uint32 cubData, int nChannel)
 {
     std::lock_guard lock(p2p_mtx);
 
@@ -218,9 +218,7 @@ void P2p_Manager::store_packet(CSteamID my_id, CSteamID steamIDRemote, const voi
         cubData, steamIDRemote.ConvertToUint64(), (int)conn->is_accepted, nChannel
     );
 
-    if (!conn->is_accepted) {
-        trigger_session_request(steamIDRemote, my_id);
-    }
+    return conn->is_accepted;
 }
 
 
@@ -230,6 +228,11 @@ bool P2p_Manager::send_packet(CSteamID my_id, CSteamID steamIDRemote, const void
     if (eP2PSendType == k_EP2PSendReliable || eP2PSendType == k_EP2PSendReliableWithBuffering) {
         reliable = true;
     }
+
+    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // don't lock 2 or more mutexes at the same time
+    // to avoid the problem of lock ordering deadlock
+    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     {
         std::lock_guard lock(p2p_mtx);
@@ -255,11 +258,16 @@ bool P2p_Manager::send_packet(CSteamID my_id, CSteamID steamIDRemote, const void
     msg.mutable_network()->set_channel(nChannel);
     msg.mutable_network()->set_data(pubData, cubData);
 
-    bool ret = network->sendTo(&msg, reliable);
-    PRINT_DEBUG(
-        "Sent remote message with size=[%zu] from=[%llu] to=[%llu], is_ok=%u",
-        msg.network().data().size(), (uint64)msg.source_id(), (uint64)msg.dest_id(), ret
-    );
+    bool ret = false;
+    {
+        std::lock_guard lock(global_mutex);
+
+        ret = network->sendTo(&msg, reliable);
+        PRINT_DEBUG(
+            "Sent remote message with size=[%zu] from=[%llu] to=[%llu], is_ok=%u",
+            msg.network().data().size(), (uint64)msg.source_id(), (uint64)msg.dest_id(), ret
+        );
+    }
 
     return ret;
 }
@@ -358,14 +366,27 @@ bool P2p_Manager::close_channel(CSteamID my_id, CSteamID steamIDRemote, int nCha
 
     auto conn = get_connection(steamIDRemote, my_id);
     if (!conn) {
+        PRINT_DEBUG(
+            "[X] no connection to remote user [%llu] was found, I am [%llu]",
+            steamIDRemote.ConvertToUint64(), my_id.ConvertToUint64()
+        );
         return false;
     }
 
     conn->channels.erase(nChannel);
+    PRINT_DEBUG(
+        "closed channel [%i] with remote user [%llu], I am [%llu]",
+        nChannel, steamIDRemote.ConvertToUint64(), my_id.ConvertToUint64()
+    );
+
     if (conn->channels.empty()) {
         // https://partner.steamgames.com/doc/api/ISteamNetworking#CloseP2PChannelWithUser
         // "Once all channels to a user have been closed,"
         // "the open session to the user will be closed and new data from this user will trigger a new P2PSessionRequest_t callback."
+        PRINT_DEBUG(
+            "[?] all channels with remote user [%llu] are closed, removing connection, I am [%llu]",
+            steamIDRemote.ConvertToUint64(), my_id.ConvertToUint64()
+        );
         remove_connection(steamIDRemote, my_id);
         remove_connection(my_id, steamIDRemote);
     }
@@ -377,53 +398,71 @@ bool P2p_Manager::close_session(CSteamID my_id, CSteamID steamIDRemote)
 {
     std::lock_guard lock(p2p_mtx);
 
-    bool res_1 = remove_connection(steamIDRemote, my_id);
-    bool res_2 = remove_connection(my_id, steamIDRemote);
+    const bool res_1 = remove_connection(steamIDRemote, my_id);
+    const bool res_2 = remove_connection(my_id, steamIDRemote);
     return res_1 || res_2;
 }
 
 bool P2p_Manager::get_session_state(CSteamID my_id, CSteamID steamIDRemote, P2PSessionState_t *pConnectionState)
 {
-    std::lock_guard lock(p2p_mtx);
+    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // don't lock 2 or more mutexes at the same time
+    // to avoid the problem of lock ordering deadlock
+    // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    auto conn = get_connection(steamIDRemote, my_id);
-    if (!conn) {
-        if (pConnectionState) {
-            pConnectionState->m_bConnectionActive = false;
-            pConnectionState->m_bConnecting = false;
-            pConnectionState->m_eP2PSessionError = 0;
-            pConnectionState->m_bUsingRelay = false;
-            pConnectionState->m_nBytesQueuedForSend = 0;
-            pConnectionState->m_nPacketsQueuedForSend = 0;
-            pConnectionState->m_nRemoteIP = 0;
-            pConnectionState->m_nRemotePort = 0;
+    {
+        std::lock_guard lock(p2p_mtx);
+
+        auto conn = get_connection(steamIDRemote, my_id);
+        if (!conn) {
+            if (pConnectionState) {
+                pConnectionState->m_bConnectionActive = false;
+                pConnectionState->m_bConnecting = false;
+                pConnectionState->m_eP2PSessionError = EP2PSessionError::k_EP2PSessionErrorTimeout;
+                pConnectionState->m_bUsingRelay = false;
+                pConnectionState->m_nBytesQueuedForSend = 0;
+                pConnectionState->m_nPacketsQueuedForSend = 0;
+                pConnectionState->m_nRemoteIP = 0;
+                pConnectionState->m_nRemotePort = 0;
+            }
+
+            PRINT_DEBUG(
+                "no connection to remote user [%llu], I am [%llu]",
+                steamIDRemote.ConvertToUint64(), my_id.ConvertToUint64()
+            );
+            return false;
         }
 
-        PRINT_DEBUG("  no connection to user=[%llu]", steamIDRemote.ConvertToUint64());
-        return false;
+        if (pConnectionState) {
+            int32 pending_packets = 0;
+            int32 pending_bytes = 0;
+            for (auto& [ch_idx, channel] : conn->channels) {
+                pending_packets += (int32)channel.packets.size();
+                for (auto &msg : channel.packets) {
+                    pending_bytes += (int32)msg.data.size();
+                }
+            }
+
+            pConnectionState->m_bConnectionActive = conn->is_accepted;
+            pConnectionState->m_bConnecting = !conn->is_accepted;
+            pConnectionState->m_eP2PSessionError = EP2PSessionError::k_EP2PSessionErrorNone;
+            pConnectionState->m_bUsingRelay = false; // TODO
+            pConnectionState->m_nPacketsQueuedForSend = pending_packets;
+            pConnectionState->m_nBytesQueuedForSend = pending_bytes;
+        }
     }
 
     if (pConnectionState) {
-        int32 pending_packets = 0;
-        int32 pending_bytes = 0;
-        for (auto& [ch_idx, channel] : conn->channels) {
-            pending_packets += (int32)channel.packets.size();
-            for (auto &msg : channel.packets) {
-                pending_bytes += (int32)msg.data.size();
-            }
-        }
+        std::lock_guard lock(global_mutex);
 
-        pConnectionState->m_bConnectionActive = conn->is_accepted;
-        pConnectionState->m_bConnecting = !conn->is_accepted;
-        pConnectionState->m_eP2PSessionError = 0;
-        pConnectionState->m_bUsingRelay = false;
-        pConnectionState->m_nPacketsQueuedForSend = pending_packets;
-        pConnectionState->m_nBytesQueuedForSend = pending_bytes;
         pConnectionState->m_nRemoteIP = network->getIP(steamIDRemote);
         pConnectionState->m_nRemotePort = network->getPort(steamIDRemote);
     }
 
-    PRINT_DEBUG("  user is connected [%llu]", steamIDRemote.ConvertToUint64());
+    PRINT_DEBUG(
+        "remote user [%llu] has a session/connection, I am [%llu]",
+        steamIDRemote.ConvertToUint64(), my_id.ConvertToUint64()
+    );
     return true;
 }
 
@@ -440,9 +479,6 @@ bool P2p_Manager::accept_session(CSteamID my_id, CSteamID steamIDRemote)
     if (!conn->is_accepted) {
         conn->is_accepted = true;
         PRINT_DEBUG("accepted new session from=[%llu], I am=[%llu]", steamIDRemote.ConvertToUint64(), my_id.ConvertToUint64());    
-        
-        // process all packets
-        periodic_callback();
     }
     return true;
 }
@@ -519,31 +555,35 @@ void P2p_Manager::network_data_packets(Common_Message *msg)
     );
 
     switch (msg->network().type()) {
-        case Network_pb::DATA: {
-            PRINT_DEBUG("got network data message");
-            store_packet(
-                dest_id, src_id,
-                msg->network().data().c_str(), (uint32)msg->network().data().size(),
-                (int)msg->network().channel()
-            );
+    case Network_pb::DATA: {
+        PRINT_DEBUG("got network data message");
+        const bool conn_is_accepted = store_packet(
+            dest_id, src_id,
+            msg->network().data().c_str(), (uint32)msg->network().data().size(),
+            (int)msg->network().channel()
+        );
+        if (!conn_is_accepted) {
+            trigger_session_request(src_id, dest_id);
         }
-        break;
+    }
+    break;
 
-        case Network_pb::FAILED_CONNECT: {
-            PRINT_DEBUG("[X] got connection failure packet");
-            P2PSessionConnectFail_t data{};
-            data.m_steamIDRemote = src_id;
-            data.m_eP2PSessionError = EP2PSessionError::k_EP2PSessionErrorTimeout;
+    case Network_pb::FAILED_CONNECT: {
+        PRINT_DEBUG("[X] got connection failure packet");
+        P2PSessionConnectFail_t data{};
+        data.m_steamIDRemote = src_id;
+        data.m_eP2PSessionError = EP2PSessionError::k_EP2PSessionErrorTimeout;
 
-            get_my_callbacks(dest_id)->addCBResult(data.k_iCallback, &data, sizeof(data));
+        get_my_callbacks(dest_id)->addCBResult(data.k_iCallback, &data, sizeof(data));
 
-            {
-                std::lock_guard lock(p2p_mtx);
-                remove_connection(src_id, dest_id);
-                remove_connection(dest_id, src_id);
-            }
+        {
+            std::lock_guard lock(p2p_mtx);
+
+            remove_connection(src_id, dest_id);
+            remove_connection(dest_id, src_id);
         }
-        break;
+    }
+    break;
     }
 }
 
@@ -559,17 +599,26 @@ void P2p_Manager::network_low_level(Common_Message *msg)
         break;
 
         case Low_Level::DISCONNECT: {
-            P2PSessionConnectFail_t data{};
-            data.m_steamIDRemote = src_id;
-            data.m_eP2PSessionError = k_EP2PSessionErrorDestinationNotLoggedIn;
-
-            get_my_callbacks(dest_id)->addCBResult(data.k_iCallback, &data, sizeof(data));
-
+            bool any_conn_removed = false;
             {
                 std::lock_guard lock(p2p_mtx);
-                remove_connection(src_id, dest_id);
-                remove_connection(dest_id, src_id);
+
+                any_conn_removed |= remove_connection(src_id, dest_id);
+                any_conn_removed |= remove_connection(dest_id, src_id);
             }
+
+            if (any_conn_removed) {
+                PRINT_DEBUG(
+                    "[X] remote user [%llu] disconnected, sending P2PSessionConnectFail_t, I am [%llu]",
+                    src_id.ConvertToUint64(), dest_id.ConvertToUint64()
+                );
+                P2PSessionConnectFail_t data{};
+                data.m_steamIDRemote = src_id;
+                data.m_eP2PSessionError = k_EP2PSessionErrorDestinationNotLoggedIn;
+
+                get_my_callbacks(dest_id)->addCBResult(data.k_iCallback, &data, sizeof(data));
+            }
+
         }
         break;
     }

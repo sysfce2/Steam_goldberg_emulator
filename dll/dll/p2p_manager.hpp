@@ -67,7 +67,9 @@ private:
     Connection_t* create_connection(const CSteamID &remote_id, const CSteamID &my_id);
     Connection_t* get_connection(const CSteamID &remote_id, const CSteamID &my_id);
 
-    void store_packet(CSteamID my_id, CSteamID steamIDRemote, const void *pubData, uint32 cubData, int nChannel);
+    // true if the connection was already accepted,
+    // false otherwise.
+    bool store_packet(CSteamID my_id, CSteamID steamIDRemote, const void *pubData, uint32 cubData, int nChannel);
 
     void periodic_handle_connections(const std::chrono::high_resolution_clock::time_point &now);
     void periodic_handle_channels(const std::chrono::high_resolution_clock::time_point &now);

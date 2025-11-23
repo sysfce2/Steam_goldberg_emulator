@@ -1595,10 +1595,12 @@ bool Steam_UGC::DownloadItem( PublishedFileId_t nPublishedFileID, bool bHighPrio
 // This is helpful if you want to support multiple game servers running out of the same install folder
 bool Steam_UGC::BInitWorkshopForGameServer( DepotId_t unWorkshopDepotID, const char *pszFolder )
 {
-    PRINT_DEBUG_ENTRY();
+    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("[%u] '%s'", unWorkshopDepotID, pszFolder);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    
-    return false;
+
+    // Space Engineers Dedicated Server (appid 298740) expects this to be true
+    return true;
 }
 
 
