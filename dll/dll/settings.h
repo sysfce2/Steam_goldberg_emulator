@@ -200,6 +200,32 @@ struct Branch_Info {
     bool active = false;
 };
 
+struct OldP2pBehavior {
+    enum class EPacketShareMode {
+        // if the sending type is unreliable (UDP), share packets between gameserver and client
+        // otherwise, don't share packets
+        DEFAULT,
+
+        // always share packets between gameserver and client
+        ALWAYS_SHARE,
+
+        // never share packets between gameserver and client
+        NEVER_SHARE,
+
+        _LAST,
+    };
+
+    static EPacketShareMode to_share_mode(int val) {
+        if (val < 0 || val >= (unsigned)EPacketShareMode::_LAST) {
+            return EPacketShareMode::DEFAULT;
+        }
+
+        return (EPacketShareMode)val;
+    }
+
+    EPacketShareMode mode = EPacketShareMode::DEFAULT;
+};
+
 class Settings {
 private:
     CSteamID steam_id{}; // user id
@@ -375,6 +401,9 @@ public:
 
     // free weekend
     bool free_weekend = false;
+
+    // old P2P (ISteamNetworking) behavior
+    OldP2pBehavior old_p2p_behavior{};
 
     // voice chat
     bool enable_voice_chat = false;

@@ -324,9 +324,14 @@ static void *create_client_interface(const char *ver)
         } else if (strcmp(ver, STEAMCLIENT_INTERFACE_VERSION) == 0) {
             return static_cast<ISteamClient *>(client_ptr);
         }
+
+        // report the missing interface if it is a client
+        client_ptr->report_missing_impl(ver, EMU_FUNC_NAME);
     }
     
-    client_ptr->report_missing_impl_and_exit(ver, EMU_FUNC_NAME);
+    PRINT_DEBUG("%s interface is not SteamClient, returning nullptr!", ver);
+    // Original steam returns 0 here.
+    return nullptr;
 }
 
 STEAMAPI_API void * S_CALLTYPE SteamInternal_CreateInterface( const char *ver )

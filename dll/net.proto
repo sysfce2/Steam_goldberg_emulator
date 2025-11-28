@@ -81,15 +81,15 @@ message Low_Level {
 }
 
 message Network_pb {
-    int32 channel = 1;
-    bytes data = 2;
-
     enum Types {
         DATA = 0;
         FAILED_CONNECT = 1;
     }
 
-    Types type = 3;
+    Types type = 1;
+    int32 channel = 2;
+    bytes data = 3;
+    uint32 send_type = 4; // EP2PSend
 }
 
 message Network_Old {

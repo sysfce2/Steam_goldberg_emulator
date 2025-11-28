@@ -18,6 +18,7 @@
 #pragma once
 
 #include "base.h"
+#include <tuple>
 
 
 class P2p_Manager
@@ -31,8 +32,15 @@ private:
 
     struct Packet_t
     {
+    private:
+        std::chrono::high_resolution_clock::time_point time_created = std::chrono::high_resolution_clock::now();
+
+    public:
         bool is_processed = false;
         std::vector<char> data{};
+        EP2PSend send_type = EP2PSend::k_EP2PSendUnreliable;
+
+        const std::chrono::high_resolution_clock::time_point& get_time_created() const;
     };
 
     struct Channel_t
@@ -69,7 +77,17 @@ private:
 
     // true if the connection was already accepted,
     // false otherwise.
-    bool store_packet(CSteamID my_id, CSteamID steamIDRemote, const void *pubData, uint32 cubData, int nChannel);
+    bool store_packet(
+        CSteamID my_id, CSteamID steamIDRemote,
+        const void *pubData, uint32 cubData, int nChannel,
+        EP2PSend send_type
+    );
+
+    std::optional<std::tuple<
+        decltype(connections)::iterator,
+        decltype(Connection_t::channels)::iterator,
+        decltype(Channel_t::packets)::iterator
+    >> get_next_packet(CSteamID my_id, int nChannel);
 
     void periodic_handle_connections(const std::chrono::high_resolution_clock::time_point &now);
     void periodic_handle_channels(const std::chrono::high_resolution_clock::time_point &now);
