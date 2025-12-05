@@ -37,7 +37,7 @@ STEAMAPI_API ISteamApps * SteamAPI_ISteamClient_GetISteamApps( ISteamClient* sel
 STEAMAPI_API ISteamNetworking * SteamAPI_ISteamClient_GetISteamNetworking( ISteamClient* self, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char * pchVersion );
 STEAMAPI_API ISteamRemoteStorage * SteamAPI_ISteamClient_GetISteamRemoteStorage( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
 STEAMAPI_API ISteamScreenshots * SteamAPI_ISteamClient_GetISteamScreenshots( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
-STEAMAPI_API ISteamGameSearch * SteamAPI_ISteamClient_GetISteamGameSearch( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
+STEAMAPI_API ISteamGameSearch * SteamAPI_ISteamClient_GetISteamGameSearch( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion ); // removed in SDK 1.63
 STEAMAPI_API uint32 SteamAPI_ISteamClient_GetIPCCallCount( ISteamClient* self );
 STEAMAPI_API void SteamAPI_ISteamClient_SetWarningMessageHook( ISteamClient* self, SteamAPIWarningMessageHook_t pFunction );
 STEAMAPI_API steam_bool SteamAPI_ISteamClient_BShutdownIfAllPipesClosed( ISteamClient* self );
@@ -46,7 +46,7 @@ STEAMAPI_API ISteamController * SteamAPI_ISteamClient_GetISteamController( IStea
 STEAMAPI_API ISteamUGC * SteamAPI_ISteamClient_GetISteamUGC( ISteamClient* self, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char * pchVersion );
 STEAMAPI_API ISteamAppList * SteamAPI_ISteamClient_GetISteamAppList( ISteamClient* self, HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char * pchVersion );
 STEAMAPI_API ISteamMusic * SteamAPI_ISteamClient_GetISteamMusic( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
-STEAMAPI_API ISteamMusicRemote * SteamAPI_ISteamClient_GetISteamMusicRemote( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
+STEAMAPI_API ISteamMusicRemote * SteamAPI_ISteamClient_GetISteamMusicRemote( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion ); // removed in SDK 1.63
 STEAMAPI_API ISteamHTMLSurface * SteamAPI_ISteamClient_GetISteamHTMLSurface( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
 STEAMAPI_API ISteamInventory * SteamAPI_ISteamClient_GetISteamInventory( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
 STEAMAPI_API ISteamVideo * SteamAPI_ISteamClient_GetISteamVideo( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion );
@@ -306,6 +306,7 @@ STEAMAPI_API HServerQuery SteamAPI_ISteamMatchmakingServers_ServerRules( ISteamM
 STEAMAPI_API void SteamAPI_ISteamMatchmakingServers_CancelServerQuery( ISteamMatchmakingServers* self, HServerQuery hServerQuery );
 
 // ISteamGameSearch
+// whole interface removed in SDK 1.63
 STEAMAPI_API ISteamGameSearch *SteamAPI_SteamGameSearch_v001();
 STEAMAPI_API EGameSearchErrorCode_t SteamAPI_ISteamGameSearch_AddGameSearchParams( ISteamGameSearch* self, const char * pchKeyToFind, const char * pchValuesToFind );
 STEAMAPI_API EGameSearchErrorCode_t SteamAPI_ISteamGameSearch_SearchForGameWithLobby( ISteamGameSearch* self, uint64_steamid steamIDLobby, int nPlayerMin, int nPlayerMax );
@@ -541,6 +542,7 @@ STEAMAPI_API void SteamAPI_ISteamMusic_SetVolume( ISteamMusic* self, float flVol
 STEAMAPI_API float SteamAPI_ISteamMusic_GetVolume( ISteamMusic* self );
 
 // ISteamMusicRemote
+// whole interface removed in SDK 1.63
 STEAMAPI_API ISteamMusicRemote *SteamAPI_SteamMusicRemote_v001();
 STEAMAPI_API steam_bool SteamAPI_ISteamMusicRemote_RegisterSteamMusicRemote( ISteamMusicRemote* self, const char * pchName );
 STEAMAPI_API steam_bool SteamAPI_ISteamMusicRemote_DeregisterSteamMusicRemote( ISteamMusicRemote* self );

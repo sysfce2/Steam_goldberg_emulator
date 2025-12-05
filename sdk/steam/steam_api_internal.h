@@ -229,7 +229,7 @@ class ISteamNetworking;
 class ISteamRemoteStorage;
 class ISteamScreenshots;
 class ISteamMusic;
-class ISteamMusicRemote;
+class ISteamMusicRemote; // removed in SDK 1.63
 class ISteamGameServerStats;
 class ISteamHTTP;
 class ISteamController;
@@ -239,7 +239,7 @@ class ISteamHTMLSurface;
 class ISteamInventory;
 class ISteamVideo;
 class ISteamParentalSettings;
-class ISteamGameSearch;
+class ISteamGameSearch; // removed in SDK 1.63
 class ISteamInput;
 class ISteamParties;
 class ISteamTV;
@@ -298,7 +298,7 @@ enum { k_iClientShortcutsCallbacks = 3700 };
 enum { k_iClientRemoteControlManagerCallbacks = 3800 };
 enum { k_iSteamAppListCallbacks = 3900 };
 enum { k_iSteamMusicCallbacks = 4000 };
-enum { k_iSteamMusicRemoteCallbacks = 4100 };
+enum { k_iSteamMusicRemoteCallbacks = 4100 }; // removed in SDK 1.63
 enum { k_iClientVRCallbacks = 4200 };
 enum { k_iClientGameNotificationCallbacks = 4300 }; 
 enum { k_iSteamGameNotificationCallbacks = 4400 }; 

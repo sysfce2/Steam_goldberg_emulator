@@ -117,6 +117,7 @@ STEAMAPI_API ISteamScreenshots * SteamAPI_ISteamClient_GetISteamScreenshots( ISt
     return get_steam_client()->GetISteamScreenshots(hSteamuser, hSteamPipe, pchVersion);
 }
 
+// removed in SDK 1.63
 STEAMAPI_API ISteamGameSearch * SteamAPI_ISteamClient_GetISteamGameSearch( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion )
 {
     return get_steam_client()->GetISteamGameSearch(hSteamuser, hSteamPipe, pchVersion);
@@ -167,6 +168,7 @@ STEAMAPI_API ISteamMusic * SteamAPI_ISteamClient_GetISteamMusic( ISteamClient* s
     return get_steam_client()->GetISteamMusic(hSteamuser, hSteamPipe, pchVersion);
 }
 
+// removed in SDK 1.63
 STEAMAPI_API ISteamMusicRemote * SteamAPI_ISteamClient_GetISteamMusicRemote( ISteamClient* self, HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char * pchVersion )
 {
     return get_steam_client()->GetISteamMusicRemote(hSteamuser, hSteamPipe, pchVersion);
@@ -1646,6 +1648,7 @@ STEAMAPI_API void SteamAPI_ISteamMatchmakingServers_CancelServerQuery( ISteamMat
     return (get_steam_client()->steam_matchmaking_servers)->CancelServerQuery(hServerQuery);
 }
 
+// whole interface removed in SDK 1.63
 STEAMAPI_API ISteamGameSearch *SteamAPI_SteamGameSearch_v001()
 {
     return get_steam_client()->GetISteamGameSearch(flat_hsteamuser(), flat_hsteampipe(), "SteamMatchGameSearch001");
@@ -2806,6 +2809,7 @@ STEAMAPI_API float SteamAPI_ISteamMusic_GetVolume( ISteamMusic* self )
     return self->GetVolume();
 }
 
+// whole interface removed in SDK 1.63
 STEAMAPI_API ISteamMusicRemote *SteamAPI_SteamMusicRemote_v001()
 {
     return get_steam_client()->GetISteamMusicRemote(flat_hsteamuser(), flat_hsteampipe(), "STEAMMUSICREMOTE_INTERFACE_VERSION001");

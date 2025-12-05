@@ -319,7 +319,7 @@ static void *create_client_interface(const char *ver)
             return static_cast<ISteamClient020 *>(client_ptr);
         } else if (strcmp(ver, "SteamClient021") == 0) {
             return static_cast<ISteamClient021 *>(client_ptr);
-        } else if (strcmp(ver, "SteamClient022") == 0) {
+        } else if (strcmp(ver, "SteamClient022") == 0) { // not public, based on reversing
             return static_cast<ISteamClient022 *>(client_ptr);
         } else if (strcmp(ver, STEAMCLIENT_INTERFACE_VERSION) == 0) {
             return static_cast<ISteamClient *>(client_ptr);

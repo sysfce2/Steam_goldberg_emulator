@@ -156,6 +156,7 @@ enum EResult
 	k_EResultNotSupported = 128,				// The data being accessed is not supported by this API
 	k_EResultFamilySizeLimitExceeded = 129,		// Reached the maximum size of the family
 	k_EResultOfflineAppCacheInvalid = 130,		// The local data for the offline mode cache is insufficient to login
+	k_EResultTryLater = 131,					// retry the operation later
 };
 
 // Error codes for use with the voice functions
@@ -685,6 +686,9 @@ enum EMarketNotAllowedReasonFlags
 
 	// User accepted a wallet gift that was recently purchased
 	k_EMarketNotAllowedReason_AcceptedWalletGift = (1 << 15),
+
+	// User did something that triggered a trade cooldown (like reversing trades)
+	k_EMarketNotAllowedReason_TradeCooldown = (1 << 16),
 };
 
 
