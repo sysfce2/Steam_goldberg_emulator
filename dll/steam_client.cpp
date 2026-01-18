@@ -105,17 +105,12 @@ Steam_Client::Steam_Client()
     steam_utils = new Steam_Utils(settings_client, callback_results_client, callbacks_client, steam_overlay);
     
     ugc_bridge = new Ugc_Remote_Storage_Bridge(settings_client);
-    p2p_manager = new P2p_Manager(
-        settings_client, settings_server,
-        callbacks_client, callbacks_server,
-        network, run_every_runcb
-    );
 
     steam_matchmaking = new Steam_Matchmaking(settings_client, local_storage, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_matchmaking_servers = new Steam_Matchmaking_Servers(settings_client, local_storage, network);
     steam_user_stats = new Steam_User_Stats(settings_client, network, local_storage, callback_results_client, callbacks_client, run_every_runcb, steam_overlay);
     steam_apps = new Steam_Apps(settings_client, callback_results_client, callbacks_client);
-    steam_networking = new Steam_Networking(settings_client, network, p2p_manager, callbacks_client, run_every_runcb);
+    steam_networking = new Steam_Networking(settings_client, network, callbacks_client, run_every_runcb);
     steam_remote_storage = new Steam_Remote_Storage(settings_client, ugc_bridge, local_storage, callback_results_client, callbacks_client, run_every_runcb);
     steam_screenshots = new Steam_Screenshots(local_storage, callbacks_client);
     steam_http = new Steam_HTTP(settings_client, network, callback_results_client, callbacks_client);
@@ -150,7 +145,7 @@ Steam_Client::Steam_Client()
     steam_gameserver_user = new Steam_User(settings_server, local_storage, network, callback_results_server, callbacks_server);
     steam_gameserver_utils = new Steam_Utils(settings_server, callback_results_server, callbacks_server, steam_overlay);
     steam_gameserverstats = new Steam_GameServerStats(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
-    steam_gameserver_networking = new Steam_Networking(settings_server, network, p2p_manager, callbacks_server, run_every_runcb);
+    steam_gameserver_networking = new Steam_Networking(settings_server, network, callbacks_server, run_every_runcb);
     steam_gameserver_http = new Steam_HTTP(settings_server, network, callback_results_server, callbacks_server);
     steam_gameserver_inventory = new Steam_Inventory(settings_server, callback_results_server, callbacks_server, run_every_runcb, local_storage);
     steam_gameserver_ugc = new Steam_UGC(settings_server, ugc_bridge, local_storage, callback_results_server, callbacks_server);
@@ -237,7 +232,6 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_app_disable_update);
     DEL_INST(steam_billing);
 
-    DEL_INST(p2p_manager);
     DEL_INST(ugc_bridge);
 
     DEL_INST(steam_utils);
@@ -959,15 +953,15 @@ void Steam_Client::RunCallbacks(bool runClientCB, bool runGameserverCB)
 
     // PRINT_DEBUG("steam_matchmaking_servers *********");
     steam_matchmaking_servers->RunCallbacks();
+    
+    // PRINT_DEBUG("run_every_runcb *********");
+    run_every_runcb->run();
 
     // PRINT_DEBUG("steam_gameserver *********");
     steam_gameserver->RunCallbacks();
 
     // PRINT_DEBUG("steam_user *********");
     steam_gameserver_user->RunCallbacks();
-
-    // PRINT_DEBUG("run_every_runcb *********");
-    run_every_runcb->run();
 
     if (runClientCB) {
         // PRINT_DEBUG("callback_results_client *********");

@@ -173,7 +173,6 @@ public:
     Steam_AppTicket *steam_app_ticket{};
 
     Steam_Overlay* steam_overlay{};
-    P2p_Manager *p2p_manager{};
 
     PlaytimeCounter* playtime_counter{};
 

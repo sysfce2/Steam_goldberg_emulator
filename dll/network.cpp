@@ -715,33 +715,34 @@ bool Networking::handle_announce(Common_Message *msg, IP_PORT ip_port)
             Common_Message msg_ = create_announce(true);
 
             size_t size = msg_.ByteSizeLong();
-            std::vector<char> buffer(size);
-            msg_.SerializeToArray(buffer.data(), static_cast<int>(size));
+            char *buffer = new char[size];
+            msg_.SerializeToArray(buffer, static_cast<int>(size));
             IP_PORT ipp;
             ipp.ip = msg->announce().peers(i).ip();
             ipp.port = htons(msg->announce().peers(i).udp_port());
-            send_packet_to(udp_socket, ipp, buffer.data(), static_cast<unsigned long>(size));
+            send_packet_to(udp_socket, ipp, buffer, static_cast<unsigned long>(size));
+            delete[] buffer;
         }
     }
 
     conn->last_received = std::chrono::high_resolution_clock::now();
 
     if (msg->announce().type() == Announce::PING) {
-        {
-            Common_Message msg = create_announce(false);
-            size_t size = msg.ByteSizeLong();
-            std::vector<char> buffer(size);
-            msg.SerializeToArray(buffer.data(), static_cast<int>(size));
-            send_packet_to(udp_socket, ip_port, buffer.data(), static_cast<unsigned long>(size));
-        }
+        Common_Message msg = create_announce(false);
+        size_t size = msg.ByteSizeLong(); 
+        char *buffer = new char[size];
+        msg.SerializeToArray(buffer, static_cast<int>(size));
+        send_packet_to(udp_socket, ip_port, buffer, static_cast<unsigned long>(size));
+        delete[] buffer;
 
         //send ping packet if not pinged
         if (!conn->udp_pinged) {
             Common_Message msg = create_announce(true);
-            size_t size = msg.ByteSizeLong();
-            std::vector<char> buffer(size);
-            msg.SerializeToArray(buffer.data(), static_cast<int>(size));
-            send_packet_to(udp_socket, ip_port, buffer.data(), static_cast<unsigned long>(size));
+            size_t size = msg.ByteSizeLong(); 
+            char *buffer = new char[size];
+            msg.SerializeToArray(buffer, static_cast<int>(size));
+            send_packet_to(udp_socket, ip_port, buffer, static_cast<unsigned long>(size));
+            delete[] buffer;
         }
     } else if (msg->announce().type() == Announce::PONG) {
         conn->udp_ip_port = ip_port;
@@ -1105,15 +1106,13 @@ void Networking::Run()
                             auto i = std::find(c.ids.begin(), c.ids.end(), steam_id);
                             if (i != c.ids.end()) {
                                 c.ids.erase(i);
-                                PRINT_DEBUG("REMOVE OLD USER CONNECTION ID [%llu]", steam_id.ConvertToUint64());
                                 run_callback_user(steam_id, false, c.appid);
+                                PRINT_DEBUG("REMOVE OLD CONNECTION ID");
                             }
                         }
                     }
 
-                    for (auto &steam_id : conn.ids) {
-                        run_callback_user(steam_id, true, conn.appid);
-                    }
+                    for (auto &steam_id : conn.ids) run_callback_user(steam_id, true, conn.appid);
                 }
 
                 conn.connected = true;
@@ -1150,15 +1149,11 @@ void Networking::Run()
         auto conn = std::begin(connections);
         while (conn != std::end(connections)) {
             if (check_timedout(conn->last_received, USER_TIMEOUT + time_extra)) {
-                if (conn->connected) {
-                    PRINT_DEBUG("USER TIMEOUT");
-                    for (auto &steam_id : conn->ids) {
-                        run_callback_user(steam_id, false, conn->appid);
-                    }
-                }
+                if (conn->connected) for (auto &steam_id : conn->ids) run_callback_user(steam_id, false, conn->appid);
                 kill_tcp_socket(conn->tcp_socket_outgoing);
                 kill_tcp_socket(conn->tcp_socket_incoming);
                 conn = connections.erase(conn);
+                PRINT_DEBUG("USER TIMEOUT");
             } else {
                 ++conn;
             }
@@ -1167,11 +1162,7 @@ void Networking::Run()
 
     for (auto &conn: connections) {
         if (!(conn.tcp_socket_incoming.received_data || conn.tcp_socket_outgoing.received_data)) {
-            if (conn.connected) {
-                for (auto &steam_id : conn.ids) {
-                    run_callback_user(steam_id, false, conn.appid);
-                }
-            }
+            if (conn.connected) for (auto &steam_id : conn.ids) run_callback_user(steam_id, false, conn.appid);
             conn.connected = false;
         }
     }
@@ -1321,28 +1312,14 @@ bool Networking::sendToAll(Common_Message *msg, bool reliable)
 
 void Networking::run_callbacks(Callback_Ids id, Common_Message *msg)
 {
-    const uint64 message_destination_steamid = msg->dest_id();
-
-    for (const auto &cb : callbacks[id].callbacks) {
-        const uint64 callback_allowed_steamid = cb.steam_id.ConvertToUint64();
-
+    for (auto &cb : callbacks[id].callbacks) {
+        uint64 callback_allowed_steamid = cb.steam_id.ConvertToUint64();
+        uint64 message_destination_steamid = msg->dest_id();
         if (callback_allowed_steamid == 0 || // callback wants to receive all messages (callback for broadcast)
             message_destination_steamid == 0 || // message was broadcasted to all (broadcast message)
             callback_allowed_steamid == message_destination_steamid) { // callback destination is the same as the message destination
-            
-            // change broadcast destination ID to a specific one
-            // this is required since otherwise the CSteamID of the destination would be 0 (invalid ID)
-            if (message_destination_steamid == 0) {
-                msg->set_dest_id(callback_allowed_steamid);
-            }
-            // invoke the callback
             cb.message_callback(cb.object, msg);
         }
-    }
-    
-    // restore broadcast destination ID
-    if (message_destination_steamid == 0) {
-        msg->set_dest_id(0);
     }
 }
 

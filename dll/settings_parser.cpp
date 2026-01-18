@@ -1606,13 +1606,6 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->download_steamhttp_requests = ini.GetBoolValue("main::connectivity", "download_steamhttp_requests", settings_client->download_steamhttp_requests);
     settings_server->download_steamhttp_requests = ini.GetBoolValue("main::connectivity", "download_steamhttp_requests", settings_server->download_steamhttp_requests);
 
-    settings_client->old_p2p_behavior.mode = OldP2pBehavior::to_share_mode(
-        (int)ini.GetLongValue("main::connectivity", "old_p2p_packet_sharing_mode", (unsigned)settings_client->old_p2p_behavior.mode)
-    );
-    settings_server->old_p2p_behavior.mode = OldP2pBehavior::to_share_mode(
-        (int)ini.GetLongValue("main::connectivity", "old_p2p_packet_sharing_mode", (unsigned)settings_server->old_p2p_behavior.mode)
-    );
-
 
     // [main::misc]
     settings_client->achievement_bypass = ini.GetBoolValue("main::misc", "achievements_bypass", settings_client->achievement_bypass);

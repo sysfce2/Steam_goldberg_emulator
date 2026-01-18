@@ -23,14 +23,11 @@
 #define REQUEST_LOBBY_DATA_TIMEOUT 6.0
 #define LOBBY_DELETED_TIMEOUT 2
 
-// appid 353090 takes ~100ms to create the lobby
-#define LOBBY_CREATE_DELAY 0.2
+#define LOBBY_CREATE_DELAY 0.07 //artificial delay for lobby creation
 
 #define FILTER_MAX_DEFAULT 4096
 
-// https://partner.steamgames.com/doc/api/ISteamMatchmaking#RequestLobbyList
-// "this call can take from 300ms to 5 seconds to complete, and has a timeout of 20 seconds."
-#define LOBBY_SEARCH_TIMEOUT 1.0
+#define LOBBY_SEARCH_TIMEOUT 0.2 //Tested on real steam
 
 
 google::protobuf::Map<std::string,std::string>::const_iterator Steam_Matchmaking::caseinsensitive_find(const ::google::protobuf::Map< ::std::string, ::std::string >& map, std::string key)

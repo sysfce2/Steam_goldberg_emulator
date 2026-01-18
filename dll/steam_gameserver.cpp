@@ -20,9 +20,6 @@
 
 #define SEND_SERVER_RATE 5.0
 
-// appid 353090 takes ~1.2-1.4 sec to create the gameserver
-#define LOGON_DELAY 1.3
-
 
 void Steam_GameServer::set_version(const char *pchVersionString)
 {
@@ -844,14 +841,14 @@ void Steam_GameServer::RunCallbacks()
     if (temp_call_servers_connected) {
         PRINT_DEBUG("SteamServersConnected_t");
         SteamServersConnected_t data{};
-        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), LOGON_DELAY);
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.1);
     }
 
     if (logged_in && !policy_response_called) {
         PRINT_DEBUG("GSPolicyResponse_t");
         GSPolicyResponse_t data{};
         data.m_bSecure = !!(flags & k_unServerFlagSecure);
-        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), LOGON_DELAY);
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.11);
         policy_response_called = true;
     }
 
