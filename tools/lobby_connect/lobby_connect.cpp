@@ -64,41 +64,32 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 	
+	title();
+
     int friend_count = SteamFriends()->GetFriendCount(k_EFriendFlagAll);
     
-    /*
     std::cout << "People on the network: " << friend_count << "\n";
-    for (int i = 0; i < friend_count; ++i) {
-        CSteamID id = SteamFriends()->GetFriendByIndex(i, k_EFriendFlagAll);
-        const char *name = SteamFriends()->GetFriendPersonaName(id);
-        
-        FriendGameInfo_t friend_info = {};
-        SteamFriends()->GetFriendGamePlayed(id, &friend_info);
-        std::cout << name << " is playing: " << friend_info.m_gameID.AppID() << std::endl;
-    }
-    */
-    
-	title();
-	
     std::vector<std::pair<std::string, uint32>> arguments;
     for (int i = 0; i < friend_count; ++i) {
         CSteamID id = SteamFriends()->GetFriendByIndex(i, k_EFriendFlagAll);
         const char *name = SteamFriends()->GetFriendPersonaName(id);
         const char *connect = SteamFriends()->GetFriendRichPresence( id, "connect");
         FriendGameInfo_t friend_info = {};
-        SteamFriends()->GetFriendGamePlayed(id, &friend_info);
+        bool isSuccess = SteamFriends()->GetFriendGamePlayed(id, &friend_info);
         auto appid = friend_info.m_gameID.AppID();
 		
         if (strlen(connect) > 0) {
             std::cout << arguments.size() << " - " << name << " is playing " << appid << " (" << connect << ").\n";
             arguments.emplace_back(connect, appid);
-        } else {
-            if (friend_info.m_steamIDLobby != k_steamIDNil) {
+        } else if (isSuccess && friend_info.m_steamIDLobby != k_steamIDNil) {
                 std::string connect = "+connect_lobby " + std::to_string(friend_info.m_steamIDLobby.ConvertToUint64());
                 std::cout << arguments.size() << " - " << name << " is playing " << appid << " (" << connect << ").\n";
                 arguments.emplace_back(connect, appid);
-            }
-        }
+        } else if (isSuccess) {
+			std::cout << name << " is playing " << appid << std::endl;
+		} else {
+			std::cout << name << " is found in network " << std::endl;
+		}
     }
 	
     std::cout << arguments.size() << " - Refresh.\n\n";
