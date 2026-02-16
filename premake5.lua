@@ -267,6 +267,14 @@ local overlay_files = {
     "overlay_experimental/**",
 }
 
+-- ImGui source files from ingame_overlay dependency
+local imgui_files = {
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
+}
+
 local detours_files = {
     "libs/detours/**",
 }
@@ -867,26 +875,11 @@ project "api_experimental"
     files { -- added to all filters, later defines will be appended
         common_files,
         overlay_files,
+        imgui_files, -- ImGui sources from ingame_overlay
     }
     removefiles {
         'libs/detours/uimports.cc',
     }
-    -- Add ImGui sources from ingame_overlay for x32
-    filter { "platforms:x32", }
-        files {
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
-        }
-    -- Add ImGui sources from ingame_overlay for x64
-    filter { "platforms:x64", }
-        files {
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
-        }
     -- deps
     filter { 'options:incdeps', "platforms:x32", }
         files {
@@ -1015,27 +1008,12 @@ project "steamclient_experimental"
     files { -- added to all filters, later defines will be appended
         common_files,
         overlay_files,
+        imgui_files, -- ImGui sources from ingame_overlay
     }
     removefiles {
         'libs/detours/uimports.cc',
         'dll/flat.cpp',
     }
-    -- Add ImGui sources from ingame_overlay for x32
-    filter { "platforms:x32", }
-        files {
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
-        }
-    -- Add ImGui sources from ingame_overlay for x64
-    filter { "platforms:x64", }
-        files {
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
-            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
-        }
     -- deps
     filter { 'options:incdeps', "platforms:x32", }
         files {
