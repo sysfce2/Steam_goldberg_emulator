@@ -71,6 +71,11 @@ struct Avatar_Numbers Steam_Friends::add_friend_avatars(CSteamID id)
         "account_avatar.jpg",
         "account_avatar.jpeg",
     };
+    static const std::initializer_list<std::string> avatar_icons_default = {
+        "account_avatar_default.png",
+        "account_avatar_default.jpg",
+        "account_avatar_default.jpeg",
+    };
 
     if (!settings->disable_account_avatar && (id == settings->get_local_steam_id())) {
         std::string file_path{};
@@ -104,7 +109,7 @@ struct Avatar_Numbers Steam_Friends::add_friend_avatars(CSteamID id)
 
             // try local location first, then try global location
             for (const auto &settings_path : { Local_Storage::get_game_settings_path(), local_storage->get_global_settings_path() }) {
-                for (const auto &file_name : avatar_icons) {
+                for (const auto &file_name : avatar_icons_default) {
                     file_path = settings_path + file_name;
                     file_size = file_size_(file_path);
                     if (file_size) break;

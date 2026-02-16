@@ -223,6 +223,8 @@ An example that was made for PayDay 2 can be found in `.\steam_settings.EXAMPLE`
 Copy a `png`, or a `jpg`, or a `jpeg` image file to your `.\GSE Settings\settings` folder and name it `account_avatar`  
 You can also place this file inside the local `.\steam_settings` folder of the game  
 
+You can set a default profile picture for users who are missing one by copying a similar file called `account_avatar_default`.  
+
 Players avatars are shared over the local network
 
 You can find an example in `.\steam_settings.EXAMPLE`
