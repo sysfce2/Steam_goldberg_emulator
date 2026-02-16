@@ -407,6 +407,7 @@ local common_link_win = {
     "Winmm"    .. static_postfix,
     "Bcrypt"   .. static_postfix,
     "Dbghelp"  .. static_postfix,
+    "Ntdll"    .. static_postfix, -- for NtQueryInformationProcess/Thread
     -- gamepad
     "Xinput"   .. static_postfix,
     -- imgui / overlay
@@ -427,6 +428,7 @@ table_append(common_link_linux, deps_link)
 -- overlay libs
 local overlay_link = {
     "ingame_overlay",
+    "imgui", -- ImGui library from ingame_overlay
     "system", -- ingame_overlay dependency
     "mini_detour", -- ingame_overlay dependency
 }
