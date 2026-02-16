@@ -1020,6 +1020,22 @@ project "steamclient_experimental"
         'libs/detours/uimports.cc',
         'dll/flat.cpp',
     }
+    -- Add ImGui sources from ingame_overlay for x32
+    filter { "platforms:x32", }
+        files {
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
+        }
+    -- Add ImGui sources from ingame_overlay for x64
+    filter { "platforms:x64", }
+        files {
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
+            path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
+        }
     -- deps
     filter { 'options:incdeps', "platforms:x32", }
         files {
