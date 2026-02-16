@@ -267,6 +267,14 @@ local overlay_files = {
     "overlay_experimental/**",
 }
 
+-- ImGui source files from ingame_overlay dependency
+local imgui_files = {
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui.cpp"),
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_draw.cpp"),
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_tables.cpp"),
+    path.join(deps_dir, "ingame_overlay/deps/ImGui/imgui_widgets.cpp"),
+}
+
 local detours_files = {
     "libs/detours/**",
 }
@@ -407,6 +415,7 @@ local common_link_win = {
     "Winmm"    .. static_postfix,
     "Bcrypt"   .. static_postfix,
     "Dbghelp"  .. static_postfix,
+    "Ntdll"    .. static_postfix, -- for NtQueryInformationProcess/Thread
     -- gamepad
     "Xinput"   .. static_postfix,
     -- imgui / overlay
@@ -866,6 +875,7 @@ project "api_experimental"
     files { -- added to all filters, later defines will be appended
         common_files,
         overlay_files,
+        imgui_files, -- ImGui sources from ingame_overlay
     }
     removefiles {
         'libs/detours/uimports.cc',
@@ -998,6 +1008,7 @@ project "steamclient_experimental"
     files { -- added to all filters, later defines will be appended
         common_files,
         overlay_files,
+        imgui_files, -- ImGui sources from ingame_overlay
     }
     removefiles {
         'libs/detours/uimports.cc',

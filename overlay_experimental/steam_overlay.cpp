@@ -245,8 +245,8 @@ void Steam_Overlay::create_fonts()
     font_cfg.OversampleV = 1;
     font_cfg.SizePixels = font_size;
     // non-latin characters look ugly and squeezed without this horizontal spacing
-    font_cfg.GlyphExtraSpacing.x = settings->overlay_appearance.font_glyph_extra_spacing_x; 
-    font_cfg.GlyphExtraSpacing.y = settings->overlay_appearance.font_glyph_extra_spacing_y;
+    font_cfg.GlyphExtraAdvanceX = settings->overlay_appearance.font_glyph_extra_spacing_x;
+    // Y-axis spacing removed: ImGui replaced GlyphExtraSpacing (ImVec2) with GlyphExtraAdvanceX (float) in 2025
 
     for (const auto &ach : achievements) {
         font_builder.AddText(ach.title.c_str());
@@ -1250,7 +1250,6 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
     auto image_info = settings->get_image(icon_handle);
     if (image_info) {
         int icon_size = static_cast<int>(settings->overlay_appearance.icon_size);
-        icon_rsrc->SetAutoLoad(InGameOverlay::ResourceAutoLoad_t::OnUse);
         icon_rsrc->AttachResource((void*)image_info->data.c_str(), icon_size, icon_size);
         
         PRINT_DEBUG("'%s' (result=%i)", ach.name.c_str(), (int)icon_rsrc->GetResourceId() != 0);
