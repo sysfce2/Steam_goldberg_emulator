@@ -246,7 +246,7 @@ void Steam_Overlay::create_fonts()
     font_cfg.SizePixels = font_size;
     // non-latin characters look ugly and squeezed without this horizontal spacing
     font_cfg.GlyphExtraAdvanceX = settings->overlay_appearance.font_glyph_extra_spacing_x;
-    // Note: GlyphExtraSpacing.y was never used by ImGui, vertical spacing is controlled by ItemSpacing.y in ImGui style
+    // Y-axis spacing removed: ImGui replaced GlyphExtraSpacing (ImVec2) with GlyphExtraAdvanceX (float) in 2025
 
     for (const auto &ach : achievements) {
         font_builder.AddText(ach.title.c_str());
