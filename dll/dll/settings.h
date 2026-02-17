@@ -222,6 +222,7 @@ private:
     std::set<AppId_t> installed_app_ids{};
 
     std::map<AppId_t, std::string> app_paths{};
+    std::map<AppId_t, std::string> purchased_keys{};
     std::vector<struct Mod_entry> mods{};
     std::map<std::string, Leaderboard_config> leaderboards{};
     std::map<std::string, Stat_config> stats{};
@@ -434,6 +435,10 @@ public:
     //App Install paths
     void setAppInstallPath(AppId_t appID, const std::string &path);
     bool getAppInstallPath(AppId_t appID, std::string &path);
+
+    //Purchased keys
+    void setPurchasedKey(AppId_t appID, const std::string &key);
+    bool getPurchasedKey(AppId_t appID, std::string &key) const;
 
     //mod stuff
     void addMod(PublishedFileId_t id, const std::string &title, const std::string &path);

@@ -371,6 +371,23 @@ bool Settings::getAppInstallPath(AppId_t appID, std::string &path)
     return false;
 }
 
+void Settings::setPurchasedKey(AppId_t appID, const std::string &key)
+{
+    purchased_keys[appID] = key;
+}
+
+bool Settings::getPurchasedKey(AppId_t appID, std::string &key) const
+{
+    auto it = purchased_keys.find(appID);
+    if (purchased_keys.end() != it)
+    {
+        key = it->second;
+        return true;
+    }
+
+    return false;
+}
+
 void Settings::setLeaderboard(const std::string &leaderboard, enum ELeaderboardSortMethod sort_method, enum ELeaderboardDisplayType display_type)
 {
     Leaderboard_config leader{};

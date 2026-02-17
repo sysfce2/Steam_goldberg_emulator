@@ -23,9 +23,6 @@ void Steam_Apps::FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse_t& data, 
 {
     data.m_nAppID = nAppID;
     if (ok_result) {
-        // TODO maybe read this from a config file "purchased_keys.txt":
-        // 480=AAAAA-BBBBB-CCCCC-DDDDD
-        // 218620=XYZFJ-13370-98765
         size_t min_len = key.size() < k_cubAppProofOfPurchaseKeyMax
             ? key.size()
             : k_cubAppProofOfPurchaseKeyMax - 1; // -1 because we need space for null
@@ -45,9 +42,6 @@ void Steam_Apps::FillProofOfPurchaseKey( AppProofOfPurchaseKeyResponse007_t& dat
 {
     data.m_nAppID = nAppID;
     if (ok_result) {
-        // TODO maybe read this from a config file "purchased_keys.txt":
-        // 480=AAAAA-BBBBB-CCCCC-DDDDD
-        // 218620=XYZFJ-13370-98765
         size_t min_len = key.size() < k_cubAppProofOfPurchaseKeyMax
             ? key.size()
             : k_cubAppProofOfPurchaseKeyMax - 1; // -1 because we need space for null
@@ -269,7 +263,7 @@ void Steam_Apps::UninstallDLC( AppId_t nAppID )
 // the key is available (which may be immediately).
 void Steam_Apps::RequestAppProofOfPurchaseKey( AppId_t nAppID )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%u", nAppID);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     AppProofOfPurchaseKeyResponse_t data{};
@@ -279,9 +273,14 @@ void Steam_Apps::RequestAppProofOfPurchaseKey( AppId_t nAppID )
     if (nAppID == 0 || nAppID == UINT32_MAX) {
         FillProofOfPurchaseKey(data, nAppID, false);
     } else if (nAppID == settings->get_local_game_id().AppID() || settings->hasDLC(nAppID)) {
-        FillProofOfPurchaseKey(data, nAppID, true);
+        std::string key{};
+        settings->getPurchasedKey(nAppID, key);
+        if (!key.empty()) {
+            FillProofOfPurchaseKey(data, nAppID, true, key);
+        } else {
+            FillProofOfPurchaseKey(data, nAppID, true);
+        }
     } else {
-        //TODO what to do here?
         FillProofOfPurchaseKey(data, nAppID, false);
     }
 
@@ -290,7 +289,7 @@ void Steam_Apps::RequestAppProofOfPurchaseKey( AppId_t nAppID )
 
 void Steam_Apps::RequestAppProofOfPurchaseKey_OLD( AppId_t nAppID )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%u", nAppID);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     AppProofOfPurchaseKeyResponse007_t data{};
@@ -300,9 +299,14 @@ void Steam_Apps::RequestAppProofOfPurchaseKey_OLD( AppId_t nAppID )
     if (nAppID == 0 || nAppID == UINT32_MAX) {
         FillProofOfPurchaseKey(data, nAppID, false);
     } else if (nAppID == settings->get_local_game_id().AppID() || settings->hasDLC(nAppID)) {
-        FillProofOfPurchaseKey(data, nAppID, true);
+        std::string key{};
+        settings->getPurchasedKey(nAppID, key);
+        if (!key.empty()) {
+            FillProofOfPurchaseKey(data, nAppID, true, key);
+        } else {
+            FillProofOfPurchaseKey(data, nAppID, true);
+        }
     } else {
-        //TODO what to do here?
         FillProofOfPurchaseKey(data, nAppID, false);
     }
 
@@ -454,24 +458,36 @@ int Steam_Apps::GetAppBuildId()
 // member is k_uAppIdInvalid (zero).
 void Steam_Apps::RequestAllProofOfPurchaseKeys()
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     // current app
     {
         AppProofOfPurchaseKeyResponse_t data{};
-        FillProofOfPurchaseKey(data, settings->get_local_game_id().AppID(), true);
+        std::string key{};
+        AppId_t app_id = settings->get_local_game_id().AppID();
+        settings->getPurchasedKey(app_id, key);
+        if (!key.empty()) {
+            FillProofOfPurchaseKey(data, app_id, true, key);
+        } else {
+            FillProofOfPurchaseKey(data, app_id, true);
+        }
         callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
     }
 
     // DLCs
-    const auto count = settings->DLCCount();
     for (unsigned i = 0; i < settings->DLCCount(); i++) {
         AppId_t app_id{};
         bool available{};
         std::string name{};
         if (settings->getDLC(i, app_id, available, name)) {
             AppProofOfPurchaseKeyResponse_t data{};
-            FillProofOfPurchaseKey(data, app_id, true);
+            std::string key{};
+            settings->getPurchasedKey(app_id, key);
+            if (!key.empty()) {
+                FillProofOfPurchaseKey(data, app_id, true, key);
+            } else {
+                FillProofOfPurchaseKey(data, app_id, true);
+            }
             callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
         }
     }

@@ -1012,6 +1012,41 @@ static void parse_subscribed_groups(class Settings *settings_client, class Setti
 
 }
 
+// purchased_keys.txt
+static void parse_purchased_keys(class Settings *settings_client, class Settings *settings_server)
+{
+    std::string purchased_keys_path = Local_Storage::get_game_settings_path() + "purchased_keys.txt";
+    std::ifstream input( std::filesystem::u8path(purchased_keys_path) );
+    if (input.is_open()) {
+        PRINT_DEBUG("Reading purchased keys");
+        common_helpers::consume_bom(input);
+        for( std::string line; getline( input, line ); ) {
+            if (!line.empty() && line[line.length()-1] == '\n') {
+                line.pop_back();
+            }
+
+            if (!line.empty() && line[line.length()-1] == '\r') {
+                line.pop_back();
+            }
+
+            // skip empty lines and comments
+            if (line.empty() || line[0] == '#') continue;
+
+            try {
+                size_t delimiter = line.find('=');
+                if (delimiter != std::string::npos) {
+                    AppId_t app_id = std::stoul(line.substr(0, delimiter));
+                    std::string key = line.substr(delimiter + 1);
+                    settings_client->setPurchasedKey(app_id, key);
+                    settings_server->setPurchasedKey(app_id, key);
+                    PRINT_DEBUG("Added purchased key for app ID %u", app_id);
+                }
+            } catch (...) {}
+        }
+    }
+
+}
+
 // installed_app_ids.txt
 static void parse_installed_app_Ids(class Settings *settings_client, class Settings *settings_server)
 {
@@ -1921,6 +1956,7 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     parse_dlc(settings_client, settings_server);
     parse_installed_app_Ids(settings_client, settings_server);
     parse_app_paths(settings_client, settings_server, program_path);
+    parse_purchased_keys(settings_client, settings_server);
 
     parse_leaderboards(settings_client, settings_server);
     parse_stats(settings_client, settings_server, local_storage);

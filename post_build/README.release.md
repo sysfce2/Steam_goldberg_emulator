@@ -96,14 +96,21 @@ See `.\steam_settings.EXAMPLE\subscribed_groups_clans.EXAMPLE.txt` for an exampl
 
 ---
 
+## Purchased Keys:
+Some games request CD keys or proof-of-purchase keys for installed apps and DLCs  
+You can provide these keys to the game with a `steam_settings\purchased_keys.txt` file  
+
+The format is `appid=KEY` with one entry per line. Comments start with `#`  
+See `steam_settings.EXAMPLE\purchased_keys.EXAMPLE.txt` for an example
+
+---
+
 ## App Paths:
 Some rare games might need to be provided one or more paths to app ids, for example the path to where a dlc is installed 
 This sets the paths returned by the `Steam_Apps::GetAppInstallDir` function  
 
 See `[app::paths]` inside `.\steam_settings.EXAMPLE\configs.app.EXAMPLE.ini` for an example  
-
-Note that paths are treated as relative paths **from where the steam_api dll is located**.
----
+Note that paths are treated as relative paths **from where the steam_api dll is located**
 
 ---
 
