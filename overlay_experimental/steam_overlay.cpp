@@ -224,7 +224,13 @@ bool Steam_Overlay::renderer_hook_proc()
 
     bool started = _renderer->StartHook(overlay_toggle_callback, overlay_toggle_keys, toggle_keys_count, &fonts_atlas);
     PRINT_DEBUG("started renderer hook (result=%i)", (int)started);
-    
+
+    // Limit GPU texture uploads per frame to avoid the DX12 WaitForSingleObject stall that
+    // causes a visible lag spike on first overlay open (especially in PlayStation ports).
+    // Each batch costs one fence signal+wait on DX12, so fewer textures per batch = less stall.
+    _renderer->SetAutoLoadBatchSize(settings->overlay_auto_load_batch_size);
+    PRINT_DEBUG("set achievement icon batch size to %u", settings->overlay_auto_load_batch_size);
+
     return true;
 }
 
@@ -418,6 +424,22 @@ void Steam_Overlay::overlay_state_hook(bool ready)
             ImGuiStyle &style = ImGui::GetStyle();
             // Disable round window
             style.WindowRounding = 0.0;
+        }
+
+        // Eagerly start uploading achievement icons as soon as the renderer is ready,
+        // one batch per rendered frame. This pre-warms the GPU textures so that when
+        // the user actually opens the overlay (Shift+Tab) the icons are already loaded
+        // and no stall occurs. This is especially impactful on DX12 where each batch
+        // costs a WaitForSingleObject fence wait on the render thread.
+        if (settings->overlay_upload_achs_icons_to_gpu && !achievements.empty()) {
+            PRINT_DEBUG("renderer ready: beginning background preload of %zu achievement icons", achievements.size());
+            allow_renderer_frame_processing(true);
+            for (auto &ach : achievements) {
+                // upload the locked (gray) icon first — shown most often before user unlocks
+                try_load_ach_icon(ach, false, true);
+                try_load_ach_icon(ach, true, true);
+            }
+            allow_renderer_frame_processing(false);
         }
     }
 }

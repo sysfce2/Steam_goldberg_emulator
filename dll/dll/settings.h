@@ -356,6 +356,9 @@ public:
     bool disable_overlay_warning_local_save = false;
     // should the overlay upload icons to the GPU and display them
     bool overlay_upload_achs_icons_to_gpu = true;
+    // number of achievement icons to upload to the GPU per frame (1 = one texture per frame, reduces stutter on first open especially in DX12 games)
+    // default 1: spread uploads over multiple frames to avoid a WaitForSingleObject stall on DX12
+    uint32_t overlay_auto_load_batch_size = 1;
     //disable overlay warning for bad app ID (= 0)
     bool disable_overlay_warning_bad_appid = false;
     // disable all overlay warnings

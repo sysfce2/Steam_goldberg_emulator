@@ -1548,6 +1548,20 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
     settings_client->overlay_upload_achs_icons_to_gpu = ini.GetBoolValue("overlay::general", "upload_achievements_icons_to_gpu", settings_client->overlay_upload_achs_icons_to_gpu);
     settings_server->overlay_upload_achs_icons_to_gpu = ini.GetBoolValue("overlay::general", "upload_achievements_icons_to_gpu", settings_server->overlay_upload_achs_icons_to_gpu);
 
+    {
+        // How many achievement icon textures to upload to the GPU per rendered frame.
+        // Lowering this (e.g. to 1) spreads uploads across many frames and avoids the
+        // WaitForSingleObject CPU stall in the DX12 backend that causes lag on first overlay open,
+        // particularly in PlayStation ports (God of War Ragnarok, etc.).
+        // Default: 1  (safe for all renderers; raise only if you want faster initial icon loading)
+        auto val = ini.GetLongValue("overlay::general", "achievement_icon_load_batch_size", (long)settings_client->overlay_auto_load_batch_size);
+        if (val > 0) {
+            settings_client->overlay_auto_load_batch_size = (uint32_t)val;
+            settings_server->overlay_auto_load_batch_size = (uint32_t)val;
+            PRINT_DEBUG("Setting overlay achievement icon batch size to %u", (uint32_t)val);
+        }
+    }
+
     settings_client->overlay_always_show_user_info = ini.GetBoolValue("overlay::general", "overlay_always_show_user_info", settings_client->overlay_always_show_user_info);
     settings_server->overlay_always_show_user_info = ini.GetBoolValue("overlay::general", "overlay_always_show_user_info", settings_server->overlay_always_show_user_info);
 
