@@ -436,7 +436,6 @@ void Steam_Overlay::load_achievements_data()
 
     PRINT_DEBUG("count=%u, loaded=%zu", achievements_num, achievements.size());
 
-    Steam_User_Stats* steamUserStats = get_steam_client()->steam_user_stats;
     if (steamUserStats->global_achievement_percentages_populated) {
         // data already available (e.g. game called the API before overlay init)
         if (settings->overlay_achievement_sort_by_global_percent) {
