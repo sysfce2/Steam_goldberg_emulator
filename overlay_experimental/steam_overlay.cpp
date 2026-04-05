@@ -1621,21 +1621,19 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // --- Bar: always rendered; symbol + status inside at left, x/y at right ---
+                    // --- Bar: always rendered; symbol + date (if achieved) inside at left, x/y at right ---
                     {
                         const char *sym = achieved ? u8"\u2713" : u8"\u2717";
                         ImU32 sym_col = achieved ? IM_COL32(0, 220, 0, 255) : IM_COL32(220, 0, 0, 255);
 
-                        // build status string
-                        char status_buf[128]{};
+                        // build date string (only when achieved)
+                        char date_buf[128]{};
                         if (achieved) {
-                            char date_buf[80]{};
+                            char tmp[80]{};
                             time_t unlock_time = (time_t)x.unlock_time;
-                            size_t written = std::strftime(date_buf, sizeof(date_buf), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
-                            if (!written) std::strftime(date_buf, sizeof(date_buf), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
-                            snprintf(status_buf, sizeof(status_buf), translationAchievedOn[current_language], date_buf);
-                        } else {
-                            snprintf(status_buf, sizeof(status_buf), "%s", translationNotAchieved[current_language]);
+                            size_t written = std::strftime(tmp, sizeof(tmp), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
+                            if (!written) std::strftime(tmp, sizeof(tmp), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
+                            snprintf(date_buf, sizeof(date_buf), "%s", tmp);
                         }
 
                         // build x/y string
@@ -1656,11 +1654,13 @@ void Steam_Overlay::render_main_window()
                         ImVec2 sym_pos = { bar_pos.x + 4.0f, bar_pos.y + (bar_h - sym_sz.y) * 0.5f };
                         dl->AddText(sym_pos, sym_col, sym);
 
-                        // status text after symbol
-                        float status_x = sym_pos.x + sym_sz.x + 4.0f;
-                        ImVec2 status_sz = ImGui::CalcTextSize(status_buf);
-                        ImVec2 status_pos = { status_x, bar_pos.y + (bar_h - status_sz.y) * 0.5f };
-                        dl->AddText(status_pos, IM_COL32(255, 255, 255, 255), status_buf);
+                        // date after symbol (only when achieved)
+                        if (achieved && date_buf[0]) {
+                            float date_x = sym_pos.x + sym_sz.x + 4.0f;
+                            ImVec2 date_sz = ImGui::CalcTextSize(date_buf);
+                            ImVec2 date_pos = { date_x, bar_pos.y + (bar_h - date_sz.y) * 0.5f };
+                            dl->AddText(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
+                        }
 
                         // x/y at right inside bar
                         if (has_progress) {
