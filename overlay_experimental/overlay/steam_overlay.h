@@ -125,6 +125,16 @@ class Steam_Overlay
     std::vector<Overlay_Achievement> achievements{};
     std::map<std::string, float> ach_global_percentages{}; // fetched from Steam Web API
     size_t last_loaded_ach_icon{};
+
+    // snapshot of original achievement data for the "Reset" button (overlay debug use only)
+    struct AchievementSnapshot {
+        std::string name{};
+        bool achieved{};
+        uint32 progress{};
+        uint32 unlock_time{};
+    };
+    std::vector<AchievementSnapshot> achievements_snapshot{};
+    std::map<std::string, float> ach_global_percentages_snapshot{};
     
     bool show_overlay = false;
     bool show_user_info = false;

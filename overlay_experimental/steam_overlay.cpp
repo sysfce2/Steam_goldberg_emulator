@@ -14,6 +14,8 @@
 #include <utility>
 #include <unordered_set>
 #include <unordered_map>
+#include <random>
+#include <ctime>
 
 #include "InGameOverlay/RendererDetector.h"
 
@@ -437,6 +439,12 @@ void Steam_Overlay::load_achievements_data()
         if (!setup_overlay_called) return;
     }
 
+    // save a snapshot for the Reset button
+    achievements_snapshot.clear();
+    for (const auto &a : achievements) {
+        achievements_snapshot.push_back({ a.name, a.achieved, a.progress, a.unlock_time });
+    }
+
     PRINT_DEBUG("count=%u, loaded=%zu", achievements_num, achievements.size());
 
     if (steamUserStats->global_achievement_percentages_populated) {
@@ -446,6 +454,7 @@ void Steam_Overlay::load_achievements_data()
         } else {
             ach_global_percentages = steamUserStats->global_achievement_percentages;
         }
+        ach_global_percentages_snapshot = ach_global_percentages;
     } else {
         // trigger fetch if the game hasn't done so yet; result arrives via steam_run_callback
         steamUserStats->RequestGlobalAchievementPercentages();
@@ -456,6 +465,7 @@ void Steam_Overlay::SortAchievementsByGlobalPercent(const std::map<std::string, 
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     ach_global_percentages = percentages;
+    ach_global_percentages_snapshot = percentages;
     // Match Steam's display order:
     //   1. Unlocked achievements, sorted by unlock time descending (most recent first)
     //   2. Locked achievements, sorted by global percentage descending (easiest first)
@@ -1556,6 +1566,63 @@ void Steam_Overlay::render_main_window()
             ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin(translationAchievementWindow[current_language], &show_achievements)) {
                 ImGui::Text("%s", translationListOfAchievements[current_language]);
+                ImGui::SameLine();
+                if (ImGui::Button("Reset##ach_reset") && !achievements_snapshot.empty()) {
+                    for (auto &ax : achievements) {
+                        for (const auto &snap : achievements_snapshot) {
+                            if (snap.name == ax.name) {
+                                ax.achieved    = snap.achieved;
+                                ax.progress    = snap.progress;
+                                ax.unlock_time = snap.unlock_time;
+                                break;
+                            }
+                        }
+                    }
+                    ach_global_percentages = ach_global_percentages_snapshot;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Simulate##ach_simulate")) {
+                    // random seed based on current time
+                    static std::mt19937 rng(std::random_device{}());
+                    std::uniform_int_distribution<uint32_t> percent_dist(0, 100);
+                    std::uniform_real_distribution<float> global_dist(0.5f, 99.9f);
+                    const uint32_t now_ts = (uint32_t)std::time(nullptr);
+
+                    for (auto &ax : achievements) {
+                        if (ax.hidden) continue; // skip hidden achievements
+
+                        uint32_t roll = percent_dist(rng);
+                        if (ax.max_progress > 0) {
+                            // progress achievement: ~40% chance fully achieved, ~40% partial, ~20% zero
+                            if (roll < 40) {
+                                ax.achieved = true;
+                                ax.progress = ax.max_progress;
+                                ax.unlock_time = now_ts - percent_dist(rng) * 86400u;
+                            } else if (roll < 80) {
+                                ax.achieved = false;
+                                std::uniform_int_distribution<uint32_t> prog_dist(1, ax.max_progress - 1);
+                                ax.progress = (ax.max_progress > 1) ? prog_dist(rng) : 0;
+                                ax.unlock_time = 0;
+                            } else {
+                                ax.achieved = false;
+                                ax.progress = 0;
+                                ax.unlock_time = 0;
+                            }
+                        } else {
+                            // regular achievement: ~50% chance achieved
+                            if (roll < 50) {
+                                ax.achieved = true;
+                                ax.unlock_time = now_ts - percent_dist(rng) * 86400u;
+                            } else {
+                                ax.achieved = false;
+                                ax.unlock_time = 0;
+                            }
+                        }
+
+                        // simulate a global percentage for this achievement
+                        ach_global_percentages[ax.name] = global_dist(rng);
+                    }
+                }
                 ImGui::BeginChild(translationAchievements[current_language]);
                 for (auto & x : achievements) {
                     bool achieved = x.achieved;
