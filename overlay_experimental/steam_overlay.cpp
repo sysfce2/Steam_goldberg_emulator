@@ -1549,7 +1549,9 @@ void Steam_Overlay::render_main_window()
 
         // user clicked on "show achievements" button
         if (show_achievements && achievements.size()) {
-            ImGui::SetNextWindowSizeConstraints(ImVec2(ImGui::GetFontSize() * 32, ImGui::GetFontSize() * 32), ImVec2(8192, 8192));
+            const float noti_w = io.DisplaySize.x * Notification::width_percent;
+            const float min_w = std::max(ImGui::GetFontSize() * 32, noti_w);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(min_w, ImGui::GetFontSize() * 32), ImVec2(8192, 8192));
             ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin(translationAchievementWindow[current_language], &show_achievements)) {
                 ImGui::Text("%s", translationListOfAchievements[current_language]);
