@@ -646,7 +646,7 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    bool can_fetch = !settings->disable_networking && !settings->offline
+    bool can_fetch = !settings->disable_networking && !settings->is_offline()
         && !global_achievement_percentages_fetching
         && !global_achievement_percentages_populated;
     if (!can_fetch) {
