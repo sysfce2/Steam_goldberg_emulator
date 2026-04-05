@@ -1570,7 +1570,7 @@ void Steam_Overlay::render_main_window()
                     bool rendered = false;
 
                     if (has_icon) {
-                        // title above the table, left edge aligned with the ✓/✗ symbol centered under the icon
+                        // title above the table, left edge aligned with the ✓/✗ symbol
                         {
                             const char *sym_for_measure = achieved ? u8"\u2713" : u8"\u2717";
                             float sym_w = ImGui::CalcTextSize(sym_for_measure).x;
@@ -1600,33 +1600,8 @@ void Steam_Overlay::render_main_window()
                             ImGui::TableSetColumnIndex(1);
                             if (!hidden) {
                                 ImGui::TextWrapped("%s", x.description.c_str());
-                            }
-
-                            // --- Row 2: ✓/✗ centered under icon | date or "not achieved" ---
-                            ImGui::TableNextRow();
-                            ImGui::TableSetColumnIndex(0);
-                            {
-                                const char *sym = achieved ? u8"\u2713" : u8"\u2717";
-                                float sym_w = ImGui::CalcTextSize(sym).x;
-                                float offset = (icon_col_w - sym_w) * 0.5f;
-                                if (offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
-                                if (achieved) {
-                                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", sym);
-                                } else {
-                                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", sym);
-                                }
-                            }
-                            ImGui::TableSetColumnIndex(1);
-                            if (achieved) {
-                                char buffer[80]{};
-                                time_t unlock_time = (time_t)x.unlock_time;
-                                size_t written = std::strftime(buffer, sizeof(buffer), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
-                                if (!written) {
-                                    std::strftime(buffer, sizeof(buffer), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
-                                }
-                                ImGui::Text(translationAchievedOn[current_language], buffer);
                             } else {
-                                ImGui::Text("%s", translationNotAchieved[current_language]);
+                                ImGui::TextDisabled("%s", x.description.c_str());
                             }
 
                             ImGui::EndTable();
@@ -1637,10 +1612,15 @@ void Steam_Overlay::render_main_window()
                         // no icon: render everything inline
                         if (hidden) {
                             ImGui::Text("%s", translationHiddenAchievement[current_language]);
+                            ImGui::TextDisabled("%s", x.description.c_str());
                         } else {
                             ImGui::Text("%s", x.title.c_str());
                             ImGui::TextWrapped("%s", x.description.c_str());
                         }
+                    }
+
+                    // --- Full-width: ✓/✗ + date/status text ---
+                    {
                         const char *sym = achieved ? u8"\u2713" : u8"\u2717";
                         if (achieved) {
                             ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", sym);
@@ -1659,24 +1639,27 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // --- Global % (full width, below the table) ---
+                    // --- Progress bar: always shown when max_progress > 0, x/y centered ---
+                    if (!x.achieved && x.max_progress > 0) {
+                        char pbuf[32]{};
+                        snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
+                        ImVec2 bar_pos = ImGui::GetCursorScreenPos();
+                        float bar_width = ImGui::GetContentRegionAvail().x;
+                        ImGui::ProgressBar((float)x.progress / (float)x.max_progress, ImVec2(-1.0f, bar_h), "");
+                        ImVec2 txt_sz = ImGui::CalcTextSize(pbuf);
+                        ImVec2 txt_pos = {
+                            bar_pos.x + (bar_width - txt_sz.x) * 0.5f,
+                            bar_pos.y + (bar_h - txt_sz.y) * 0.5f
+                        };
+                        ImGui::GetWindowDrawList()->AddText(txt_pos, IM_COL32(255, 255, 255, 255), pbuf);
+                    }
+
+                    // --- Global % ---
                     {
                         auto it = ach_global_percentages.find(x.name);
                         if (it != ach_global_percentages.end()) {
                             ImGui::TextDisabled(translationGlobalAchievementPercent[current_language], it->second);
                         }
-                    }
-
-                    // --- Progress bar (full width, x/y right-aligned inside bar) ---
-                    if (!x.achieved && x.progress > 0 && x.max_progress > 0 && (!hidden || x.progress > 0)) {
-                        char pbuf[32]{};
-                        snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
-                        ImVec2 bar_pos = ImGui::GetCursorScreenPos();
-                        float bar_width = ImGui::GetContentRegionAvail().x;
-                        ImGui::ProgressBar((float)x.progress / x.max_progress, ImVec2(-1.0f, bar_h), "");
-                        ImVec2 txt_sz = ImGui::CalcTextSize(pbuf);
-                        ImVec2 txt_pos = { bar_pos.x + bar_width - txt_sz.x - 4.0f, bar_pos.y + (bar_h - txt_sz.y) * 0.5f };
-                        ImGui::GetWindowDrawList()->AddText(txt_pos, IM_COL32(255, 255, 255, 255), pbuf);
                     }
 
                     ImGui::Separator();

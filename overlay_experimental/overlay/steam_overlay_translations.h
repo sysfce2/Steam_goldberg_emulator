@@ -1849,13 +1849,13 @@ const char translationAchievements[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_
 
 const char translationHiddenAchievement[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
 	// 0 - English
-  u8"hidden achievement",
+  u8"Hidden Achievement",
 
 	// 1 - Arabic
-  u8"hidden achievement",
+  u8"إنجاز مخفي",
 
 	// 2 - Bulgarian
-  u8"hidden achievement",
+  u8"Скрито постижение",
 
 	// 3 - Simplified Chinese
   u8"隐藏成就",
@@ -1867,52 +1867,52 @@ const char translationHiddenAchievement[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLA
   u8"Skrytý achievement",
 
 	// 6 - Danish
-  u8"hidden achievement",
+  u8"Skjult præstation",
 
 	// 7 - Dutch
-  u8"hidden achievement",
+  u8"Verborgen prestatie",
 
 	// 8 - Finnish
-  u8"hidden achievement",
+  u8"Piilotettu saavutus",
 
 	// 9 - French
-  u8"hidden achievement",
+  u8"Succès caché",
 
 	// 10 - German
-  u8"hidden achievement",
+  u8"Verstecktes Achievement",
 
 	// 11 - Greek
-  u8"hidden achievement",
+  u8"Κρυφό επίτευγμα",
 
 	// 12 - Hungarian
-  u8"hidden achievement",
+  u8"Rejtett teljesítmény",
 
 	// 13 - Italian
-  u8"hidden achievement",
+  u8"Obiettivo nascosto",
 
 	// 14 - Japanese
-  u8"hidden achievement",
+  u8"非表示の実績",
 
 	// 15 - Korean
-  u8"hidden achievement",
+  u8"숨겨진 도전 과제",
 
 	// 16 - Norwegian
-  u8"hidden achievement",
+  u8"Skjult prestasjon",
 
 	// 17 - Polish
-  u8"ukryte osiągnięcie",
+  u8"Ukryte osiągnięcie",
 
 	// 18 - Portuguese
-  u8"hidden achievement",
+  u8"Troféu oculto",
 
 	// 19 - Brazilian Portuguese
-  u8"conquista oculta",
+  u8"Conquista oculta",
 
 	// 20 - Romanian
-  u8"hidden achievement",
+  u8"Realizare ascunsă",
 
 	// 21 - Russian
-  u8"скрытое достижение",
+  u8"Скрытое достижение",
 
 	// 22 - Spanish
   u8"Logro oculto",
@@ -1921,25 +1921,25 @@ const char translationHiddenAchievement[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLA
   u8"Logro oculto",
 
 	// 24 - Swedish
-  u8"hidden achievement",
+  u8"Dold utmärkelse",
 
 	// 25 - Thai
-  u8"hidden achievement",
+  u8"ความสำเร็จที่ซ่อนอยู่",
 
 	// 26 - Turkish
   u8"Gizli Başarım",
 
 	// 27 - Ukrainian
-  u8"hidden achievement",
+  u8"Приховане досягнення",
 
 	// 28 - Vietnamese
-  u8"hidden achievement",
+  u8"Thành tích ẩn",
 
 	// 29 - Croatian
-  u8"Sakrivena postignuća",
-  
+  u8"Skriveno postignuće",
+
   // 30 - Indonesian
-  u8"hidden achievement",
+  u8"Pencapaian tersembunyi",
   
 };
 
