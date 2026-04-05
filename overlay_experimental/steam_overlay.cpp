@@ -321,6 +321,7 @@ void Steam_Overlay::create_fonts()
         font_builder.AddText(translationHiddenAchievement[i]);
         font_builder.AddText(translationAchievedOn[i]);
         font_builder.AddText(translationNotAchieved[i]);
+        font_builder.AddText(translationGlobalAchievementPercent[i]);
         font_builder.AddText(translationGlobalSettingsWindow[i]);
         font_builder.AddText(translationGlobalSettingsWindowDescription[i]);
         font_builder.AddText(translationUsername[i]);
@@ -435,6 +436,37 @@ void Steam_Overlay::load_achievements_data()
 
     PRINT_DEBUG("count=%u, loaded=%zu", achievements_num, achievements.size());
 
+    if (settings->overlay_achievement_sort_by_global_percent) {
+        Steam_User_Stats* steamUserStats = get_steam_client()->steam_user_stats;
+        if (steamUserStats->global_achievement_percentages_populated) {
+            SortAchievementsByGlobalPercent(steamUserStats->global_achievement_percentages);
+        }
+    } else if (get_steam_client()->steam_user_stats->global_achievement_percentages_populated) {
+        // even without sorting, grab the percentages so they can be displayed
+        ach_global_percentages = get_steam_client()->steam_user_stats->global_achievement_percentages;
+    }
+}
+
+void Steam_Overlay::SortAchievementsByGlobalPercent(const std::map<std::string, float> &percentages)
+{
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    ach_global_percentages = percentages;
+    // Match Steam's display order:
+    //   1. Unlocked achievements, sorted by unlock time descending (most recent first)
+    //   2. Locked achievements, sorted by global percentage descending (easiest first)
+    std::stable_sort(achievements.begin(), achievements.end(),
+        [&percentages](const Overlay_Achievement &a, const Overlay_Achievement &b) {
+            if (a.achieved != b.achieved) return a.achieved > b.achieved; // unlocked before locked
+            if (a.achieved) return a.unlock_time > b.unlock_time;          // unlocked: most recent first
+            // both locked: higher global % first
+            auto ita = percentages.find(a.name);
+            auto itb = percentages.find(b.name);
+            float pa = (ita != percentages.end()) ? ita->second : -1.0f;
+            float pb = (itb != percentages.end()) ? itb->second : -1.0f;
+            return pa > pb;
+        }
+    );
+    PRINT_DEBUG("achievements re-sorted (unlocked by recency, locked by global %)");
 }
 
 // called initially and when window size is updated
@@ -1538,7 +1570,8 @@ void Steam_Overlay::render_main_window()
                             ImGui::TableNextRow(ImGuiTableRowFlags_None, settings->overlay_appearance.icon_size);
 
                             ImGui::TableSetColumnIndex(0);
-                            auto &icon_rsrc = achieved ? x.icon : x.icon_gray;
+                            // hidden locked: always show gray icon (never the color one)
+                            auto &icon_rsrc = (achieved && !hidden) ? x.icon : x.icon_gray;
                             if (icon_rsrc->GetResourceId() != 0) {
                                 ImGui::Image(
                                     icon_rsrc->GetResourceId(),
@@ -1551,12 +1584,11 @@ void Steam_Overlay::render_main_window()
                         }
                     }
                     
-                    // we want to display the ach text regardless the icons were displayed or not
-                    ImGui::Text("%s", x.title.c_str());
-
+                    // hidden locked: replace title and description with generic text (like Steam)
                     if (hidden) {
                         ImGui::Text("%s", translationHiddenAchievement[current_language]);
                     } else {
+                        ImGui::Text("%s", x.title.c_str());
                         ImGui::TextWrapped("%s", x.description.c_str());
                     }
 
@@ -1572,6 +1604,15 @@ void Steam_Overlay::render_main_window()
                     } else {
                         ImGui::TextColored(ImVec4(255, 0, 0, 255), "%s", translationNotAchieved[current_language]);
                     }
+
+                    // show global achievement percentage if available
+                    {
+                        auto it = ach_global_percentages.find(x.name);
+                        if (it != ach_global_percentages.end()) {
+                            ImGui::TextDisabled(translationGlobalAchievementPercent[current_language], it->second);
+                        }
+                    }
+
                     add_ach_progressbar(x);
 
                     if (could_create_ach_table_entry) ImGui::EndTable();

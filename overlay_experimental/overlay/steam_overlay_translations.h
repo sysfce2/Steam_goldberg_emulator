@@ -2135,6 +2135,71 @@ const char translationNotAchieved[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_B
   
 };
 
+const char translationGlobalAchievementPercent[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"%.1f%% of all players have this achievement",
+	// 1 - Arabic
+  u8"%.1f%% of all players have this achievement",
+	// 2 - Bulgarian
+  u8"%.1f%% of all players have this achievement",
+	// 3 - Simplified Chinese
+  u8"%.1f%% 的玩家拥有此成就",
+	// 4 - Traditional Chinese
+  u8"%.1f%% 的玩家擁有此成就",
+	// 5 - Czech
+  u8"%.1f%% hráčů má toto úspěch",
+	// 6 - Danish
+  u8"%.1f%% of all players have this achievement",
+	// 7 - Dutch
+  u8"%.1f%% of all players have this achievement",
+	// 8 - Finnish
+  u8"%.1f%% of all players have this achievement",
+	// 9 - French
+  u8"%.1f%% des joueurs ont ce succès",
+	// 10 - German
+  u8"%.1f%% aller Spieler haben diesen Erfolg",
+	// 11 - Greek
+  u8"%.1f%% of all players have this achievement",
+	// 12 - Hungarian
+  u8"%.1f%% of all players have this achievement",
+	// 13 - Italian
+  u8"%.1f%% of all players have this achievement",
+	// 14 - Japanese
+  u8"%.1f%% of all players have this achievement",
+	// 15 - Korean
+  u8"%.1f%% of all players have this achievement",
+	// 16 - Norwegian
+  u8"%.1f%% of all players have this achievement",
+	// 17 - Polish
+  u8"%.1f%% graczy ma to osiągnięcie",
+	// 18 - Portuguese
+  u8"%.1f%% of all players have this achievement",
+	// 19 - Brazilian Portuguese
+  u8"%.1f%% de todos os jogadores têm esta conquista",
+	// 20 - Romanian
+  u8"%.1f%% of all players have this achievement",
+	// 21 - Russian
+  u8"%.1f%% всех игроков имеют это достижение",
+	// 22 - Spanish
+  u8"%.1f%% de todos los jugadores tienen este logro",
+	// 23 - Latin American
+  u8"%.1f%% de todos los jugadores tienen este logro",
+	// 24 - Swedish
+  u8"%.1f%% of all players have this achievement",
+	// 25 - Thai
+  u8"%.1f%% of all players have this achievement",
+	// 26 - Turkish
+  u8"%.1f%% oyuncunun bu başarımı var",
+	// 27 - Ukrainian
+  u8"%.1f%% of all players have this achievement",
+	// 28 - Vietnamese
+  u8"%.1f%% of all players have this achievement",
+	// 29 - Croatian
+  u8"%.1f%% of all players have this achievement",
+  // 30 - Indonesian
+  u8"%.1f%% of all players have this achievement",
+};
+
 const char translationGlobalSettingsWindow[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
 	// 0 - English
   u8"Global Settings Window",

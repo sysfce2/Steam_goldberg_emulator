@@ -174,6 +174,13 @@ private:
     static void steam_user_stats_run_every_runcb(void *object);
 
 public:
+    // global achievement percentages fetched from Steam Web API (public for overlay access)
+    std::map<std::string, float> global_achievement_percentages{};
+    std::vector<std::pair<std::string, float>> sorted_global_achievement_percentages{}; // sorted descending by percent
+    bool global_achievement_percentages_populated{false};
+    bool global_achievement_percentages_fetching{false};
+    bool global_achievement_percentages_overlay_sorted{false}; // whether the overlay sort has already been applied
+
     Steam_User_Stats(Settings *settings, class Networking *network, Local_Storage *local_storage, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, Steam_Overlay* overlay);
     ~Steam_User_Stats();
 

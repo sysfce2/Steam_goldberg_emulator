@@ -1586,6 +1586,9 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
     settings_client->overlay_upload_achs_icons_to_gpu = ini.GetBoolValue("overlay::general", "upload_achievements_icons_to_gpu", settings_client->overlay_upload_achs_icons_to_gpu);
     settings_server->overlay_upload_achs_icons_to_gpu = ini.GetBoolValue("overlay::general", "upload_achievements_icons_to_gpu", settings_server->overlay_upload_achs_icons_to_gpu);
 
+    settings_client->overlay_achievement_sort_by_global_percent = ini.GetBoolValue("overlay::general", "sort_achievements_by_global_percent", settings_client->overlay_achievement_sort_by_global_percent);
+    settings_server->overlay_achievement_sort_by_global_percent = ini.GetBoolValue("overlay::general", "sort_achievements_by_global_percent", settings_server->overlay_achievement_sort_by_global_percent);
+
     settings_client->overlay_always_show_user_info = ini.GetBoolValue("overlay::general", "overlay_always_show_user_info", settings_client->overlay_always_show_user_info);
     settings_server->overlay_always_show_user_info = ini.GetBoolValue("overlay::general", "overlay_always_show_user_info", settings_server->overlay_always_show_user_info);
 

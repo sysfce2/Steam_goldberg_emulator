@@ -451,6 +451,27 @@ void Steam_User_Stats::steam_run_callback()
     send_updated_stats();
     load_achievements_icons();
     send_pending_user_stats_requests();
+
+    // once global percentages are fetched, push them to overlay once (for display + optional sort)
+    // and persist them into the user achievements.json
+    if (global_achievement_percentages_populated && !global_achievement_percentages_overlay_sorted) {
+        if (overlay) {
+            overlay->SortAchievementsByGlobalPercent(global_achievement_percentages);
+        }
+
+        // write global_percent into every achievement entry and save to disk
+        bool changed = false;
+        for (auto &kv : global_achievement_percentages) {
+            float existing = user_achievements[kv.first].value("global_percent", -1.0f);
+            if (existing != kv.second) {
+                user_achievements[kv.first]["global_percent"] = kv.second;
+                changed = true;
+            }
+        }
+        if (changed) save_achievements();
+
+        global_achievement_percentages_overlay_sorted = true;
+    }
 }
 
 

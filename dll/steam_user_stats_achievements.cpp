@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_user_stats.h"
+#include <curl/curl.h>
 #include <random>
 
 
@@ -629,6 +630,13 @@ bool Steam_User_Stats::GetUserAchievementAndUnlockTime( CSteamID steamIDUser, co
 }
 
 
+static size_t global_ach_percent_curl_write(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    size_t real_size = size * nmemb;
+    static_cast<std::string *>(userp)->append(static_cast<char *>(contents), real_size);
+    return real_size;
+}
+
 // Requests that Steam fetch data on the percentage of players who have received each achievement
 // for the game globally.
 // This call is asynchronous, with the result returned in GlobalAchievementPercentagesReady_t.
@@ -638,12 +646,80 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    GlobalAchievementPercentagesReady_t data{};
-    data.m_eResult = EResult::k_EResultOK;
-    data.m_nGameID = settings->get_local_game_id().ToUint64();
-    auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
-    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
-    return ret;
+    bool can_fetch = !settings->disable_networking && !settings->offline
+        && !global_achievement_percentages_fetching
+        && !global_achievement_percentages_populated;
+    if (!can_fetch) {
+        // offline/networking disabled: fire immediate fake callback
+        GlobalAchievementPercentagesReady_t data{};
+        data.m_eResult = EResult::k_EResultOK;
+        data.m_nGameID = settings->get_local_game_id().ToUint64();
+        auto ret = callback_results->addCallResult(data.k_iCallback, &data, sizeof(data));
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+        return ret;
+    }
+
+    global_achievement_percentages_fetching = true;
+    auto call_res_id = callback_results->reserveCallResult();
+
+    uint64 game_id = settings->get_local_game_id().ToUint64();
+    std::string url = "https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=" + std::to_string(game_id);
+
+    std::thread([this, call_res_id, url, game_id]() {
+        std::string response{};
+
+        CURL *curl = curl_easy_init();
+        if (curl) {
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, global_ach_percent_curl_write);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+            curl_easy_perform(curl);
+            curl_easy_cleanup(curl);
+        }
+
+        bool ok = false;
+        std::map<std::string, float> percentages{};
+        if (!response.empty()) {
+            try {
+                auto j = nlohmann::json::parse(response);
+                for (const auto &entry : j.at("achievementpercentages").at("achievements")) {
+                    std::string name = entry.at("name").get<std::string>();
+                    float percent = entry.at("percent").get<float>();
+                    percentages[name] = percent;
+                }
+                ok = true;
+            } catch (...) {}
+        }
+
+        {
+            std::lock_guard<std::recursive_mutex> lock(global_mutex);
+            global_achievement_percentages_fetching = false;
+            if (ok) {
+                global_achievement_percentages = std::move(percentages);
+                sorted_global_achievement_percentages.clear();
+                for (const auto &kv : global_achievement_percentages) {
+                    sorted_global_achievement_percentages.emplace_back(kv.first, kv.second);
+                }
+                std::sort(sorted_global_achievement_percentages.begin(), sorted_global_achievement_percentages.end(),
+                    [](const std::pair<std::string, float> &a, const std::pair<std::string, float> &b) {
+                        return a.second > b.second;
+                    });
+                global_achievement_percentages_populated = true;
+            }
+        }
+
+        GlobalAchievementPercentagesReady_t data{};
+        data.m_eResult = ok ? EResult::k_EResultOK : EResult::k_EResultFail;
+        data.m_nGameID = game_id;
+        callback_results->addCallResult(call_res_id, data.k_iCallback, &data, sizeof(data));
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    }).detach();
+
+    return call_res_id;
 }
 
 
@@ -656,15 +732,18 @@ int Steam_User_Stats::GetMostAchievedAchievementInfo( char *pchName, uint32 unNa
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (!pchName) return -1;
 
-    std::string name(GetAchievementName(0));
-    if (name.empty()) return -1;
+    if (!global_achievement_percentages_populated) return -1;
+    if (sorted_global_achievement_percentages.empty()) return -1;
+
+    const auto &entry = sorted_global_achievement_percentages[0];
+    const std::string &name = entry.first;
 
     if (pchName && unNameBufLen) {
         memset(pchName, 0, unNameBufLen);
         name.copy(pchName, unNameBufLen - 1);
     }
 
-    if (pflPercent) *pflPercent = 90;
+    if (pflPercent) *pflPercent = entry.second;
     if (pbAchieved) {
         bool achieved = false;
         GetAchievement(name.c_str(), &achieved);
@@ -683,21 +762,21 @@ int Steam_User_Stats::GetNextMostAchievedAchievementInfo( int iIteratorPrevious,
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     if (iIteratorPrevious < 0) return -1;
-    
-    unsigned iIteratorCurrent = static_cast<unsigned>(iIteratorPrevious + 1);
-    if (iIteratorCurrent >= defined_achievements.size()) return -1;
 
-    std::string name(GetAchievementName(iIteratorCurrent));
-    if (name.empty()) return -1;
+    if (!global_achievement_percentages_populated) return -1;
+
+    unsigned iIteratorCurrent = static_cast<unsigned>(iIteratorPrevious + 1);
+    if (iIteratorCurrent >= sorted_global_achievement_percentages.size()) return -1;
+
+    const auto &entry = sorted_global_achievement_percentages[iIteratorCurrent];
+    const std::string &name = entry.first;
 
     if (pchName && unNameBufLen) {
         memset(pchName, 0, unNameBufLen);
         name.copy(pchName, unNameBufLen - 1);
     }
 
-    if (pflPercent) {
-        *pflPercent = (float)(90 * (defined_achievements.size() - iIteratorCurrent) / defined_achievements.size());
-    }
+    if (pflPercent) *pflPercent = entry.second;
     if (pbAchieved) {
         bool achieved = false;
         GetAchievement(name.c_str(), &achieved);
@@ -717,11 +796,20 @@ bool Steam_User_Stats::GetAchievementAchievedPercent( const char *pchName, float
     auto it = defined_achievements_find(pchName);
     if (defined_achievements.end() == it) return false;
 
-    size_t idx = it - defined_achievements.begin();
     if (pflPercent) {
-        *pflPercent = (float)(90 * (defined_achievements.size() - idx) / defined_achievements.size());
+        if (global_achievement_percentages_populated) {
+            auto git = global_achievement_percentages.find(pchName);
+            if (git != global_achievement_percentages.end()) {
+                *pflPercent = git->second;
+            } else {
+                *pflPercent = 0.0f;
+            }
+        } else {
+            size_t idx = it - defined_achievements.begin();
+            *pflPercent = (float)(90 * (defined_achievements.size() - idx) / defined_achievements.size());
+        }
     }
-    
+
     return true;
 }
 

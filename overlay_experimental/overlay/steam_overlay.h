@@ -123,6 +123,7 @@ class Steam_Overlay
     std::string show_url{};
 
     std::vector<Overlay_Achievement> achievements{};
+    std::map<std::string, float> ach_global_percentages{}; // fetched from Steam Web API
     size_t last_loaded_ach_icon{};
     
     bool show_overlay = false;
@@ -287,6 +288,8 @@ public:
     void FriendDisconnect(Friend _friend);
 
     void AddAchievementNotification(const std::string &ach_name, nlohmann::json const& ach, bool for_progress);
+
+    void SortAchievementsByGlobalPercent(const std::map<std::string, float> &percentages);
 };
 
 #else // EMU_OVERLAY
@@ -308,6 +311,7 @@ public:
     void UnSetupOverlay() {}
 
     void OpenOverlayInvite(CSteamID lobbyId) {}
+    void SortAchievementsByGlobalPercent(const std::map<std::string, float> &) {}
     void OpenOverlay(const char* pchDialog) {}
     void OpenOverlayWebpage(const char* pchURL) {}
 

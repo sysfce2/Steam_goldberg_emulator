@@ -357,6 +357,8 @@ public:
     bool disable_overlay_warning_local_save = false;
     // should the overlay upload icons to the GPU and display them
     bool overlay_upload_achs_icons_to_gpu = true;
+    // sort achievements in the overlay by global percentage (descending) instead of alphabetically
+    bool overlay_achievement_sort_by_global_percent = true;
     //disable overlay warning for bad app ID (= 0)
     bool disable_overlay_warning_bad_appid = false;
     // disable all overlay warnings
