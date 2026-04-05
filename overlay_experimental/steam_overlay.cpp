@@ -1621,39 +1621,53 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // --- Full-width: ✓/✗ + date/status text ---
+                    // --- Bar: always rendered; symbol + status inside at left, x/y at right ---
                     {
                         const char *sym = achieved ? u8"\u2713" : u8"\u2717";
-                        if (achieved) {
-                            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", sym);
-                            ImGui::SameLine(0, 4);
-                            char buffer[80]{};
-                            time_t unlock_time = (time_t)x.unlock_time;
-                            size_t written = std::strftime(buffer, sizeof(buffer), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
-                            if (!written) {
-                                std::strftime(buffer, sizeof(buffer), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
-                            }
-                            ImGui::Text(translationAchievedOn[current_language], buffer);
-                        } else {
-                            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", sym);
-                            ImGui::SameLine(0, 4);
-                            ImGui::Text("%s", translationNotAchieved[current_language]);
-                        }
-                    }
+                        ImU32 sym_col = achieved ? IM_COL32(0, 220, 0, 255) : IM_COL32(220, 0, 0, 255);
 
-                    // --- Progress bar: always shown when max_progress > 0, x/y centered ---
-                    if (!x.achieved && x.max_progress > 0) {
+                        // build status string
+                        char status_buf[128]{};
+                        if (achieved) {
+                            char date_buf[80]{};
+                            time_t unlock_time = (time_t)x.unlock_time;
+                            size_t written = std::strftime(date_buf, sizeof(date_buf), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
+                            if (!written) std::strftime(date_buf, sizeof(date_buf), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
+                            snprintf(status_buf, sizeof(status_buf), translationAchievedOn[current_language], date_buf);
+                        } else {
+                            snprintf(status_buf, sizeof(status_buf), "%s", translationNotAchieved[current_language]);
+                        }
+
+                        // build x/y string
                         char pbuf[32]{};
-                        snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
+                        bool has_progress = !achieved && x.max_progress > 0;
+                        if (has_progress) {
+                            snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
+                        }
+
+                        float fill = achieved ? 1.0f : (has_progress ? (float)x.progress / (float)x.max_progress : 0.0f);
                         ImVec2 bar_pos = ImGui::GetCursorScreenPos();
                         float bar_width = ImGui::GetContentRegionAvail().x;
-                        ImGui::ProgressBar((float)x.progress / (float)x.max_progress, ImVec2(-1.0f, bar_h), "");
-                        ImVec2 txt_sz = ImGui::CalcTextSize(pbuf);
-                        ImVec2 txt_pos = {
-                            bar_pos.x + (bar_width - txt_sz.x) * 0.5f,
-                            bar_pos.y + (bar_h - txt_sz.y) * 0.5f
-                        };
-                        ImGui::GetWindowDrawList()->AddText(txt_pos, IM_COL32(255, 255, 255, 255), pbuf);
+                        ImGui::ProgressBar(fill, ImVec2(-1.0f, bar_h), "");
+                        auto *dl = ImGui::GetWindowDrawList();
+
+                        // symbol at left inside bar
+                        ImVec2 sym_sz = ImGui::CalcTextSize(sym);
+                        ImVec2 sym_pos = { bar_pos.x + 4.0f, bar_pos.y + (bar_h - sym_sz.y) * 0.5f };
+                        dl->AddText(sym_pos, sym_col, sym);
+
+                        // status text after symbol
+                        float status_x = sym_pos.x + sym_sz.x + 4.0f;
+                        ImVec2 status_sz = ImGui::CalcTextSize(status_buf);
+                        ImVec2 status_pos = { status_x, bar_pos.y + (bar_h - status_sz.y) * 0.5f };
+                        dl->AddText(status_pos, IM_COL32(255, 255, 255, 255), status_buf);
+
+                        // x/y at right inside bar
+                        if (has_progress) {
+                            ImVec2 pbar_sz = ImGui::CalcTextSize(pbuf);
+                            ImVec2 pbar_pos = { bar_pos.x + bar_width - pbar_sz.x - 4.0f, bar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
+                            dl->AddText(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
+                        }
                     }
 
                     // --- Global % ---
