@@ -345,6 +345,8 @@ void Steam_Overlay::create_fonts()
         font_builder.AddText(translationPlaytimeDisplay[i]);
     }
     font_builder.AddRanges(fonts_atlas.GetGlyphRangesDefault());
+    font_builder.AddChar((ImWchar)0x2713); // ✓ CHECK MARK
+    font_builder.AddChar((ImWchar)0x2717); // ✗ BALLOT X
 
     font_builder.BuildRanges(&ranges);
     font_cfg.GlyphRanges = ranges.Data;
@@ -1562,52 +1564,92 @@ void Steam_Overlay::render_main_window()
 
                     ImGui::Separator();
 
-                    bool could_create_ach_table_entry = false;
-                    if (x.icon->GetResourceId() != 0 || x.icon_gray->GetResourceId() != 0) {
-                        if (ImGui::BeginTable(x.title.c_str(), 2)) {
-                            could_create_ach_table_entry = true;
+                    const float icon_col_w = settings->overlay_appearance.icon_size;
+                    const float bar_h = settings->overlay_appearance.font_size;
+                    bool has_icon = x.icon->GetResourceId() != 0 || x.icon_gray->GetResourceId() != 0;
+                    bool rendered = false;
 
-                            ImGui::TableSetupColumn("imgui_table_image", ImGuiTableColumnFlags_WidthFixed, settings->overlay_appearance.icon_size);
-                            ImGui::TableSetupColumn("imgui_table_text");
-                            ImGui::TableNextRow(ImGuiTableRowFlags_None, settings->overlay_appearance.icon_size);
+                    if (has_icon) {
+                        // unique table id per achievement
+                        std::string tbl_id = std::string("##ach_") + x.name;
+                        if (ImGui::BeginTable(tbl_id.c_str(), 2)) {
+                            rendered = true;
+                            ImGui::TableSetupColumn("img", ImGuiTableColumnFlags_WidthFixed, icon_col_w);
+                            ImGui::TableSetupColumn("txt");
 
+                            // --- Row 1: icon | title + description ---
+                            ImGui::TableNextRow(ImGuiTableRowFlags_None, icon_col_w);
                             ImGui::TableSetColumnIndex(0);
-                            // hidden locked: always show gray icon (never the color one)
                             auto &icon_rsrc = (achieved && !hidden) ? x.icon : x.icon_gray;
                             if (icon_rsrc->GetResourceId() != 0) {
-                                ImGui::Image(
-                                    icon_rsrc->GetResourceId(),
-                                    ImVec2(settings->overlay_appearance.icon_size, settings->overlay_appearance.icon_size)
-                                );
+                                ImGui::Image(icon_rsrc->GetResourceId(), ImVec2(icon_col_w, icon_col_w));
+                            }
+                            ImGui::TableSetColumnIndex(1);
+                            if (hidden) {
+                                ImGui::Text("%s", translationHiddenAchievement[current_language]);
+                            } else {
+                                ImGui::Text("%s", x.title.c_str());
+                                ImGui::TextWrapped("%s", x.description.c_str());
                             }
 
+                            // --- Row 2: ✓/✗ centered under icon | date or "not achieved" ---
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0);
+                            {
+                                const char *sym = achieved ? u8"\u2713" : u8"\u2717";
+                                float sym_w = ImGui::CalcTextSize(sym).x;
+                                float offset = (icon_col_w - sym_w) * 0.5f;
+                                if (offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+                                if (achieved) {
+                                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", sym);
+                                } else {
+                                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", sym);
+                                }
+                            }
                             ImGui::TableSetColumnIndex(1);
-                            // the next column is the achievement text below
+                            if (achieved) {
+                                char buffer[80]{};
+                                time_t unlock_time = (time_t)x.unlock_time;
+                                size_t written = std::strftime(buffer, sizeof(buffer), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
+                                if (!written) {
+                                    std::strftime(buffer, sizeof(buffer), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
+                                }
+                                ImGui::Text(translationAchievedOn[current_language], buffer);
+                            } else {
+                                ImGui::Text("%s", translationNotAchieved[current_language]);
+                            }
+
+                            ImGui::EndTable();
                         }
                     }
-                    
-                    // hidden locked: replace title and description with generic text (like Steam)
-                    if (hidden) {
-                        ImGui::Text("%s", translationHiddenAchievement[current_language]);
-                    } else {
-                        ImGui::Text("%s", x.title.c_str());
-                        ImGui::TextWrapped("%s", x.description.c_str());
-                    }
 
-                    if (achieved) {
-                        char buffer[80]{};
-                        time_t unlock_time = (time_t)x.unlock_time;
-                        size_t written = std::strftime(buffer, sizeof(buffer), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
-                        if (!written) { // count was reached before the entire string could be stored, keep it safe
-                            std::strftime(buffer, sizeof(buffer), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
+                    if (!rendered) {
+                        // no icon: render everything inline
+                        if (hidden) {
+                            ImGui::Text("%s", translationHiddenAchievement[current_language]);
+                        } else {
+                            ImGui::Text("%s", x.title.c_str());
+                            ImGui::TextWrapped("%s", x.description.c_str());
                         }
-
-                        ImGui::TextColored(ImVec4(0, 255, 0, 255), translationAchievedOn[current_language], buffer);
-                    } else {
-                        ImGui::TextColored(ImVec4(255, 0, 0, 255), "%s", translationNotAchieved[current_language]);
+                        const char *sym = achieved ? u8"\u2713" : u8"\u2717";
+                        if (achieved) {
+                            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", sym);
+                            ImGui::SameLine(0, 4);
+                            char buffer[80]{};
+                            time_t unlock_time = (time_t)x.unlock_time;
+                            size_t written = std::strftime(buffer, sizeof(buffer), settings->overlay_appearance.ach_unlock_datetime_format.c_str(), std::localtime(&unlock_time));
+                            if (!written) {
+                                std::strftime(buffer, sizeof(buffer), "%Y/%m/%d - %H:%M:%S", std::localtime(&unlock_time));
+                            }
+                            ImGui::Text(translationAchievedOn[current_language], buffer);
+                        } else {
+                            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", sym);
+                            ImGui::SameLine(0, 4);
+                            ImGui::Text("%s", translationNotAchieved[current_language]);
+                        }
                     }
 
-                    // show global achievement percentage if available
+                    // --- Global % (full width, below the table) ---
                     {
                         auto it = ach_global_percentages.find(x.name);
                         if (it != ach_global_percentages.end()) {
@@ -1615,12 +1657,17 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // hidden achievements don't reveal their progress until the user has made some progress
-                    if (!hidden || x.progress > 0) {
-                        add_ach_progressbar(x);
+                    // --- Progress bar (full width, x/y right-aligned inside bar) ---
+                    if (!x.achieved && x.progress > 0 && x.max_progress > 0 && (!hidden || x.progress > 0)) {
+                        char pbuf[32]{};
+                        snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
+                        ImVec2 bar_pos = ImGui::GetCursorScreenPos();
+                        float bar_width = ImGui::GetContentRegionAvail().x;
+                        ImGui::ProgressBar((float)x.progress / x.max_progress, ImVec2(-1.0f, bar_h), "");
+                        ImVec2 txt_sz = ImGui::CalcTextSize(pbuf);
+                        ImVec2 txt_pos = { bar_pos.x + bar_width - txt_sz.x - 4.0f, bar_pos.y + (bar_h - txt_sz.y) * 0.5f };
+                        ImGui::GetWindowDrawList()->AddText(txt_pos, IM_COL32(255, 255, 255, 255), pbuf);
                     }
-
-                    if (could_create_ach_table_entry) ImGui::EndTable();
 
                     ImGui::Separator();
                 }
