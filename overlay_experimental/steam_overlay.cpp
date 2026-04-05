@@ -436,14 +436,17 @@ void Steam_Overlay::load_achievements_data()
 
     PRINT_DEBUG("count=%u, loaded=%zu", achievements_num, achievements.size());
 
-    if (settings->overlay_achievement_sort_by_global_percent) {
-        Steam_User_Stats* steamUserStats = get_steam_client()->steam_user_stats;
-        if (steamUserStats->global_achievement_percentages_populated) {
+    Steam_User_Stats* steamUserStats = get_steam_client()->steam_user_stats;
+    if (steamUserStats->global_achievement_percentages_populated) {
+        // data already available (e.g. game called the API before overlay init)
+        if (settings->overlay_achievement_sort_by_global_percent) {
             SortAchievementsByGlobalPercent(steamUserStats->global_achievement_percentages);
+        } else {
+            ach_global_percentages = steamUserStats->global_achievement_percentages;
         }
-    } else if (get_steam_client()->steam_user_stats->global_achievement_percentages_populated) {
-        // even without sorting, grab the percentages so they can be displayed
-        ach_global_percentages = get_steam_client()->steam_user_stats->global_achievement_percentages;
+    } else {
+        // trigger fetch if the game hasn't done so yet; result arrives via steam_run_callback
+        steamUserStats->RequestGlobalAchievementPercentages();
     }
 }
 
@@ -1613,7 +1616,10 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    add_ach_progressbar(x);
+                    // hidden achievements don't reveal their progress until the user has made some progress
+                    if (!hidden || x.progress > 0) {
+                        add_ach_progressbar(x);
+                    }
 
                     if (could_create_ach_table_entry) ImGui::EndTable();
 
