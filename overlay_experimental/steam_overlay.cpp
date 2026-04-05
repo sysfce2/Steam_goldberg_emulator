@@ -1071,7 +1071,7 @@ float Steam_Overlay::animate_factor(std::chrono::milliseconds elapsed, std::chro
 
 void Steam_Overlay::add_ach_progressbar(const Overlay_Achievement &ach)
 {
-    if (!ach.achieved && ach.max_progress > 0) {
+    if (!ach.achieved && ach.progress > 0 && ach.max_progress > 0) {
         char buf[32]{};
         sprintf(buf, "%u/%u", ach.progress, ach.max_progress);
         ImGui::ProgressBar((float)ach.progress / ach.max_progress, { -1 , settings->overlay_appearance.font_size }, buf);
