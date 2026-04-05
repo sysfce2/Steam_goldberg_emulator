@@ -347,6 +347,7 @@ void Steam_Overlay::create_fonts()
     font_builder.AddRanges(fonts_atlas.GetGlyphRangesDefault());
     font_builder.AddChar((ImWchar)0x2713); // ✓ CHECK MARK
     font_builder.AddChar((ImWchar)0x2717); // ✗ BALLOT X
+    font_builder.AddChar((ImWchar)0x25B6); // ▶ BLACK RIGHT-POINTING TRIANGLE (in-progress)
 
     font_builder.BuildRanges(&ranges);
     font_cfg.GlyphRanges = ranges.Data;
@@ -1623,8 +1624,20 @@ void Steam_Overlay::render_main_window()
 
                     // --- Bar: always rendered; symbol + date (if achieved) inside at left, x/y at right ---
                     {
-                        const char *sym = achieved ? u8"\u2713" : u8"\u2717";
-                        ImU32 sym_col = achieved ? IM_COL32(0, 220, 0, 255) : IM_COL32(220, 0, 0, 255);
+                        // pick symbol based on state
+                        const char *sym;
+                        ImU32 sym_col;
+                        bool has_progress = !achieved && x.max_progress > 0;
+                        if (achieved) {
+                            sym = u8"\u2713"; // ✓
+                            sym_col = IM_COL32(0, 220, 0, 255);
+                        } else if (has_progress && x.progress > 0) {
+                            sym = u8"\u25B6"; // ▶ in-progress
+                            sym_col = IM_COL32(255, 180, 0, 255);
+                        } else {
+                            sym = u8"\u2717"; // ✗
+                            sym_col = IM_COL32(220, 0, 0, 255);
+                        }
 
                         // build date string (only when achieved)
                         char date_buf[128]{};
@@ -1638,7 +1651,6 @@ void Steam_Overlay::render_main_window()
 
                         // build x/y string
                         char pbuf[32]{};
-                        bool has_progress = !achieved && x.max_progress > 0;
                         if (has_progress) {
                             snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
                         }
@@ -1648,25 +1660,38 @@ void Steam_Overlay::render_main_window()
                         float bar_width = ImGui::GetContentRegionAvail().x;
                         ImGui::ProgressBar(fill, ImVec2(-1.0f, bar_h), "");
                         auto *dl = ImGui::GetWindowDrawList();
+                        ImFont *fnt = ImGui::GetFont();
+                        const float sym_font_sz = bar_h * 0.8f; // slightly smaller so it fits neatly
+                        constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
 
-                        // symbol at left inside bar
-                        ImVec2 sym_sz = ImGui::CalcTextSize(sym);
+                        // helper: draw text with a 1px dark shadow for readability over any bar color
+                        auto draw_shadowed = [&](ImVec2 pos, ImU32 col, const char *text) {
+                            dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
+                            dl->AddText(pos, col, text);
+                        };
+                        auto draw_shadowed_ex = [&](ImFont *f, float sz, ImVec2 pos, ImU32 col, const char *text) {
+                            dl->AddText(f, sz, ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
+                            dl->AddText(f, sz, pos, col, text);
+                        };
+
+                        // symbol at left inside bar, vertically centered
+                        ImVec2 sym_sz = fnt->CalcTextSizeA(sym_font_sz, FLT_MAX, 0.0f, sym);
                         ImVec2 sym_pos = { bar_pos.x + 4.0f, bar_pos.y + (bar_h - sym_sz.y) * 0.5f };
-                        dl->AddText(sym_pos, sym_col, sym);
+                        draw_shadowed_ex(fnt, sym_font_sz, sym_pos, sym_col, sym);
 
                         // date after symbol (only when achieved)
                         if (achieved && date_buf[0]) {
                             float date_x = sym_pos.x + sym_sz.x + 4.0f;
                             ImVec2 date_sz = ImGui::CalcTextSize(date_buf);
                             ImVec2 date_pos = { date_x, bar_pos.y + (bar_h - date_sz.y) * 0.5f };
-                            dl->AddText(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
+                            draw_shadowed(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
                         }
 
-                        // x/y at right inside bar
+                        // x/y centered inside bar
                         if (has_progress) {
                             ImVec2 pbar_sz = ImGui::CalcTextSize(pbuf);
-                            ImVec2 pbar_pos = { bar_pos.x + bar_width - pbar_sz.x - 4.0f, bar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
-                            dl->AddText(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
+                            ImVec2 pbar_pos = { bar_pos.x + (bar_width - pbar_sz.x) * 0.5f, bar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
+                            draw_shadowed(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
                         }
                     }
 
