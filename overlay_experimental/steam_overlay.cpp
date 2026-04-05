@@ -1565,8 +1565,44 @@ void Steam_Overlay::render_main_window()
             ImGui::SetNextWindowSizeConstraints(ImVec2(min_w, ImGui::GetFontSize() * 32), ImVec2(8192, 8192));
             ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin(translationAchievementWindow[current_language], &show_achievements)) {
-                ImGui::Text("%s", translationListOfAchievements[current_language]);
-                ImGui::SameLine();
+                // --- total completion progress bar ---
+                {
+                    int total = (int)achievements.size();
+                    int done = 0;
+                    for (const auto &a : achievements) if (a.achieved) ++done;
+                    float fill = total > 0 ? (float)done / total : 0.0f;
+                    float pct  = fill * 100.0f;
+
+                    char left_buf[32]{};
+                    snprintf(left_buf, sizeof(left_buf), "%d/%d", done, total);
+                    char right_buf[32]{};
+                    snprintf(right_buf, sizeof(right_buf), "%.1f%%", pct);
+
+                    const float bar_h = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+                    ImVec2 bar_pos = ImGui::GetCursorScreenPos();
+                    float bar_width = ImGui::GetContentRegionAvail().x;
+                    ImGui::ProgressBar(fill, ImVec2(-1.0f, bar_h), "");
+
+                    auto *dl = ImGui::GetWindowDrawList();
+                    constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
+                    constexpr ImU32 text_col   = IM_COL32(255, 255, 255, 255);
+                    auto draw_sh = [&](ImVec2 pos, const char *text) {
+                        dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
+                        dl->AddText(pos, text_col, text);
+                    };
+
+                    // left: x/y
+                    ImVec2 left_sz = ImGui::CalcTextSize(left_buf);
+                    ImVec2 left_pos = { bar_pos.x + 4.0f, bar_pos.y + (bar_h - left_sz.y) * 0.5f };
+                    draw_sh(left_pos, left_buf);
+
+                    // right: percentage
+                    ImVec2 right_sz = ImGui::CalcTextSize(right_buf);
+                    ImVec2 right_pos = { bar_pos.x + bar_width - right_sz.x - 4.0f, bar_pos.y + (bar_h - right_sz.y) * 0.5f };
+                    draw_sh(right_pos, right_buf);
+                }
+
+                // --- Reset / Simulate buttons ---
                 if (ImGui::Button("Reset##ach_reset") && !achievements_snapshot.empty()) {
                     for (auto &ax : achievements) {
                         for (const auto &snap : achievements_snapshot) {
