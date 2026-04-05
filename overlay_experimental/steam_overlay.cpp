@@ -950,18 +950,17 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
     case notification_type::achievement: {
         pos = settings->overlay_appearance.ach_earned_pos;
 
-        const float new_msg_height = ImGui::CalcTextSize(
-            noti.message.c_str(),
-            noti.message.c_str() + noti.message.size(),
-            false,
+        const auto &ach_h = noti.ach.value();
+        const float title_height = ImGui::CalcTextSize(
+            ach_h.title.c_str(), nullptr, false,
+            noti_width - padding_all_sides
+        ).y;
+        const float desc_height = ImGui::CalcTextSize(
+            ach_h.description.c_str(), nullptr, false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x - settings->overlay_appearance.icon_size
         ).y;
-        const float new_noti_height = new_msg_height;
-
-        float biggest_noti_height = settings->overlay_appearance.icon_size;
-        if (biggest_noti_height < new_noti_height) biggest_noti_height = new_noti_height;
-
-        noti_height = biggest_noti_height;
+        const float row_height = std::max(desc_height, (float)settings->overlay_appearance.icon_size);
+        noti_height = title_height + global_style.ItemSpacing.y + row_height;
 
         if ((notification_type)noti.type == notification_type::achievement_progress) {
             if (!noti.ach.value().achieved && noti.ach.value().max_progress > 0) {
@@ -1171,6 +1170,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                     auto &icon_rsrc = (notification_type)it->type == notification_type::achievement
                         ? ach.icon
                         : ach.icon_gray;
+                    ImGui::Text("%s", ach.title.c_str());
                     if (icon_rsrc->GetResourceId() != 0 && ImGui::BeginTable("imgui_table", 2)) {
                         ImGui::TableSetupColumn("imgui_table_image", ImGuiTableColumnFlags_WidthFixed, settings->overlay_appearance.icon_size);
                         ImGui::TableSetupColumn("imgui_table_text");
@@ -1180,11 +1180,11 @@ void Steam_Overlay::build_notifications(float width, float height)
                         ImGui::Image(icon_rsrc->GetResourceId(), ImVec2(settings->overlay_appearance.icon_size, settings->overlay_appearance.icon_size));
 
                         ImGui::TableSetColumnIndex(1);
-                        ImGui::TextWrapped("%s", it->message.c_str());
+                        ImGui::TextWrapped("%s", ach.description.c_str());
 
                         ImGui::EndTable();
                     } else {
-                        ImGui::TextWrapped("%s", it->message.c_str());
+                        ImGui::TextWrapped("%s", ach.description.c_str());
                     }
 
                     if ((notification_type)it->type == notification_type::achievement_progress) {
