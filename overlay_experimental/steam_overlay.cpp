@@ -1570,6 +1570,19 @@ void Steam_Overlay::render_main_window()
                     bool rendered = false;
 
                     if (has_icon) {
+                        // title above the table, left edge aligned with the ✓/✗ symbol centered under the icon
+                        {
+                            const char *sym_for_measure = achieved ? u8"\u2713" : u8"\u2717";
+                            float sym_w = ImGui::CalcTextSize(sym_for_measure).x;
+                            float title_x_offset = (icon_col_w - sym_w) * 0.5f;
+                            if (title_x_offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + title_x_offset);
+                        }
+                        if (hidden) {
+                            ImGui::Text("%s", translationHiddenAchievement[current_language]);
+                        } else {
+                            ImGui::Text("%s", x.title.c_str());
+                        }
+
                         // unique table id per achievement
                         std::string tbl_id = std::string("##ach_") + x.name;
                         if (ImGui::BeginTable(tbl_id.c_str(), 2)) {
@@ -1577,7 +1590,7 @@ void Steam_Overlay::render_main_window()
                             ImGui::TableSetupColumn("img", ImGuiTableColumnFlags_WidthFixed, icon_col_w);
                             ImGui::TableSetupColumn("txt");
 
-                            // --- Row 1: icon | title + description ---
+                            // --- Row 1: icon | description ---
                             ImGui::TableNextRow(ImGuiTableRowFlags_None, icon_col_w);
                             ImGui::TableSetColumnIndex(0);
                             auto &icon_rsrc = (achieved && !hidden) ? x.icon : x.icon_gray;
@@ -1585,10 +1598,7 @@ void Steam_Overlay::render_main_window()
                                 ImGui::Image(icon_rsrc->GetResourceId(), ImVec2(icon_col_w, icon_col_w));
                             }
                             ImGui::TableSetColumnIndex(1);
-                            if (hidden) {
-                                ImGui::Text("%s", translationHiddenAchievement[current_language]);
-                            } else {
-                                ImGui::Text("%s", x.title.c_str());
+                            if (!hidden) {
                                 ImGui::TextWrapped("%s", x.description.c_str());
                             }
 
