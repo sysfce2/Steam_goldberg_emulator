@@ -434,7 +434,16 @@ public:
 
     // Set the local load order for these items. If there are any items not in the given list, they will sort by the time subscribed.
     bool SetSubscriptionsLoadOrder( PublishedFileId_t *pvecPublishedFileIDs, uint32 unNumPublishedFileIDs );
-    
+
+    // Tells the client to no longer try to keep the item in its local cache, unless it was subscribed to by other users on this machine
+    bool MarkDownloadedItemAsUnused(PublishedFileId_t nPublishedFileID);
+
+    // Returns the number of items actually downloaded locally
+    uint32 GetNumDownloadedItems();
+
+    // Returns the ids of the items downloaded
+    uint32 GetDownloadedItems(PublishedFileId_t* pvecPublishedFileIDs, uint32 cMaxEntries);
+
 };
 
 #endif // __INCLUDED_STEAM_UGC_H__

@@ -40,19 +40,7 @@ constexpr const static char SOLD_ITF_NAME_FRIENDS[]  = "SteamFriends017";
 static ISteamClient017 *sold_steam_client = nullptr;
 static ISteamUtils009 *sold_steam_utils = nullptr;
 static ISteamUser019 *sold_steam_user = nullptr;
-static ISteamApps *sold_steam_apps = nullptr; // TODO at that time ISteamApps == ISteamApps008 (update this when the interface vesion changes)
-
-static_assert(
-    sizeof(STEAMAPPS_INTERFACE_VERSION) == sizeof(SOLD_ITF_NAME_APPS)
-    && STEAMAPPS_INTERFACE_VERSION[sizeof(STEAMAPPS_INTERFACE_VERSION) - 1] == SOLD_ITF_NAME_APPS[sizeof(SOLD_ITF_NAME_APPS) - 1]
-    && STEAMAPPS_INTERFACE_VERSION[sizeof(STEAMAPPS_INTERFACE_VERSION) - 2] == SOLD_ITF_NAME_APPS[sizeof(SOLD_ITF_NAME_APPS) - 2]
-    && STEAMAPPS_INTERFACE_VERSION[sizeof(STEAMAPPS_INTERFACE_VERSION) - 3] == SOLD_ITF_NAME_APPS[sizeof(SOLD_ITF_NAME_APPS) - 3]
-    && STEAMAPPS_INTERFACE_VERSION[sizeof(STEAMAPPS_INTERFACE_VERSION) - 4] == SOLD_ITF_NAME_APPS[sizeof(SOLD_ITF_NAME_APPS) - 4]
-    ,
-    "ISteamApps interface was updated,\n"
-    "change the variable definition to a specific version,\n"
-    "ex: ISteamApps008"
-);
+static ISteamApps008 *sold_steam_apps = nullptr;
 
 static sold::steamclient_loader_t *steamclient_loader = nullptr;
 static CreateInterface_t ptrCreateInterface = nullptr;

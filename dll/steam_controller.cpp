@@ -221,7 +221,7 @@ Steam_Controller::Steam_Controller(class Settings *settings, class SteamCallResu
     this->run_every_runcb = run_every_runcb;
 
     set_handles(settings->controller_settings.action_sets);
-    disabled = action_handles.empty();
+    disabled = !settings->controller_settings.enabled && action_handles.empty();
     initialized = false;
     
     this->run_every_runcb->add(&Steam_Controller::steam_run_every_runcb, this);
@@ -1086,6 +1086,17 @@ ESteamInputType Steam_Controller::GetInputTypeForHandle( ControllerHandle_t cont
     PRINT_DEBUG("%llu", controllerHandle);
     auto controller = controllers.find(controllerHandle);
     if (controller == controllers.end()) return k_ESteamInputType_Unknown;
+    
+    // Playstation
+    if (settings->controller_settings.controller_type_override == "PS3") return k_ESteamInputType_PS3Controller;
+    if (settings->controller_settings.controller_type_override == "PS4") return k_ESteamInputType_PS4Controller;
+    if (settings->controller_settings.controller_type_override == "PS5") return k_ESteamInputType_PS5Controller;
+    // Xbox
+    if (settings->controller_settings.controller_type_override == "XBOX360") return k_ESteamInputType_XBox360Controller;
+    if (settings->controller_settings.controller_type_override == "XBOXONE") return k_ESteamInputType_XBoxOneController;
+    // Nintendo
+    if (settings->controller_settings.controller_type_override == "SWITCH") return k_ESteamInputType_SwitchProController;
+
     return k_ESteamInputType_XBox360Controller;
 }
 

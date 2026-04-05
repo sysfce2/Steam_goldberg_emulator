@@ -7,8 +7,6 @@
 
 // this interface version is not found in public SDK archives, it is based on reversing old Linux binaries
 
-#include "isteammasterserverupdater.h"
-
 class ISteamClient005
 {
 public:

@@ -50,10 +50,11 @@ HSteamUser Steam_User::GetHSteamUser()
 void Steam_User::LogOn( CSteamID steamID )
 {
     PRINT_DEBUG_ENTRY();
-    settings->set_offline(false);
-    logon_time = std::chrono::high_resolution_clock::now();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     call_logged_on = true;
     call_logged_off = false;
+    logon_time = std::chrono::high_resolution_clock::now();
 
     if (settings == get_steam_client()->settings_server) {
         get_steam_client()->steam_gameserver->LogOnAnonymous();
@@ -63,10 +64,13 @@ void Steam_User::LogOn( CSteamID steamID )
 void Steam_User::LogOff()
 {
     PRINT_DEBUG_ENTRY();
-    settings->set_offline(true);
-    logoff_time = std::chrono::high_resolution_clock::now();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     call_logged_on = false;
     call_logged_off = true;
+    logoff_time = std::chrono::high_resolution_clock::now();
+
+    settings->set_offline(true);
     player_auths.clear();
 
     if (settings == get_steam_client()->settings_server) {
@@ -80,12 +84,16 @@ void Steam_User::LogOff()
 bool Steam_User::BLoggedOn()
 {
     PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     return !settings->is_offline();
 }
 
 ELogonState Steam_User::GetLogonState()
 {
     PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     if(settings->is_offline())
         return (ELogonState)0;
     else
@@ -95,6 +103,8 @@ ELogonState Steam_User::GetLogonState()
 bool Steam_User::BConnected()
 {
     PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     return !settings->is_offline();
 }
 
@@ -103,6 +113,8 @@ bool Steam_User::BConnected()
 CSteamID Steam_User::GetSteamID()
 {
     PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
     CSteamID id = settings->get_current_steam_id();
 
     PRINT_DEBUG("GetSteamID() call #%u, returning %llu", settings->global_steamid_call_count, id.ConvertToUint64());
@@ -113,6 +125,10 @@ CSteamID Steam_User::GetSteamID()
 bool Steam_User::IsVACBanned( int nGameID )
 {
     PRINT_DEBUG_ENTRY();
+    // EVACBan to appid map:
+    // k_EVACBanGoldsrc -> 10
+    // k_EVACBanSource -> 240
+    // k_EVACBanDayOfDefeatSource -> 300
     return false;
 }
 
@@ -177,7 +193,7 @@ int Steam_User::GetSteamGameConnectToken( void *pBlob, int cbMaxBlob )
     return out_size;
 }
 
-bool Steam_User::SetRegistryString( EConfigSubTree eRegistrySubTree, const char *pchKey, const char *pchValue )
+bool Steam_User::SetRegistryString( ERegistrySubTree eRegistrySubTree, const char *pchKey, const char *pchValue )
 {
     PRINT_DEBUG_TODO();
     if (!pchValue)
@@ -197,7 +213,7 @@ bool Steam_User::SetRegistryString( EConfigSubTree eRegistrySubTree, const char 
     return true;
 }
 
-bool Steam_User::GetRegistryString( EConfigSubTree eRegistrySubTree, const char *pchKey, char *pchValue, int cbValue )
+bool Steam_User::GetRegistryString( ERegistrySubTree eRegistrySubTree, const char *pchKey, char *pchValue, int cbValue )
 {
     PRINT_DEBUG_TODO();
     // TODO: read data on disk, because real steam can get the string when app restarts
@@ -223,7 +239,7 @@ bool Steam_User::GetRegistryString( EConfigSubTree eRegistrySubTree, const char 
     return true;
 }
 
-bool Steam_User::SetRegistryInt( EConfigSubTree eRegistrySubTree, const char *pchKey, int iValue )
+bool Steam_User::SetRegistryInt( ERegistrySubTree eRegistrySubTree, const char *pchKey, int iValue )
 {
     PRINT_DEBUG_TODO();
     if (!pchKey) // tested on real steam
@@ -240,7 +256,7 @@ bool Steam_User::SetRegistryInt( EConfigSubTree eRegistrySubTree, const char *pc
     return true;
 }
 
-bool Steam_User::GetRegistryInt( EConfigSubTree eRegistrySubTree, const char *pchKey, int *piValue )
+bool Steam_User::GetRegistryInt( ERegistrySubTree eRegistrySubTree, const char *pchKey, int *piValue )
 {
     PRINT_DEBUG_TODO();
     // TODO: read data on disk, because real steam can get the string when app restarts
@@ -906,16 +922,11 @@ bool Steam_User::BSetDurationControlOnlineState( EDurationControlOnlineState eNe
 }
 
 // older sdk -----------------------------------------------
+// SteamUser001 --------------------------------------------
 void Steam_User::Init( ICMCallback001 *cmcallback, ISteam2Auth *steam2auth )
 {
     PRINT_DEBUG_ENTRY();
     callbacks_old1 = cmcallback;
-}
-
-void Steam_User::Init( ICMCallback *cmcallback, ISteam2Auth *steam2auth )
-{
-    PRINT_DEBUG_ENTRY();
-    callbacks_old2 = cmcallback;
 }
 
 int Steam_User::ProcessCall( int unk )
@@ -924,40 +935,42 @@ int Steam_User::ProcessCall( int unk )
     return 0;
 }
 
-void Steam_User::LogOn( CSteamID *steamID )
+void Steam_User::LogOn_old( CSteamID &steamID )
 {
     PRINT_DEBUG_ENTRY();
-    LogOn(*steamID);
+    LogOn(steamID);
 }
 
-int Steam_User::CreateAccount( const char *unk1, void *unk2, void *unk3, const char *unk4, int unk5, void *unk6 )
+int Steam_User::CreateAccount( const char *unk1, uint8 *unk2, uint8 *unk3, const char *unk4, int unk5, uint8 *unk6 )
 {
     PRINT_DEBUG_TODO();
     return 0;
 }
 
-bool Steam_User::GSSendLogonRequest( CSteamID *steamID )
+bool Steam_User::GSSendLogonRequest( CSteamID &steamID )
 {
-    PRINT_DEBUG("%llu", (*steamID).ConvertToUint64());
+    PRINT_DEBUG("%llu", steamID.ConvertToUint64());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    // Note that SteamID passed into this comes from Steam.dll so it won't match the client's Goldberg SteamID.
-    std::pair<CSteamID, std::chrono::high_resolution_clock::time_point> entry(*steamID, std::chrono::high_resolution_clock::now());
+    // At this point, client auth is still primarily done via Steam2 (Steam.dll), Steam3 is supplementary.
+    // As such, there's not much really needed from us besides firing approve callback.
+    // Since SteamID passed into this comes from Steam.dll, it won't match the client's Goldberg SteamID.
+    std::pair<CSteamID, std::chrono::high_resolution_clock::time_point> entry(steamID, std::chrono::high_resolution_clock::now());
     player_auths.push_back(entry);
-    get_steam_client()->steam_gameserver->add_player(*steamID);
+    get_steam_client()->steam_gameserver->add_player(steamID);
     return true;
 }
 
-bool Steam_User::GSSendDisconnect( CSteamID *steamID )
+bool Steam_User::GSSendDisconnect( CSteamID &steamID )
 {
-    PRINT_DEBUG("%llu", (*steamID).ConvertToUint64());
+    PRINT_DEBUG("%llu", steamID.ConvertToUint64());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    get_steam_client()->steam_gameserver->remove_player(*steamID);
+    get_steam_client()->steam_gameserver->remove_player(steamID);
     return true;
 }
 
-bool Steam_User::GSSendStatusResponse( CSteamID *steamID, int nSecondsConnected, int nSecondsSinceLast )
+bool Steam_User::GSSendStatusResponse( CSteamID &steamID, int nSecondsConnected, int nSecondsSinceLast )
 {
     PRINT_DEBUG_TODO();
     return false;
@@ -968,13 +981,25 @@ bool Steam_User::GSSetStatus( int32 nAppIdServed, uint32 unServerFlags, int cPla
     PRINT_DEBUG_TODO();
     return true;
 }
+// SteamUser001 --------------------------------------------
 
+// SteamUser002 (old) --------------------------------------
 bool Steam_User::GSSetStatus( int32 nAppIdServed, uint32 unServerFlags, int cPlayers, int cPlayersMax, int cBotPlayers, int unGamePort, const char *pchServerName, const char *pchGameDir, const char *pchMapName, const char *pchVersion )
 {
     PRINT_DEBUG_ENTRY();
     return get_steam_client()->steam_gameserver->Obsolete_GSSetStatus(nAppIdServed, unServerFlags, cPlayers, cPlayersMax, cBotPlayers, unGamePort, pchServerName, pchGameDir, pchMapName, pchVersion);
 }
+// SteamUser002 (old) --------------------------------------
 
+// SteamUser002 (new) --------------------------------------
+void Steam_User::Init( ICMCallback *cmcallback, ISteam2Auth *steam2auth )
+{
+    PRINT_DEBUG_ENTRY();
+    callbacks_old2 = cmcallback;
+}
+// SteamUser002 (new) --------------------------------------
+
+// SteamUser004 (old) --------------------------------------
 bool Steam_User::BGetCallback( int *piCallback, uint8 **ppubParam, int *unk )
 {
     PRINT_DEBUG_ENTRY();
@@ -1001,22 +1026,6 @@ void Steam_User::FreeLastCallback()
         return;
 
     steamclient_free_callback(pipe);
-}
-
-int Steam_User::GetSteamTicket( void *pBlob, int cbMaxBlob )
-{
-    PRINT_DEBUG_ENTRY();
-    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-
-    if (cbMaxBlob < STEAM_TICKET_MIN_SIZE) return 0;
-    if (!pBlob) return 0;
-
-    uint32 out_size = STEAM_AUTH_TICKET_SIZE;
-    auth_manager->getTicketData(pBlob, cbMaxBlob, &out_size);
-
-    if (out_size > STEAM_AUTH_TICKET_SIZE)
-        return 0;
-    return out_size;
 }
 
 const char *Steam_User::GetPlayerName()
@@ -1090,6 +1099,23 @@ int32 Steam_User::AddFriendByName( const char *pchEmailOrAccountName )
     PRINT_DEBUG_ENTRY();
     return get_steam_client()->steam_friends->AddFriendByName(pchEmailOrAccountName);
 }
+
+int Steam_User::GetSteamTicket( void *pBlob, int cbMaxBlob )
+{
+    PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (cbMaxBlob < STEAM_TICKET_MIN_SIZE) return 0;
+    if (!pBlob) return 0;
+
+    uint32 out_size = STEAM_AUTH_TICKET_SIZE;
+    auth_manager->getTicketData(pBlob, cbMaxBlob, &out_size);
+
+    if (out_size > STEAM_AUTH_TICKET_SIZE)
+        return 0;
+    return out_size;
+}
+// SteamUser004 (old) --------------------------------------
 // older sdk -----------------------------------------------
 
 void Steam_User::RunCallbacks()
@@ -1097,6 +1123,7 @@ void Steam_User::RunCallbacks()
     if (callbacks_old1) {
         if (call_logged_on && check_timedout(logon_time, 0.1)) {
             PRINT_DEBUG("ICMCallback -> OnLogonSuccess");
+            settings->set_offline(false);
             callbacks_old1->OnLogonSuccess();
             call_logged_on = false;
         }
@@ -1110,7 +1137,7 @@ void Steam_User::RunCallbacks()
         for (auto it = player_auths.begin(); it != player_auths.end();) {
             if (check_timedout(it->second, 0.1)) {
                 PRINT_DEBUG("ICMCallback -> GSHandleClientApprove %llu", it->first.ConvertToUint64());
-                callbacks_old1->GSHandleClientApprove(&(it->first));
+                callbacks_old1->GSHandleClientApprove(it->first);
                 it = player_auths.erase(it);
             } else {
                 it++;
@@ -1119,6 +1146,7 @@ void Steam_User::RunCallbacks()
     } else if (callbacks_old2) {
         if (call_logged_on && check_timedout(logon_time, 0.1)) {
             PRINT_DEBUG("ICMCallback -> OnLogonSuccess");
+            settings->set_offline(false);
             callbacks_old2->OnLogonSuccess();
             call_logged_on = false;
         }
@@ -1132,7 +1160,7 @@ void Steam_User::RunCallbacks()
         for (auto it = player_auths.begin(); it != player_auths.end();) {
             if (check_timedout(it->second, 0.1)) {
                 PRINT_DEBUG("ICMCallback -> GSHandleClientApprove %llu", it->first.ConvertToUint64());
-                callbacks_old2->GSHandleClientApprove(&(it->first));
+                callbacks_old2->GSHandleClientApprove(it->first);
                 it = player_auths.erase(it);
             } else {
                 it++;

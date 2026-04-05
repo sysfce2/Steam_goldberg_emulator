@@ -34,17 +34,17 @@ jobs:
 
       # we need branch because it has package scripts
       - name: "Checkout branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "Clone third-party deps (deps/win)"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/deps/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
 
       # download artifacts
       - name: "Download emu build artifacts (Win)"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: "build/win"
           pattern: "emu-win-*-${{ github.sha }}"
@@ -79,7 +79,7 @@ jobs:
       # upload artifacts/packages if this is a manual run
       - name: "Upload release package"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-release-${{ github.sha }}"
           path: "build/package/win/vs2022/*release*"
@@ -89,7 +89,7 @@ jobs:
 
       - name: "Upload debug package"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-debug-${{ github.sha }}"
           path: "build/package/win/vs2022/*debug*"
@@ -108,17 +108,17 @@ jobs:
     steps:
       # we need branch because it has package scripts
       - name: "Checkout branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "Clone third-party deps (deps/linux)"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/deps/linux"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/linux"
 
       # download artifacts
       - name: "Download emu build artifacts (linux)"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: "build/linux"
           pattern: "emu-linux-*-${{ github.sha }}"
@@ -168,7 +168,7 @@ jobs:
       # upload artifacts/packages if this is a manual run
       - name: "Upload release package"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "release-emu-linux-release-${{ github.sha }}"
           path: "build/package/linux/gmake2/*release*"
@@ -178,7 +178,7 @@ jobs:
 
       - name: "Upload debug package"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "release-emu-linux-debug-${{ github.sha }}"
           path: "build/package/linux/gmake2/*debug*"
@@ -207,17 +207,17 @@ jobs:
 
       # we need branch because it has package scripts
       - name: "Checkout branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "Clone third-party deps (deps/win)"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/deps/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
 
       # download artifacts
       - name: "Download script build artifacts (Win)"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: "tools/migrate_gse/bin/win"
           pattern: "migrate_gse-win-*"
@@ -239,7 +239,7 @@ jobs:
       # upload artifact/package if this is a manual run
       - name: "Upload release package"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "release-migrate_gse-win-${{ github.sha }}"
           path: "tools/migrate_gse/bin/package/win/**/*"
@@ -259,11 +259,11 @@ jobs:
     steps:
       # we need branch because it has package scripts
       - name: "Checkout branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # download artifacts
       - name: "Download script build artifacts (linux)"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: "tools/migrate_gse/bin/linux"
           pattern: "migrate_gse-linux-*"
@@ -292,7 +292,7 @@ jobs:
       # upload artifact/package if this is a manual run
       - name: "Upload release package"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "release-migrate_gse-linux-${{ github.sha }}"
           path: "tools/migrate_gse/bin/package/linux/**/*"

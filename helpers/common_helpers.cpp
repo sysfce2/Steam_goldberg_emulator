@@ -570,3 +570,16 @@ std::vector<std::string> common_helpers::str_split(std::string_view str, std::st
 
     return out;
 }
+
+std::string common_helpers::str_strip(std::string_view str)
+{
+    if (str.empty()) return {};
+
+    constexpr static const char whitespaces[] = { ' ', '\t', '\r', '\n', 0 }; // null terminator at the end is needed
+
+    const auto start = str.find_first_not_of(whitespaces);
+    if (std::string::npos == start) return {};
+
+    const auto end = str.find_last_not_of(whitespaces);
+    return std::string(str.substr(start, end - start + 1));
+}

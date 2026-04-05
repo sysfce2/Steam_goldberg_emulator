@@ -121,6 +121,7 @@
 #include "isteamuserstats002.h"
 #include "isteamuserstats001.h"
 #include "isteamapps.h"
+#include "isteamapps008.h"
 #include "isteamapps007.h"
 #include "isteamapps006.h"
 #include "isteamapps005.h"
@@ -228,6 +229,7 @@
 #include "isteamremoteplay.h"
 #include "isteamremoteplay001.h"
 #include "isteamremoteplay002.h"
+#include "isteamremoteplay003.h"
 #include "isteamnetworkingmessages.h"
 #include "isteamnetworkingsockets.h"
 #include "isteamnetworkingutils.h"
@@ -248,6 +250,14 @@
 #include "isteamgameserver001.h"
 #include "isteamgameserverstats.h"
 #include "isteamgamestats.h"
+#include "isteamuseritems.h"
+#include "isteamuseritems001.h"
+#include "isteamuseritems002.h"
+#include "isteamuseritems003.h"
+#include "isteamgameserveritems.h"
+#include "isteamgameserveritems001.h"
+#include "isteamgameserveritems002.h"
+#include "isteamgameserveritems003.h"
 
 
 //----------------------------------------------------------------------------------------------------------------------------------------------------------//

@@ -32,95 +32,56 @@ static uint32_t upper_range_ips[MAX_BROADCASTS];
 
 #if defined(STEAM_WIN32)
 
-//windows xp support
-static int
-inet_pton4(const char *src, uint32_t *dst)
-{
-	static const char digits[] = "0123456789";
-	int saw_digit, octets, ch;
-	u_char tmp[sizeof(uint32_t)], *tp;
-
-	saw_digit = 0;
-	octets = 0;
-	*(tp = tmp) = 0;
-	while ((ch = *src++) != '\0') {
-		const char *pch;
-
-		if ((pch = strchr(digits, ch)) != NULL) {
-			size_t nx = *tp * 10 + (pch - digits);
-
-			if (nx > 255)
-				return (0);
-			*tp = (u_char) nx;
-			if (! saw_digit) {
-				if (++octets > 4)
-					return (0);
-				saw_digit = 1;
-			}
-		} else if (ch == '.' && saw_digit) {
-			if (octets == 4)
-				return (0);
-			*++tp = 0;
-			saw_digit = 0;
-		} else
-			return (0);
-	}
-	if (octets < 4)
-		return (0);
-	memcpy(dst, tmp, sizeof(uint32_t));
-	return (1);
-}
-
 static void get_broadcast_info(uint16 port)
 {
     number_broadcasts = 0;
 
-    IP_ADAPTER_INFO *pAdapterInfo = (IP_ADAPTER_INFO *)malloc(sizeof(IP_ADAPTER_INFO));
-    unsigned long ulOutBufLen = sizeof(IP_ADAPTER_INFO);
-
-    if (pAdapterInfo == NULL) {
+    ULONG ulOutBufLen = 16384;
+    IP_ADAPTER_ADDRESSES *pAdapterInfo = (IP_ADAPTER_ADDRESSES *)malloc(ulOutBufLen);
+    if (pAdapterInfo == nullptr) {
         return;
     }
 
-    if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
-        free(pAdapterInfo);
-        pAdapterInfo = (IP_ADAPTER_INFO *)malloc(ulOutBufLen);
+    ULONG ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_PREFIX, nullptr, pAdapterInfo, &ulOutBufLen);
 
-        if (pAdapterInfo == NULL) {
+    if (ret == ERROR_BUFFER_OVERFLOW) {
+        free(pAdapterInfo);
+        pAdapterInfo = (IP_ADAPTER_ADDRESSES *)malloc(ulOutBufLen);
+        if (pAdapterInfo == nullptr) {
             return;
         }
+
+        ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_PREFIX, nullptr, pAdapterInfo, &ulOutBufLen);
     }
 
-    int ret;
+    if (ret == NO_ERROR) {
+        for (IP_ADAPTER_ADDRESSES *pAdapter = pAdapterInfo; pAdapter; pAdapter = pAdapter->Next) {
+            if (pAdapter->OperStatus == IfOperStatusUp &&
+                pAdapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK &&
+                pAdapter->FirstUnicastAddress &&
+                pAdapter->FirstUnicastAddress->OnLinkPrefixLength <= 32) {
+                sockaddr_in *addr_ptr = (sockaddr_in *)(pAdapter->FirstUnicastAddress->Address.lpSockaddr);
+                uint32 iface_ip = ntohl(addr_ptr->sin_addr.s_addr);
 
-    if ((ret = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) == NO_ERROR) {
-        IP_ADAPTER_INFO *pAdapter = pAdapterInfo;
+                ULONG prefix = pAdapter->FirstUnicastAddress->OnLinkPrefixLength;
+                uint32 subnet_mask = (prefix == 0) ? 0 : (0xFFFFFFFFu << (32 - prefix));
 
-        while (pAdapter) {
-            uint32_t iface_ip = 0, subnet_mask = 0;
+                IP_PORT *ip_port = &broadcasts[number_broadcasts];
+                uint32 broadcast_ip = htonl(iface_ip | ~subnet_mask);
+                ip_port->ip = broadcast_ip;
+                ip_port->port = port;
+                lower_range_ips[number_broadcasts] = htonl(iface_ip & subnet_mask);
+                upper_range_ips[number_broadcasts] = broadcast_ip;
+                number_broadcasts++;
 
-            if (inet_pton4(pAdapter->IpAddressList.IpMask.String, &subnet_mask) == 1
-                    && inet_pton4(pAdapter->IpAddressList.IpAddress.String, &iface_ip) == 1) {
-                    IP_PORT *ip_port = &broadcasts[number_broadcasts];
-                    uint32 broadcast_ip = iface_ip | ~subnet_mask;
-                    ip_port->ip = broadcast_ip;
-                    ip_port->port = port;
-                    lower_range_ips[number_broadcasts] = iface_ip & subnet_mask;
-                    upper_range_ips[number_broadcasts] = broadcast_ip;
-                    number_broadcasts++;
-
-                    if (number_broadcasts >= MAX_BROADCASTS) {
-                        break;
-                    }
+                if (number_broadcasts >= MAX_BROADCASTS) {
+                    break;
                 }
-
-            pAdapter = pAdapter->Next;
+            }
         }
     }
 
-    if (pAdapterInfo) {
-        free(pAdapterInfo);
-    }
+    free(pAdapterInfo);
 }
 
 #elif defined(__linux__)
@@ -352,8 +313,9 @@ static bool send_broadcasts(sock_t sock, uint16 port, char *data, unsigned long 
         return false;
 
     for (int i = 0; i < number_broadcasts; i++) {
-        ret = send_packet_to(sock, broadcasts[i], data, length);
         IP_PORT ip_port = broadcasts[i];
+        ip_port.port = port;
+        ret = send_packet_to(sock, ip_port, data, length);
     }
 
     /** 
@@ -613,7 +575,11 @@ void Networking::do_callbacks_message(Common_Message *msg)
         PRINT_DEBUG("has_steam_user_stats_messages");
         run_callbacks(CALLBACK_ID_USER_STATS, msg);
     }
-    
+
+    if (msg->has_gameserver_items_messages()) {
+        PRINT_DEBUG("has_gameserver_items_messages");
+        run_callbacks(CALLBACK_ID_GAMESERVER_ITEMS, msg);
+    }
 }
 
 bool Networking::handle_tcp(Common_Message *msg, struct TCP_Socket &socket)
@@ -928,8 +894,10 @@ void Networking::send_announce_broadcasts()
     size_t size = msg.ByteSizeLong(); 
     std::vector<char> buffer(size);
     msg.SerializeToArray(&buffer[0], static_cast<int>(size));
-    send_broadcasts(udp_socket, htons(DEFAULT_PORT), &buffer[0], static_cast<unsigned long>(size), &this->custom_broadcasts);
-    if (udp_port != DEFAULT_PORT) {
+    for (uint16 i = DEFAULT_PORT; i < DEFAULT_PORT + NUM_QUERY_PORTS; i++) {
+        send_broadcasts(udp_socket, htons(i), &buffer[0], static_cast<unsigned long>(size), &this->custom_broadcasts);
+    }
+    if (udp_port < DEFAULT_PORT || udp_port >= DEFAULT_PORT + NUM_QUERY_PORTS) {
         send_broadcasts(udp_socket, htons(udp_port), &buffer[0], static_cast<unsigned long>(size), &this->custom_broadcasts);
     }
 

@@ -12,6 +12,8 @@
 #include <sstream>
 #include <cctype>
 #include <utility>
+#include <unordered_set>
+#include <unordered_map>
 
 #include "InGameOverlay/RendererDetector.h"
 
@@ -31,11 +33,6 @@ static constexpr int max_window_id = 10000;
 static constexpr int base_notif_window_id  = 0 * max_window_id;
 static constexpr int base_friend_window_id = 1 * max_window_id;
 static constexpr int base_friend_item_id   = 2 * max_window_id;
-
-static InGameOverlay::ToggleKey overlay_toggle_keys[] = {
-    InGameOverlay::ToggleKey::SHIFT, InGameOverlay::ToggleKey::TAB
-};
-static const int toggle_keys_count = 2;
 
 // look for the column 'API language code' here: https://partner.steamgames.com/doc/store/localization/languages
 static constexpr const char* valid_languages[] = {
@@ -95,6 +92,55 @@ void Steam_Overlay::overlay_networking_callback(void* object, Common_Message* ms
     _this->networking_msg_received(msg);
 }
 
+void Steam_Overlay::parse_key_combo()
+{
+    static const std::unordered_map<InGameOverlay::ToggleKey, std::string_view> KEYS_MAP {
+        { InGameOverlay::ToggleKey::SHIFT, "shift" },
+        { InGameOverlay::ToggleKey::CTRL,  "ctrl"  },
+        { InGameOverlay::ToggleKey::ALT,   "alt"   },
+        { InGameOverlay::ToggleKey::TAB,   "tab"   },
+        { InGameOverlay::ToggleKey::F1,    "fn1"   },
+        { InGameOverlay::ToggleKey::F2,    "fn2"   },
+        { InGameOverlay::ToggleKey::F3,    "fn3"   },
+        { InGameOverlay::ToggleKey::F4,    "fn4"   },
+        { InGameOverlay::ToggleKey::F5,    "fn5"   },
+        { InGameOverlay::ToggleKey::F6,    "fn6"   },
+        { InGameOverlay::ToggleKey::F7,    "fn7"   },
+        { InGameOverlay::ToggleKey::F8,    "fn8"   },
+        { InGameOverlay::ToggleKey::F9,    "fn9"   },
+        { InGameOverlay::ToggleKey::F10,   "fn10"  },
+        { InGameOverlay::ToggleKey::F11,   "fn11"  },
+        { InGameOverlay::ToggleKey::F12,   "fn12"  },
+    };
+
+    std::unordered_set<InGameOverlay::ToggleKey> keys_combo{};
+    bool use_default = false;
+    if (settings->overlay_toggle_keys.empty()) {
+        use_default = true;
+    } else {
+        for (const auto &key_name : settings->overlay_toggle_keys) {
+            auto key_it = std::find_if(KEYS_MAP.cbegin(), KEYS_MAP.cend(), [&key_name](decltype(*KEYS_MAP.cbegin()) const &item) {
+                return common_helpers::str_cmp_insensitive(item.second, key_name);
+            });
+            if (KEYS_MAP.cend() != key_it) {
+                keys_combo.insert(key_it->first);
+            } else {
+                use_default = true;
+                PRINT_DEBUG("[X] Unknown key '%s', using default key combo Shift + Tab", key_name.c_str());
+                break;
+            }
+        }
+    }
+
+    if (use_default) {
+        toggle_keys = {
+            InGameOverlay::ToggleKey::SHIFT, InGameOverlay::ToggleKey::TAB
+        };
+    } else {
+        toggle_keys = std::vector<InGameOverlay::ToggleKey>(keys_combo.begin(), keys_combo.end());
+    }
+}
+
 Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking* network) :
     settings(settings),
     local_storage(local_storage),
@@ -125,7 +171,8 @@ Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, S
         std::chrono::milliseconds(0),
         [this] { return !setup_overlay_called; }
     );
-    
+
+    parse_key_combo();
     strncpy(username_text, settings->get_local_name(), sizeof(username_text));
 
     // we need these copies to show the warning only once, then disable the flag
@@ -222,7 +269,7 @@ bool Steam_Overlay::renderer_hook_proc()
         overlay_state_hook(state == InGameOverlay::OverlayHookState::Ready || state == InGameOverlay::OverlayHookState::Reset);
     };
 
-    bool started = _renderer->StartHook(overlay_toggle_callback, overlay_toggle_keys, toggle_keys_count, &fonts_atlas);
+    bool started = _renderer->StartHook(overlay_toggle_callback, toggle_keys.data(), (int)toggle_keys.size(), &fonts_atlas);
     PRINT_DEBUG("started renderer hook (result=%i)", (int)started);
     
     return true;

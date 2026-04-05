@@ -454,6 +454,8 @@ STEAMAPI_API steam_bool SteamAPI_ISteamUserStats_GetAchievementProgressLimitsInt
 STEAMAPI_API steam_bool SteamAPI_ISteamUserStats_GetAchievementProgressLimitsFloat( ISteamUserStats* self, const char * pchName, float * pfMinProgress, float * pfMaxProgress );
 
 // ISteamApps
+STEAMAPI_API ISteamApps *SteamAPI_SteamApps_v009();
+STEAMAPI_API ISteamApps *SteamAPI_SteamGameServerApps_v009();
 STEAMAPI_API ISteamApps *SteamAPI_SteamApps_v008();
 STEAMAPI_API ISteamApps *SteamAPI_SteamGameServerApps_v008();
 STEAMAPI_API steam_bool SteamAPI_ISteamApps_BIsSubscribed( ISteamApps* self );
@@ -487,7 +489,7 @@ STEAMAPI_API steam_bool SteamAPI_ISteamApps_BIsSubscribedFromFamilySharing( ISte
 STEAMAPI_API steam_bool SteamAPI_ISteamApps_BIsTimedTrial( ISteamApps* self, uint32 * punSecondsAllowed, uint32 * punSecondsPlayed );
 STEAMAPI_API steam_bool SteamAPI_ISteamApps_SetDlcContext( ISteamApps* self, AppId_t nAppID );
 STEAMAPI_API int SteamAPI_ISteamApps_GetNumBetas( ISteamApps* self, int * pnAvailable, int * pnPrivate );
-STEAMAPI_API steam_bool SteamAPI_ISteamApps_GetBetaInfo( ISteamApps* self, int iBetaIndex, uint32 * punFlags, uint32 * punBuildID, char * pchBetaName, int cchBetaName, char * pchDescription, int cchDescription );
+STEAMAPI_API steam_bool SteamAPI_ISteamApps_GetBetaInfo( ISteamApps* self, int iBetaIndex, uint32 * punFlags, uint32 * punBuildID, char * pchBetaName, int cchBetaName, char * pchDescription, int cchDescription, uint32 *punLastUpdated );
 STEAMAPI_API steam_bool SteamAPI_ISteamApps_SetActiveBeta( ISteamApps* self, const char * pchBetaName );
 
 
@@ -963,9 +965,15 @@ STEAMAPI_API steam_bool SteamAPI_ISteamParentalSettings_BIsFeatureInBlockList( I
 STEAMAPI_API ISteamRemotePlay *SteamAPI_SteamRemotePlay_v001();
 STEAMAPI_API ISteamRemotePlay *SteamAPI_SteamRemotePlay_v002();
 STEAMAPI_API ISteamRemotePlay *SteamAPI_SteamRemotePlay_v003();
+STEAMAPI_API ISteamRemotePlay *SteamAPI_SteamRemotePlay_v004();
 STEAMAPI_API uint32 SteamAPI_ISteamRemotePlay_GetSessionCount( ISteamRemotePlay* self );
 STEAMAPI_API RemotePlaySessionID_t SteamAPI_ISteamRemotePlay_GetSessionID( ISteamRemotePlay* self, int iSessionIndex );
+STEAMAPI_API bool SteamAPI_ISteamRemotePlay_BSessionRemotePlayTogether( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
 STEAMAPI_API uint64_steamid SteamAPI_ISteamRemotePlay_GetSessionSteamID( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
+STEAMAPI_API uint32 SteamAPI_ISteamRemotePlay_GetSessionGuestID( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
+STEAMAPI_API int SteamAPI_ISteamRemotePlay_GetSmallSessionAvatar( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
+STEAMAPI_API int SteamAPI_ISteamRemotePlay_GetMediumSessionAvatar( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
+STEAMAPI_API int SteamAPI_ISteamRemotePlay_GetLargeSessionAvatar( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
 STEAMAPI_API const char * SteamAPI_ISteamRemotePlay_GetSessionClientName( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
 STEAMAPI_API ESteamDeviceFormFactor SteamAPI_ISteamRemotePlay_GetSessionClientFormFactor( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID );
 STEAMAPI_API steam_bool SteamAPI_ISteamRemotePlay_BGetSessionClientResolution( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID, int * pnResolutionX, int * pnResolutionY );

@@ -19,31 +19,136 @@
 #define __INCLUDED_STEAM_GAME_COORDINATOR_H__
 
 #include "base.h"
+#include "econ_item.h"
+
+class Steam_User_Items;
+class Steam_GameServer_Items;
+struct GCMsgHdr_t;
+struct GCMsgHdrEx_t;
+struct ProtoBufMsgHeader_t;
+class CMsgProtoBufHeader;
 
 class Steam_Game_Coordinator :
 public ISteamGameCoordinator
 {
+    static constexpr const auto items_user_file = "items.json";
+    static constexpr const auto gc_config_file = "gc.json";
     constexpr const static uint32 protobuf_mask = 0x80000000;
 
     class Settings *settings{};
     class Networking *network{};
-    class SteamCallResults *callback_results{};
+    class Local_Storage *local_storage{};
     class SteamCallBacks *callbacks{};
     class RunEveryRunCB *run_every_runcb{};
+    bool is_server{};
 
-    std::queue<std::string> outgoing_messages{};
+    struct GC_Message
+    {
+        uint32 msg_type{};
+        std::string msg_body;
+        std::chrono::high_resolution_clock::time_point created{};
+        double post_in{};
+    };
 
-    void push_incoming(std::string message);
+    std::vector<GC_Message> pending_messages;
+    std::queue<GC_Message> incoming_messages;
 
-    static void steam_callback(void *object, Common_Message *msg);
+    enum GC_Profile
+    {
+        GC_PROFILE_INVALID = 0,
+        GC_PROFILE_TF2,
+        //GC_PROFILE_PORTAL2,
+    };
+
+    int gc_version{};
+    GC_Profile gc_profile{};
+    bool is_portal2{};
+    bool gc_initialized{};
+    bool delay_init{};
+    bool welcome_received{};
+    std::chrono::high_resolution_clock::time_point welcome_time{};
+
+    std::vector<Econ_Item> items;
+    bool items_loaded{};
+
+    struct RequestInventory
+    {
+        std::chrono::high_resolution_clock::time_point created{};
+        CSteamID steam_id{};
+        SteamAPICall_t steam_api_call{};
+        bool is_gc{};
+    };
+
+    std::map<CSteamID, std::vector<Econ_Item>> all_user_items;
+    std::vector<RequestInventory> pending_items_requests;
+
+    bool gc_enabled();
+    Steam_User_Items *client_items();
+    Steam_GameServer_Items *server_items();
+    void parse_gc_config();
+    bool is_welcome_message(const GC_Message &message);
+    void push_incoming(uint32 msg_type, const std::string &message, double delay = 0.1);
+
+    std::string build_msg_header(JobID_t target_job = k_GIDNil, JobID_t source_job = k_GIDNil);
+    GCMsgHdrEx_t parse_msg_header(const char *&p);
+    std::string build_protomsg_header(uint32 msg_type, JobID_t target_job = k_GIDNil, JobID_t source_job = k_GIDNil);
+    template <class T>
+    std::tuple<ProtoBufMsgHeader_t, CMsgProtoBufHeader, T, bool> parse_protomsg(const void *input, uint32 input_size);
+    uint64 item_id_local_to_network(uint64 item_id);
+    uint64 item_id_network_to_local(uint64 item_id);
+    std::string item_to_gcstruct(const Econ_Item &item, CSteamID steam_id);
+    std::string item_to_gcprotobuf(const Econ_Item &item, CSteamID steam_id);
+
+    void handle_set_item_pos(const void *input, uint32 input_size);
+    void handle_delete_item(const void *input, uint32 input_size);
+    void handle_motd_request(const void *input, uint32 input_size);
+    void handle_respawn(const void *input, uint32 input_size);
+    void handle_set_item_style(const void *input, uint32 input_size);
+    void handle_adjust_equip_state(const void *input, uint32 input_size);
+    void handle_set_multiple_item_pos(const void *input, uint32 input_size);
+
+    void callback_client_welcome();
+    void callback_server_welcome();
+    void callback_items_received(CSteamID steam_id, const std::vector<Econ_Item> &items);
+    void callback_items_removed(CSteamID steam_id);
+    void callback_item_updated(CSteamID steam_id, const Econ_Item &item);
+    void callback_item_deleted(CSteamID steam_id, uint64 item_id);
+    void callback_respawn_request(CSteamID steam_id);
+
+    void network_callback_inventory_request(Common_Message *msg);
+    void network_callback_inventory_response(Common_Message *msg);
+    void network_callback_item_update(Common_Message *msg);
+    void network_callback_item_deletion(Common_Message *msg);
+    void network_callback_respawn_request(Common_Message *msg);
+    void network_callback(Common_Message *msg);
+    void RunCallbacks();
+
+    static void steam_network_callback(void *object, Common_Message *msg);
     static void steam_run_every_runcb(void *object);
 
-    void RunCallbacks();
-    void Callback(Common_Message *msg);
-
 public:
-    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
+    Steam_Game_Coordinator(class Settings *settings, class Networking *network, class Local_Storage *local_storage, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, bool is_server);
     ~Steam_Game_Coordinator();
+
+    void initialize_gc();
+    void shutdown_gc();
+
+    const std::vector<Econ_Item> &get_items() { return items; }
+    const std::map<CSteamID, std::vector<Econ_Item>> &get_all_user_items() { return all_user_items; }
+    const bool has_items_for_user(CSteamID steam_id) { return (all_user_items.count(steam_id) != 0); }
+    const std::vector<Econ_Item> &get_items_for_user(CSteamID steam_id) { return all_user_items.at(steam_id); }
+
+    const std::vector<Econ_Item> &load_items_from_file();
+    void save_items_to_file();
+    const Econ_Item *set_item_pos(uint64 item_id, uint32 inv_pos, bool is_gc, bool save = true);
+    bool delete_item(uint64 item_id, bool is_gc);
+
+    void request_user_items(CSteamID steam_id, SteamAPICall_t api_call, bool is_gc);
+    SteamAPICall_t find_items_request(CSteamID steam_id);
+    void remove_user_items(CSteamID steam_id);
+
+    void on_client_connected(CSteamID steam_id);
+    void on_client_disconnected(CSteamID steam_id);
 
     // sends a message to the Game Coordinator
     EGCResults SendMessage_( uint32 unMsgType, const void *pubData, uint32 cubData );

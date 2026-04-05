@@ -899,6 +899,40 @@ void Steam_User_Stats::network_stats_updated(Common_Message *msg)
     );
 }
 
+// server requested achievement status
+void Steam_User_Stats::network_achievement_request(Common_Message *msg)
+{
+    if (!msg->gameserver_stats_messages().has_achievement_request()) {
+        PRINT_DEBUG("error empty msg");
+        return;
+    }
+
+    uint64 server_steamid = msg->source_id();
+
+    const auto &ach_request_msg = msg->gameserver_stats_messages().achievement_request();
+    std::string ach_name = ach_request_msg.name();
+    bool achieved = false;
+    GetAchievement(ach_name.c_str(), &achieved);
+
+    auto ach_response_msg = new GameServerStats_Messages::AchievementResponse();
+    ach_response_msg->set_name(ach_name);
+    auto ach_info = new GameServerStats_Messages::AchievementInfo();
+    ach_info->set_achieved(achieved);
+    ach_response_msg->set_allocated_info(ach_info);
+
+    auto gameserverstats_msg = new GameServerStats_Messages();
+    gameserverstats_msg->set_type(GameServerStats_Messages::Response_UserAchievement);
+    gameserverstats_msg->set_allocated_achievement_response(ach_response_msg);
+
+    Common_Message new_msg{};
+    new_msg.set_allocated_gameserver_stats_messages(gameserverstats_msg);
+    new_msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    new_msg.set_dest_id(server_steamid);
+    network->sendTo(&new_msg, true);
+
+    PRINT_DEBUG("server requested achievement '%s'", ach_name.c_str());
+}
+
 void Steam_User_Stats::send_pending_user_stats_requests()
 {
     if (!pending_user_stats_requests.empty()) {
@@ -1006,6 +1040,11 @@ void Steam_User_Stats::network_callback_stats(Common_Message *msg)
     // a user has updated/new stats
     case GameServerStats_Messages::UpdateUserStatsFromUser:
         // nothing
+    break;
+
+    // server requested achievement status
+    case GameServerStats_Messages::Request_UserAchievement:
+        network_achievement_request(msg);
     break;
     
     default:

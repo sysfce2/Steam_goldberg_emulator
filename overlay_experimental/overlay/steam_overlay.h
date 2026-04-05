@@ -167,6 +167,8 @@ class Steam_Overlay
     common_helpers::KillableWorker renderer_hook_init_thread{};
     int renderer_hook_timeout_ctr{};
 
+    std::vector<InGameOverlay::ToggleKey> toggle_keys{};
+
     // font stuff
     ImFontAtlas fonts_atlas{};
     ImFont *font_default{};
@@ -188,6 +190,7 @@ class Steam_Overlay
     Steam_Overlay& operator=(Steam_Overlay const&) = delete;
     Steam_Overlay& operator=(Steam_Overlay&&) = delete;
 
+    void parse_key_combo();
     bool submit_notification(
         notification_type type,
         const std::string &msg,

@@ -1,6 +1,24 @@
+/* Copyright (C) 2019 Mr Goldberg
+   This file is part of the Goldberg Emulator
+
+   The Goldberg Emulator is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 3 of the License, or (at your option) any later version.
+
+   The Goldberg Emulator is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with the Goldberg Emulator; if not, see
+   <http://www.gnu.org/licenses/>.  */
+
 #include "dll/auth.h"
 
-#define STEAM_TICKET_PROCESS_TIME 0.03
+// this should be at least as long as SteamGameServer logon time
+#define STEAM_TICKET_PROCESS_TIME 0.15
 
 static inline int generate_random_int()
 {
@@ -691,18 +709,18 @@ void Auth_Manager::launch_callback_gs_steam2(CSteamID steam_id, uint32_t user_id
         data3.m_SteamID = data3.m_OwnerSteamID = steam_id;
         callbacks->addCBResult(data3.k_iCallback, &data3, sizeof(data3), STEAM_TICKET_PROCESS_TIME * 2.0);
     } else {
-        /*
+        // Fire Steam2 callback. Only one of these is actually needed to kick the client.
         GSClientSteam2Deny_t data2{};
         data2.m_UserID = user_id;
-        data2.m_eSteamError = k_EDenyNotLoggedOn;
+        data2.m_eSteamError = k_EDenyNotLoggedOn; //TODO: other reasons?
         callbacks->addCBResult(data2.k_iCallback, &data2, sizeof(data2), STEAM_TICKET_PROCESS_TIME);
-        */
 
-        // Fire Steam3 callback. Only one of these is actually needed to kick the client.
+        /*
         GSClientDeny_t data3{};
         data3.m_SteamID = steam_id;
-        data3.m_eDenyReason = k_EDenyNotLoggedOn; //TODO: other reasons?
-        callbacks->addCBResult(data3.k_iCallback, &data3, sizeof(data3), STEAM_TICKET_PROCESS_TIME);
+        data3.m_eDenyReason = k_EDenyNotLoggedOn;
+        callbacks->addCBResult(data3.k_iCallback, &data3, sizeof(data3), STEAM_TICKET_PROCESS_TIME * 2.0);
+        */
     }
 }
 
@@ -863,7 +881,7 @@ HAuthTicket Auth_Manager::getWebApiTicket( const char* pchIdentity )
 CSteamID Auth_Manager::fakeUser()
 {
     Auth_Data data = {};
-    data.id = generate_steam_anon_user();
+    data.id = generate_steam_id_anonserver(); // not k_EAccountTypeAnonUser
     inbound.push_back(data);
     return data.id;
 }

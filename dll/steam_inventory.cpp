@@ -160,15 +160,13 @@ bool Steam_Inventory::GetResultItems( SteamInventoryResult_t resultHandle,
             // We end if we reached the end of items or the end of buffer
             for( auto i = user_items.begin(); i != user_items.end() && max_items; ++i, --max_items )
             {
-                pOutItemsArray->m_iDefinition = std::stoi(i.key());
-                pOutItemsArray->m_itemId = pOutItemsArray->m_iDefinition;
-                try
-                {
-                    pOutItemsArray->m_unQuantity = i->value("quantity", static_cast<uint16>(0));
-                }
-                catch (...)
-                {
-                    pOutItemsArray->m_unQuantity = 0;
+                pOutItemsArray->m_itemId = std::stoi(i.key());
+                try {
+                    pOutItemsArray->m_iDefinition = i->value("definition", static_cast<int32>(pOutItemsArray->m_itemId));
+                    pOutItemsArray->m_unQuantity = i->value("quantity", static_cast<uint16>(1));
+                } catch (...) {
+                    pOutItemsArray->m_iDefinition = static_cast<int32>(pOutItemsArray->m_itemId);
+                    pOutItemsArray->m_unQuantity = 1;
                 }
                 pOutItemsArray->m_unFlags = k_ESteamItemNoTrade;
                 ++pOutItemsArray;
@@ -178,16 +176,13 @@ bool Steam_Inventory::GetResultItems( SteamInventoryResult_t resultHandle,
                 if (!max_items) break;
                 auto it = user_items.find(std::to_string(itemid));
                 if (it != user_items.end()) {
-                    pOutItemsArray->m_iDefinition = static_cast<int32>(itemid);
                     pOutItemsArray->m_itemId = itemid;
-
-                    try
-                    {
-                        pOutItemsArray->m_unQuantity = it->value("quantity", static_cast<uint16>(0));
-                    }
-                    catch (...)
-                    {
-                        pOutItemsArray->m_unQuantity = 0;
+                    try {
+                        pOutItemsArray->m_iDefinition = it->value("definition", static_cast<int32>(pOutItemsArray->m_itemId));
+                        pOutItemsArray->m_unQuantity = it->value("quantity", static_cast<uint16>(1));
+                    } catch (...) {
+                        pOutItemsArray->m_iDefinition = static_cast<int32>(pOutItemsArray->m_itemId);
+                        pOutItemsArray->m_unQuantity = 1;
                     }
                     pOutItemsArray->m_unFlags = k_ESteamItemNoTrade;
                     ++pOutItemsArray;

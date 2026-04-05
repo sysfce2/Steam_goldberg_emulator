@@ -155,7 +155,7 @@ std::vector<uint8_t> Source_Query::handle_source_query(const void* buffer, size_
             serialize_response(output_buffer, static_cast<uint8_t>(2));
             serialize_response(output_buffer, gs.server_name());
             serialize_response(output_buffer, gs.map_name());
-            serialize_response(output_buffer, gs.mod_dir());
+            serialize_response(output_buffer, !gs.mod_dir().empty() ? gs.mod_dir() : gs.game_dir());
             serialize_response(output_buffer, gs.product());
             serialize_response(output_buffer, static_cast<uint16_t>(gs.appid()));
             serialize_response(output_buffer, static_cast<uint8_t>(players.size()));
@@ -206,11 +206,13 @@ std::vector<uint8_t> Source_Query::handle_source_query(const void* buffer, size_
                 serialize_response(output_buffer, source_response_header::A2S_PLAYER);
                 serialize_response(output_buffer, static_cast<uint8_t>(players.size())); // num_players
 
+                auto cur_time = std::chrono::steady_clock::now();
+
                 for (unsigned i = 0; i < players.size(); ++i) {
                     serialize_response(output_buffer, static_cast<uint8_t>(i)); // player index
                     serialize_response(output_buffer, players[i].second.name); // player name
                     serialize_response(output_buffer, players[i].second.score); // player score
-                    serialize_response(output_buffer, static_cast<float>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - players[i].second.join_time).count()));
+                    serialize_response(output_buffer, std::chrono::duration<float>(cur_time - players[i].second.join_time).count());
                 }
             }
         }

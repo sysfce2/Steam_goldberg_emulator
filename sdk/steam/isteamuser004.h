@@ -5,9 +5,14 @@
 #pragma once
 #endif
 
-enum EConfigSubTree
+enum ERegistrySubTree
 {
-	EConfigSubTree_stub
+	k_ERegistrySubTreeNews = 0,
+	k_ERegistrySubTreeApps = 1,
+	k_ERegistrySubTreeSubscriptions = 2,
+	k_ERegistrySubTreeGameServers = 3,
+	k_ERegistrySubTreeFriends = 4,
+	k_ERegistrySubTreeSystem = 5,
 };
 
 class ISteamUser004
@@ -35,10 +40,10 @@ public:
 
 	// logon cookie - this is obsolete and never used
 	virtual int GetSteamGameConnectToken( void *pBlob, int cbMaxBlob ) = 0;
-	virtual bool SetRegistryString( EConfigSubTree eRegistrySubTree, const char *pchKey, const char *pchValue ) = 0;
-	virtual bool GetRegistryString( EConfigSubTree eRegistrySubTree, const char *pchKey, char *pchValue, int cbValue ) = 0;
-	virtual bool SetRegistryInt( EConfigSubTree eRegistrySubTree, const char *pchKey, int iValue ) = 0;
-	virtual bool GetRegistryInt( EConfigSubTree eRegistrySubTree, const char *pchKey, int *piValue ) = 0;
+	virtual bool SetRegistryString( ERegistrySubTree eRegistrySubTree, const char *pchKey, const char *pchValue ) = 0;
+	virtual bool GetRegistryString( ERegistrySubTree eRegistrySubTree, const char *pchKey, char *pchValue, int cbValue ) = 0;
+	virtual bool SetRegistryInt( ERegistrySubTree eRegistrySubTree, const char *pchKey, int iValue ) = 0;
+	virtual bool GetRegistryInt( ERegistrySubTree eRegistrySubTree, const char *pchKey, int *piValue ) = 0;
 	virtual int InitiateGameConnection( void *pBlob, int cbMaxBlob, CSteamID steamID, int nGameAppID, uint32 unIPServer, uint16 usPortServer, bool bSecure ) = 0;
 	virtual void TerminateGameConnection( uint32 unIPServer, uint16 usPortServer ) = 0;
 	virtual void SetSelfAsPrimaryChatDestination() = 0;

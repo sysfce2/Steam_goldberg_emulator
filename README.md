@@ -36,7 +36,9 @@ You can find some guides, helper tools and scripts here:
 **These guides, tools and scripts are maintained by their authors. 
 Before using them, it's always a good idea to first make sure they are updated and designed to support all features of this fork of the emulator.**
 
-* **[GBE Fork Tools](https://github.com/Detanup01/gbe_fork_tools)**
+* **[gbe_fork_tools](https://github.com/Detanup01/gbe_fork_tools)**
+* **[gen.emu.sharp](https://github.com/otavepto/gen.emu.sharp)**
+* **[gse_fork_tools](https://github.com/alex47exe/gse_fork_tools)**
 * **[Semuexec](https://gitlab.com/detiam/Semuexec)**
 * **[Steam Emu Utility](https://github.com/turusudiro/SteamEmuUtility)**
 * **[How to use Goldberg Emulator](https://rentry.co/goldberg_emulator)**

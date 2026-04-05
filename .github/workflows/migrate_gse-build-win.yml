@@ -36,11 +36,11 @@ jobs:
           git config --global core.autocrlf false
 
       - name: "Checkout branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # extra helpers/tools, these are not built inside the deps build dir
       - name: "Clone third-party deps (build/win)"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/build/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/build/win"
@@ -74,7 +74,7 @@ jobs:
 
       # upload artifact
       - name: "Upload build package"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "${{ env.ARTIFACT_NAME }}"
           path: "${{ env.PACKAGE_BASE_DIR }}/"

@@ -109,6 +109,8 @@ struct Controller_Settings {
     std::map<std::string, std::map<std::string, std::pair<std::set<std::string>, std::string>>> action_sets{};
     std::map<std::string, std::string> action_set_layer_parents{};
     std::map<std::string, std::map<std::string, std::pair<std::set<std::string>, std::string>>> action_set_layers{};
+    std::string controller_type_override{};
+    bool enabled{};
 };
 
 struct Group_Clans {
@@ -326,7 +328,6 @@ public:
     struct Controller_Settings controller_settings{};
     std::string glyphs_directory{};
 
-
     // allow Steam_User_Stats::FindLeaderboard() to always succeed and create the given unknown leaderboard
     bool disable_leaderboards_create_unknown = false;
     // share leaderboards with other players playing the same game on the same network
@@ -373,12 +374,17 @@ public:
     bool overlay_always_show_fps = false;
     bool overlay_always_show_frametime = false;
     bool overlay_always_show_playtime = false;
+    // keys used to toggle the overlay, default = Shift + Tab
+    std::vector<std::string> overlay_toggle_keys{};
 
     // free weekend
     bool free_weekend = false;
 
     // voice chat
     bool enable_voice_chat = false;
+
+    // only use 32 bits for inventory item ids
+    bool use_32bit_inventory_item_ids = false;
 
 
 #ifdef LOBBY_CONNECT

@@ -126,7 +126,7 @@ Steam_Client::Steam_Client()
     steam_networking_sockets = new Steam_Networking_Sockets(settings_client, network, callback_results_client, callbacks_client, run_every_runcb, NULL);
     steam_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_networking_messages = new Steam_Networking_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
-    steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
+    steam_game_coordinator = new Steam_Game_Coordinator(settings_client, network, local_storage, callbacks_client, run_every_runcb, false);
     steam_networking_utils = new Steam_Networking_Utils(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_unified_messages = new Steam_Unified_Messages(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_game_search = new Steam_Game_Search(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
@@ -137,6 +137,7 @@ Steam_Client::Steam_Client()
     steam_timeline = new Steam_Timeline(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_app_disable_update = new Steam_App_Disable_Update(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
     steam_billing = new Steam_Billing(settings_client, network, callback_results_client, callbacks_client, run_every_runcb);
+    steam_user_items = new Steam_User_Items(settings_client, callbacks_client, callback_results_client);
 
     // server
     PRINT_DEBUG("init gameserver");
@@ -153,9 +154,10 @@ Steam_Client::Steam_Client()
     steam_gameserver_networking_sockets = new Steam_Networking_Sockets(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_networking_sockets->get_shared_between_client_server());
     steam_gameserver_networking_sockets_serialized = new Steam_Networking_Sockets_Serialized(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
     steam_gameserver_networking_messages = new Steam_Networking_Messages(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
-    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
+    steam_gameserver_game_coordinator = new Steam_Game_Coordinator(settings_server, network, local_storage, callbacks_server, run_every_runcb, true);
     steam_masterserver_updater = new Steam_Masterserver_Updater(settings_server, network, callback_results_server, callbacks_server, run_every_runcb, steam_gameserver);
     steam_gameserver_gamestats = new Steam_GameStats(settings_server, network, callback_results_server, callbacks_server, run_every_runcb);
+    steam_gameserver_items = new Steam_GameServer_Items(settings_server, callbacks_server, callback_results_server);
 
     PRINT_DEBUG("init AppTicket");
     steam_app_ticket = new Steam_AppTicket(settings_client);
@@ -199,6 +201,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_masterserver_updater);
     DEL_INST(steam_gameserver);
     DEL_INST(steam_gameserver_gamestats);
+    DEL_INST(steam_gameserver_items);
 
     DEL_INST(steam_matchmaking);
     DEL_INST(steam_matchmaking_servers);
@@ -231,6 +234,7 @@ Steam_Client::~Steam_Client()
     DEL_INST(steam_timeline);
     DEL_INST(steam_app_disable_update);
     DEL_INST(steam_billing);
+    DEL_INST(steam_user_items);
 
     DEL_INST(ugc_bridge);
 
@@ -343,6 +347,9 @@ HSteamUser Steam_Client::ConnectToGlobalUser( HSteamPipe hSteamPipe )
     }
 
     userLogIn();
+
+    // initialize GC now so that we have user's inventory ready right away
+    steam_game_coordinator->initialize_gc();
     
     // games like appid 1740720 and 2379780 do not call SteamAPI_RunCallbacks() or SteamAPI_ManualDispatch_RunFrame() or Steam_BGetCallback()
     // hence all run_callbacks() will never run, which might break the assumption that these callbacks are always run
@@ -392,6 +399,10 @@ void Steam_Client::ReleaseUser( HSteamPipe hSteamPipe, HSteamUser hUser )
 {
     PRINT_DEBUG_ENTRY();
     if (hUser == SERVER_HSTEAMUSER && steam_pipes.count(hSteamPipe)) {
+        if (steam_gameserver->BLoggedOn()) {
+            steam_gameserver->LogOff();
+        }
+
         steamclient_server_inited = false;
     }
 }
@@ -478,11 +489,22 @@ void Steam_Client::Remove_SteamAPI_CPostAPIResultInProcess( SteamAPI_PostAPIResu
     PRINT_DEBUG_TODO();
 }
 
-void Steam_Client::RegisterCallback( class CCallbackBase *pCallback, int iCallback)
+void Steam_Client::RegisterCallback( class CCallbackBase *pCallback, int iCallback )
 {
+    CCallbackBase *callback_to_add = pCallback;
+
+    // 1.02x added an overload for CCallbackBase::Run. Because of how MSVC handles virtual function
+    // overloads, this changed the order of functions in vtable from 1.02, which breaks old games.
+    // We get around this using a wrapper for the old CCallbackBase variant.
+    if (using_old_callbacks) {
+        PRINT_DEBUG("creating a wrapper for old callback %08X %i", pCallback, iCallback);
+        auto [it, _] = old_callbacks_map.emplace(pCallback, pCallback);
+        callback_to_add = &(it->second);
+    }
+
     int base_callback = (iCallback / 100) * 100;
     int callback_id = iCallback % 100;
-    bool isGameServer = CCallbackMgr::isServer(pCallback);
+    bool isGameServer = CCallbackMgr::isServer(callback_to_add);
     PRINT_DEBUG("isGameServer %u %i %i", isGameServer, iCallback, base_callback);
 
     switch (base_callback) {
@@ -695,18 +717,26 @@ void Steam_Client::RegisterCallback( class CCallbackBase *pCallback, int iCallba
     };
 
     if (isGameServer) {
-        callbacks_server->addCallBack(iCallback, pCallback);
+        callbacks_server->addCallBack(iCallback, callback_to_add);
     } else {
-        callbacks_client->addCallBack(iCallback, pCallback);
+        callbacks_client->addCallBack(iCallback, callback_to_add);
     }
 }
 
-void Steam_Client::UnregisterCallback( class CCallbackBase *pCallback)
+void Steam_Client::UnregisterCallback( class CCallbackBase *pCallback )
 {
-    int iCallback = pCallback->GetICallback();
+    CCallbackBase *callback_to_rm = pCallback;
+    if (using_old_callbacks) {
+        if (!old_callbacks_map.count(pCallback))
+            return;
+
+        callback_to_rm = &(old_callbacks_map.at(pCallback));
+    }
+
+    int iCallback = callback_to_rm->GetICallback();
     int base_callback = (iCallback / 100) * 100;
     int callback_id = iCallback % 100;
-    bool isGameServer = CCallbackMgr::isServer(pCallback);
+    bool isGameServer = CCallbackMgr::isServer(callback_to_rm);
     PRINT_DEBUG("isGameServer %u %i", isGameServer, base_callback);
 
     switch (base_callback) {
@@ -919,13 +949,17 @@ void Steam_Client::UnregisterCallback( class CCallbackBase *pCallback)
     };
 
     if (isGameServer) {
-        callbacks_server->rmCallBack(iCallback, pCallback);
+        callbacks_server->rmCallBack(iCallback, callback_to_rm);
     } else {
-        callbacks_client->rmCallBack(iCallback, pCallback);
+        callbacks_client->rmCallBack(iCallback, callback_to_rm);
+    }
+
+    if (using_old_callbacks) {
+        old_callbacks_map.erase(pCallback);
     }
 }
 
-void Steam_Client::RegisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall)
+void Steam_Client::RegisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall )
 {
     PRINT_DEBUG("%llu %i", hAPICall, pCallback->GetICallback());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
@@ -934,7 +968,7 @@ void Steam_Client::RegisterCallResult( class CCallbackBase *pCallback, SteamAPIC
     
 }
 
-void Steam_Client::UnregisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall)
+void Steam_Client::UnregisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall )
 {
     PRINT_DEBUG("%llu %i", hAPICall, pCallback->GetICallback());
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
@@ -991,53 +1025,7 @@ void Steam_Client::DestroyAllInterfaces()
 
 // older sdk ----------------------------------------------------------
 
-// creates a global instance of a steam user, so that other processes can share it
-// used by the steam UI, to share it's account info/connection with any games it launches
-// fails (returns NULL) if an existing instance already exists
-HSteamUser Steam_Client::CreateGlobalUser( HSteamPipe *phSteamPipe )
-{
-    // TODO not sure if this implementation is correct
-    PRINT_DEBUG_TODO();
-    for (const auto& [pipe_handle, pipe_type] : steam_pipes) {
-        if (pipe_type == Steam_Pipe::CLIENT) {
-            if (phSteamPipe) *phSteamPipe = pipe_handle;
-            return 0;
-        }
-    }
-
-    HSteamPipe pipe = CreateSteamPipe();
-    if (phSteamPipe) *phSteamPipe = pipe;
-
-    steam_pipes[pipe] = Steam_Pipe::CLIENT;
-    return CLIENT_HSTEAMUSER;
-}
-
-// retrieves the IVac interface associated with the handle
-// there is normally only one instance of VAC running, but using this connects it to the right user/account
-void *Steam_Client::GetIVAC( HSteamUser hSteamUser )
-{
-    PRINT_DEBUG_ENTRY();
-    // actual value from steamclient64.dll
-    return nullptr;
-}
-
-// returns the name of a universe
-const char *Steam_Client::GetUniverseName( EUniverse eUniverse )
-{
-    PRINT_DEBUG("%i", (int)eUniverse);
-    // actual values returned by steamclient64.dll
-    switch (eUniverse)
-    {
-    case EUniverse::k_EUniverseInvalid: return "Invalid";
-    case EUniverse::k_EUniversePublic: return "Public";
-    case EUniverse::k_EUniverseBeta: return "Beta";
-    case EUniverse::k_EUniverseInternal: return "Internal";
-    case EUniverse::k_EUniverseDev: return "Dev";
-    }
-
-    return "Unknown";
-}
-
+// SteamClient001 -----------------------------------------------------
 HSteamUser Steam_Client::CreateGlobalInstance()
 {
     PRINT_DEBUG_ENTRY();
@@ -1080,11 +1068,13 @@ ISteamUser *Steam_Client::GetISteamUser( HSteamUser hSteamUser, const char *pchV
     return GetISteamUser(hSteamUser, pipe, pchVersion);
 }
 
-ISteamGameServer *Steam_Client::GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion )
+// retrieves the IVac interface associated with the handle
+// there is normally only one instance of VAC running, but using this connects it to the right user/account
+void *Steam_Client::GetIVAC( HSteamUser hSteamUser )
 {
     PRINT_DEBUG_ENTRY();
-    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
-    return GetISteamGameServer(hSteamUser, pipe, pchVersion);
+    // actual value from steamclient64.dll
+    return nullptr;
 }
 
 bool Steam_Client::BMainLoop( uint64 time, bool unk )
@@ -1093,12 +1083,46 @@ bool Steam_Client::BMainLoop( uint64 time, bool unk )
     RunCallbacks(true, true);
     return true;
 }
+// SteamClient001 -----------------------------------------------------
 
+// SteamClient003 -----------------------------------------------------
 bool Steam_Client::BMainLoop( uint64 time )
 {
     PRINT_DEBUG_ENTRY();
     RunCallbacks(true, true);
     return true;
+}
+// SteamClient003 -----------------------------------------------------
+
+// SteamClient004 -----------------------------------------------------
+ISteamGameServer *Steam_Client::GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion )
+{
+    PRINT_DEBUG_ENTRY();
+    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
+    return GetISteamGameServer(hSteamUser, pipe, pchVersion);
+}
+// SteamClient004 -----------------------------------------------------
+
+// SteamClient005 -----------------------------------------------------
+// creates a global instance of a steam user, so that other processes can share it
+// used by the steam UI, to share it's account info/connection with any games it launches
+// fails (returns NULL) if an existing instance already exists
+HSteamUser Steam_Client::CreateGlobalUser( HSteamPipe *phSteamPipe )
+{
+    // TODO not sure if this implementation is correct
+    PRINT_DEBUG_TODO();
+    for (const auto &[pipe_handle, pipe_type] : steam_pipes) {
+        if (pipe_type == Steam_Pipe::CLIENT) {
+            if (phSteamPipe) *phSteamPipe = pipe_handle;
+            return 0;
+        }
+    }
+
+    HSteamPipe pipe = CreateSteamPipe();
+    if (phSteamPipe) *phSteamPipe = pipe;
+
+    steam_pipes[pipe] = Steam_Pipe::CLIENT;
+    return CLIENT_HSTEAMUSER;
 }
 
 EUniverse Steam_Client::GetConnectedUniverse()
@@ -1107,9 +1131,20 @@ EUniverse Steam_Client::GetConnectedUniverse()
     return k_EUniversePublic;
 }
 
-void Steam_Client::SetEUniverse( EUniverse universe )
+// returns the name of a universe
+const char *Steam_Client::GetUniverseName( EUniverse eUniverse )
 {
-    PRINT_DEBUG_TODO();
+    PRINT_DEBUG("%i", (int)eUniverse);
+    // actual values returned by steamclient64.dll
+    switch (eUniverse) {
+        case EUniverse::k_EUniverseInvalid: return "Invalid";
+        case EUniverse::k_EUniversePublic: return "Public";
+        case EUniverse::k_EUniverseBeta: return "Beta";
+        case EUniverse::k_EUniverseInternal: return "Internal";
+        case EUniverse::k_EUniverseDev: return "Dev";
+    }
+
+    return "Unknown";
 }
 
 bool Steam_Client::BGetCallback( HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg, int *unk )
@@ -1123,6 +1158,12 @@ void Steam_Client::FreeLastCallback( HSteamPipe hSteamPipe )
     PRINT_DEBUG_ENTRY();
     steamclient_free_callback(hSteamPipe);
 }
+
+void Steam_Client::SetEUniverse( EUniverse universe )
+{
+    PRINT_DEBUG_TODO();
+}
+// SteamClient005 -----------------------------------------------------
 
 HSteamPipe Steam_Client::get_pipe_for_user(HSteamUser hUser)
 {

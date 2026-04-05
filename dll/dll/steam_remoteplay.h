@@ -23,6 +23,7 @@
 class Steam_RemotePlay :
 public ISteamRemotePlay001,
 public ISteamRemotePlay002,
+public ISteamRemotePlay003,
 public ISteamRemotePlay
 {
     class Settings *settings{};
@@ -47,8 +48,27 @@ public:
     // Get the currently connected Steam Remote Play session ID at the specified index. Returns zero if index is out of bounds.
     uint32 GetSessionID( int iSessionIndex );
 
+    // Return true if the session has joined using a Remote Play Together invitation
+    bool BSessionRemotePlayTogether(RemotePlaySessionID_t unSessionID);
+
     // Get the SteamID of the connected user
     CSteamID GetSessionSteamID( uint32 unSessionID );
+
+    // Get the guest ID of the connected user if they are a Remote Play Together guest
+    // This returns 0 if the sessionID isn't valid or the session isn't a Remote Play Together guest
+    uint32 GetSessionGuestID(RemotePlaySessionID_t unSessionID);
+
+    // gets the small (32x32) avatar of the connected user, which is a handle to be used in IClientUtils::GetImageRGBA(), or 0 if the sessionID isn't valid
+    // returns -1 if this image has yet to be loaded, in this case wait for a RemotePlaySessionAvatarLoaded_t callback and then call this again
+    int GetSmallSessionAvatar(RemotePlaySessionID_t unSessionID);
+
+    // gets the medium (64x64) avatar of the connected user, which is a handle to be used in IClientUtils::GetImageRGBA(), or 0 if the sessionID isn't valid
+    // returns -1 if this image has yet to be loaded, in this case wait for a RemotePlaySessionAvatarLoaded_t callback and then call this again
+    int GetMediumSessionAvatar(RemotePlaySessionID_t unSessionID);
+
+    // gets the large (184x184) avatar of the connected user, which is a handle to be used in IClientUtils::GetImageRGBA(), or 0 if the sessionID isn't valid
+    // returns -1 if this image has yet to be loaded, in this case wait for a RemotePlaySessionAvatarLoaded_t callback and then call this again
+    int GetLargeSessionAvatar(RemotePlaySessionID_t unSessionID);
 
     // Get the name of the session client device
     // This returns NULL if the sessionID is not valid

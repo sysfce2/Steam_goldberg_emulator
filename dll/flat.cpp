@@ -2384,6 +2384,16 @@ STEAMAPI_API steam_bool SteamAPI_ISteamUserStats_GetAchievementProgressLimitsFlo
     return (get_steam_client()->steam_user_stats)->GetAchievementProgressLimits(pchName, pfMinProgress, pfMaxProgress);
 }
 
+STEAMAPI_API ISteamApps* SteamAPI_SteamApps_v009()
+{
+    return get_steam_client()->GetISteamApps(flat_hsteamuser(), flat_hsteampipe(), "STEAMAPPS_INTERFACE_VERSION009");
+}
+
+STEAMAPI_API ISteamApps* SteamAPI_SteamGameServerApps_v009()
+{
+    return get_steam_client()->GetISteamApps(flat_gs_hsteamuser(), flat_gs_hsteampipe(), "STEAMAPPS_INTERFACE_VERSION009");
+}
+
 STEAMAPI_API ISteamApps *SteamAPI_SteamApps_v008()
 {
     return get_steam_client()->GetISteamApps(flat_hsteamuser(), flat_hsteampipe(), "STEAMAPPS_INTERFACE_VERSION008");
@@ -2551,9 +2561,17 @@ STEAMAPI_API int SteamAPI_ISteamApps_GetNumBetas(ISteamApps* self, int* pnAvaila
 }
 
 // SDK 1.61 removed unAppID param
+/*
 STEAMAPI_API steam_bool SteamAPI_ISteamApps_GetBetaInfo(ISteamApps* self, int iBetaIndex, uint32* punFlags, uint32* punBuildID, char* pchBetaName, int cchBetaName, char* pchDescription, int cchDescription)
 {
     return self->GetBetaInfo(iBetaIndex, punFlags, punBuildID, pchBetaName, cchBetaName, pchDescription, cchDescription);
+}
+*/
+
+// SDK 1.64 added punLastUpdated.
+STEAMAPI_API steam_bool SteamAPI_ISteamApps_GetBetaInfo(ISteamApps* self, int iBetaIndex, uint32* punFlags, uint32* punBuildID, char* pchBetaName, int cchBetaName, char* pchDescription, int cchDescription, uint32* punLastUpdated)
+{
+    return self->GetBetaInfo(iBetaIndex, punFlags, punBuildID, pchBetaName, cchBetaName, pchDescription, cchDescription, punLastUpdated);
 }
 
 // SDK 1.61 removed unAppID param
@@ -4812,6 +4830,42 @@ STEAMAPI_API steam_bool SteamAPI_ISteamUGC_SetSubscriptionsLoadOrder( ISteamUGC 
     return (ptr)->SetSubscriptionsLoadOrder(pvecPublishedFileIDs, unNumPublishedFileIDs);
 }
 
+STEAMAPI_API steam_bool SteamAPI_ISteamUGC_MarkDownloadedItemAsUnused(ISteamUGC* self, PublishedFileId_t nPublishedFileID)
+{
+    long long client_vftable_distance = ((char*)self - (char*)get_steam_client()->steam_ugc);
+    long long server_vftable_distance = ((char*)self - (char*)get_steam_client()->steam_gameserver_ugc);
+    auto ptr = get_steam_client()->steam_gameserver_ugc;
+    if (client_vftable_distance >= 0 && (server_vftable_distance < 0 || client_vftable_distance < server_vftable_distance)) {
+        ptr = get_steam_client()->steam_ugc;
+    }
+
+    return (ptr)->MarkDownloadedItemAsUnused(nPublishedFileID);
+}
+
+STEAMAPI_API uint32 SteamAPI_ISteamUGC_GetNumDownloadedItems(ISteamUGC* self)
+{
+    long long client_vftable_distance = ((char*)self - (char*)get_steam_client()->steam_ugc);
+    long long server_vftable_distance = ((char*)self - (char*)get_steam_client()->steam_gameserver_ugc);
+    auto ptr = get_steam_client()->steam_gameserver_ugc;
+    if (client_vftable_distance >= 0 && (server_vftable_distance < 0 || client_vftable_distance < server_vftable_distance)) {
+        ptr = get_steam_client()->steam_ugc;
+    }
+
+    return (ptr)->GetNumDownloadedItems();
+}
+
+STEAMAPI_API uint32 SteamAPI_ISteamUGC_GetDownloadedItems(ISteamUGC* self, PublishedFileId_t* pvecPublishedFileIDs, uint32 cMaxEntries)
+{
+    long long client_vftable_distance = ((char*)self - (char*)get_steam_client()->steam_ugc);
+    long long server_vftable_distance = ((char*)self - (char*)get_steam_client()->steam_gameserver_ugc);
+    auto ptr = get_steam_client()->steam_gameserver_ugc;
+    if (client_vftable_distance >= 0 && (server_vftable_distance < 0 || client_vftable_distance < server_vftable_distance)) {
+        ptr = get_steam_client()->steam_ugc;
+    }
+
+    return (ptr)->GetDownloadedItems(pvecPublishedFileIDs, cMaxEntries);
+}
+
 STEAMAPI_API ISteamAppList *SteamAPI_SteamAppList_v001()
 {
     return get_steam_client()->GetISteamAppList(flat_hsteamuser(), flat_hsteampipe(), "STEAMAPPLIST_INTERFACE_VERSION001");
@@ -5791,6 +5845,11 @@ STEAMAPI_API ISteamRemotePlay *SteamAPI_SteamRemotePlay_v003()
     return get_steam_client()->GetISteamRemotePlay(flat_hsteamuser(), flat_hsteampipe(), "STEAMREMOTEPLAY_INTERFACE_VERSION003");
 }
 
+STEAMAPI_API ISteamRemotePlay* SteamAPI_SteamRemotePlay_v004()
+{
+    return get_steam_client()->GetISteamRemotePlay(flat_hsteamuser(), flat_hsteampipe(), "STEAMREMOTEPLAY_INTERFACE_VERSION004");
+}
+
 STEAMAPI_API uint32 SteamAPI_ISteamRemotePlay_GetSessionCount( ISteamRemotePlay* self )
 {
     return (get_steam_client()->steam_remoteplay)->GetSessionCount();
@@ -5801,9 +5860,34 @@ STEAMAPI_API RemotePlaySessionID_t SteamAPI_ISteamRemotePlay_GetSessionID( IStea
     return (get_steam_client()->steam_remoteplay)->GetSessionID(iSessionIndex);
 }
 
+STEAMAPI_API bool SteamAPI_ISteamRemotePlay_BSessionRemotePlayTogether(ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID)
+{
+    return (get_steam_client()->steam_remoteplay)->BSessionRemotePlayTogether(unSessionID);
+}
+
 STEAMAPI_API uint64_steamid SteamAPI_ISteamRemotePlay_GetSessionSteamID( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID )
 {
     return (get_steam_client()->steam_remoteplay)->GetSessionSteamID(unSessionID).ConvertToUint64();
+}
+
+STEAMAPI_API uint32 SteamAPI_ISteamRemotePlay_GetSessionGuestID(ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID)
+{
+    return (get_steam_client()->steam_remoteplay)->GetSessionGuestID(unSessionID);
+}
+
+STEAMAPI_API int SteamAPI_ISteamRemotePlay_GetSmallSessionAvatar(ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID)
+{
+    return (get_steam_client()->steam_remoteplay)->GetSmallSessionAvatar(unSessionID);
+}
+
+STEAMAPI_API int SteamAPI_ISteamRemotePlay_GetMediumSessionAvatar(ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID)
+{
+    return (get_steam_client()->steam_remoteplay)->GetMediumSessionAvatar(unSessionID);
+}
+
+STEAMAPI_API int SteamAPI_ISteamRemotePlay_GetLargeSessionAvatar(ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID)
+{
+    return (get_steam_client()->steam_remoteplay)->GetLargeSessionAvatar(unSessionID);
 }
 
 STEAMAPI_API const char * SteamAPI_ISteamRemotePlay_GetSessionClientName( ISteamRemotePlay* self, RemotePlaySessionID_t unSessionID )

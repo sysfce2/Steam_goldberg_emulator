@@ -17,6 +17,9 @@ env:
   PACKAGE_BASE_DIR: "build/package/linux"
   THIRD_PARTY_BASE_DIR: "third-party"
 
+  # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
+  MAX_PARALLEL_JOBS: 4
+
 jobs:
   deps-build:
     runs-on: "ubuntu-22.04"
@@ -25,7 +28,7 @@ jobs:
     steps:
       - name: "Lookup cache for deps"
         id: "emu-deps-cache-step"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           key: "${{ env.DEPS_CACHE_KEY }}-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
@@ -33,25 +36,25 @@ jobs:
       # we need branch because it has build scripts
       - name: "Checkout branch"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "Clone third-party deps (common/linux)"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/common/linux"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/common/linux"
 
       - name: "Clone third-party deps (deps/linux)"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/deps/linux"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/linux"
 
       - name: "Clone third-party deps (deps/common)"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: "third-party/deps/common"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/common"
@@ -87,4 +90,4 @@ jobs:
         run: |
           export CMAKE_GENERATOR="Unix Makefiles"
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5-deps.lua --64-build --32-build --all-ext --all-build --j=2 --verbose --clean --os=linux gmake2
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5-deps.lua --64-build --32-build --all-ext --all-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=linux gmake2

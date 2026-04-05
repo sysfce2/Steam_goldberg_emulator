@@ -157,6 +157,7 @@ private:
     // requests from server
     void network_stats_initial(Common_Message *msg);
     void network_stats_updated(Common_Message *msg);
+    void network_achievement_request(Common_Message *msg);
     void network_callback_stats(Common_Message *msg);
 
     // requests from other users to share leaderboards

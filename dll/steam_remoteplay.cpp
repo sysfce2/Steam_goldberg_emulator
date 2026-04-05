@@ -67,12 +67,56 @@ uint32 Steam_RemotePlay::GetSessionID( int iSessionIndex )
     return 0;
 }
 
+// Return true if the session has joined using a Remote Play Together invitation
+bool Steam_RemotePlay::BSessionRemotePlayTogether(RemotePlaySessionID_t unSessionID)
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return false;
+}
+
 // Get the SteamID of the connected user
 CSteamID Steam_RemotePlay::GetSessionSteamID( uint32 unSessionID )
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     return k_steamIDNil;
+}
+
+// Get the guest ID of the connected user if they are a Remote Play Together guest
+// This returns 0 if the sessionID isn't valid or the session isn't a Remote Play Together guest
+uint32 Steam_RemotePlay::GetSessionGuestID(RemotePlaySessionID_t unSessionID)
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return 0;
+}
+
+// gets the small (32x32) avatar of the connected user, which is a handle to be used in IClientUtils::GetImageRGBA(), or 0 if the sessionID isn't valid
+// returns -1 if this image has yet to be loaded, in this case wait for a RemotePlaySessionAvatarLoaded_t callback and then call this again
+int Steam_RemotePlay::GetSmallSessionAvatar(RemotePlaySessionID_t unSessionID)
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return 0;
+}
+
+// gets the medium (64x64) avatar of the connected user, which is a handle to be used in IClientUtils::GetImageRGBA(), or 0 if the sessionID isn't valid
+// returns -1 if this image has yet to be loaded, in this case wait for a RemotePlaySessionAvatarLoaded_t callback and then call this again
+int Steam_RemotePlay::GetMediumSessionAvatar(RemotePlaySessionID_t unSessionID)
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return 0;
+}
+
+// gets the large (184x184) avatar of the connected user, which is a handle to be used in IClientUtils::GetImageRGBA(), or 0 if the sessionID isn't valid
+// returns -1 if this image has yet to be loaded, in this case wait for a RemotePlaySessionAvatarLoaded_t callback and then call this again
+int Steam_RemotePlay::GetLargeSessionAvatar(RemotePlaySessionID_t unSessionID)
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return 0;
 }
 
 // Get the name of the session client device

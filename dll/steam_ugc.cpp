@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_ugc.h"
+#include "dll/dll.h"
 
 UGCQueryHandle_t Steam_UGC::new_ugc_query(EQueryType query_type, bool return_all_subscribed, uint32 page, bool next_cursor, const std::set<PublishedFileId_t> &return_only)
 {
@@ -1807,4 +1808,55 @@ bool Steam_UGC::SetSubscriptionsLoadOrder( PublishedFileId_t *pvecPublishedFileI
         return false;
 
     return true;
+}
+
+// Tells the client to no longer try to keep the item in its local cache, unless it was subscribed to by other users on this machine
+bool Steam_UGC::MarkDownloadedItemAsUnused(PublishedFileId_t nPublishedFileID)
+{
+    PRINT_DEBUG("%llu", nPublishedFileID);
+    // we don't really have to do anything here, leaving this TODO
+    // in case we need to keep track of these marked items later
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+    return true;
+}
+
+// Returns the number of items actually downloaded locally
+uint32 Steam_UGC::GetNumDownloadedItems()
+{
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    // https://partner.steamgames.com/doc/api/ISteamUGC#GetDownloadedItems
+    // "Returns 0 if called from a game server"
+    if (get_steam_client()->settings_server == settings) {
+        return 0;
+    }
+
+    return (uint32)settings->modSet().size(); // not sure if returning all mods is correct
+}
+
+// Returns the ids of the items downloaded
+uint32 Steam_UGC::GetDownloadedItems(PublishedFileId_t* pvecPublishedFileIDs, uint32 cMaxEntries)
+{
+    PRINT_DEBUG("%p [%u]", pvecPublishedFileIDs, cMaxEntries);
+    PRINT_DEBUG_TODO();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (!pvecPublishedFileIDs || cMaxEntries == 0) {
+        return 0;
+    }
+
+    // https://partner.steamgames.com/doc/api/ISteamUGC#GetDownloadedItems
+    // "Returns 0 if called from a game server"
+    if (get_steam_client()->settings_server == settings) {
+        return 0;
+    }
+
+    const auto all_mods = settings->modSet(); // not sure if using all mods is correct
+    uint32 count = std::min<uint32>((uint32)all_mods.size(), cMaxEntries);
+    std::copy_n(all_mods.cbegin(), count, pvecPublishedFileIDs);
+
+    PRINT_DEBUG("  copied count = %u", count);
+    return count;
 }

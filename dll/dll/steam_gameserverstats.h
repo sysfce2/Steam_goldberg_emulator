@@ -36,9 +36,15 @@ public ISteamGameServerStats
 		std::chrono::high_resolution_clock::time_point created{};
 		SteamAPICall_t steamAPICall{};
 		CSteamID steamIDUser{};
-
-		bool timeout = false;
 	};
+
+    struct RequestAchievement {
+        std::chrono::high_resolution_clock::time_point created{};
+        CSteamID steamIDUser{};
+        std::string achievement_name;
+
+        bool timeout = false;
+    };
 
 	struct CachedStat {
 		bool dirty = false; // true means it was changed on the server and should be sent to the user
@@ -55,6 +61,7 @@ public ISteamGameServerStats
 	};
 
 	std::vector<RequestAllStats> pending_RequestUserStats{};
+	std::vector<RequestAchievement> pending_RequestAchievement{};
 	std::map<uint64, UserData> all_users_data{};
 
 	CachedStat* find_stat(CSteamID steamIDUser, const std::string &key);
@@ -67,6 +74,7 @@ public ISteamGameServerStats
 	// reponses from player
 	void network_callback_initial_stats(Common_Message *msg);
 	void network_callback_updated_stats(Common_Message *msg);
+	void network_callback_achievement_response(Common_Message *msg);
 	void network_callback(Common_Message *msg);
 
 	// user connect/disconnect
@@ -79,6 +87,8 @@ public ISteamGameServerStats
 public:
 	Steam_GameServerStats(class Settings *settings, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb);
 	~Steam_GameServerStats();
+
+    bool request_user_achievement(CSteamID steamIDUser, const char *ach_name);
 	
 	// downloads stats for the user
 	// returns a GSStatsReceived_t callback when completed

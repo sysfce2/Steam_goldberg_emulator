@@ -31,6 +31,7 @@ enum EParentalFeature
 	k_EFeatureSiteLicense = 13,
 	k_EFeatureKioskMode_Deprecated = 14,
 	k_EFeatureBlockAlways = 15,
+    k_EFeatureDesktop = 16,
 	k_EFeatureMax
 };
 

@@ -161,6 +161,7 @@ local function genproto()
     local protoc_exe = path.join(deps_dir, 'protobuf', deps_install_prefix, 'bin', 'protoc')
 
     local out_dir = 'proto_gen/' .. os_iden
+    local out_dir_tf2 = out_dir .. "/tf2"
 
     if os.target() == "windows" then
         protoc_exe = protoc_exe .. '.exe'
@@ -178,6 +179,12 @@ local function genproto()
         return
     end
 
+    local ok_mk, err_mk = os.mkdir(out_dir_tf2)
+    if not ok_mk then
+        error("Error: " .. err_mk)
+        return
+    end
+
     if os.target() == "linux" then
         local ok_chmod, err_chmod = os.chmod(protoc_exe, "777")
         if not ok_chmod then
@@ -190,6 +197,12 @@ local function genproto()
         protoc_exe = 'wine ' .. protoc_exe
     end
 
+    if not os.execute(protoc_exe .. ' dll/gc_steam/steammessages.proto -I./dll/gc_steam --cpp_out=' .. out_dir ) then
+        return
+    end
+    if not os.execute(protoc_exe .. ' dll/gc_tf2/*.proto -I./dll/gc_steam -I./dll/gc_tf2 --cpp_out=' .. out_dir_tf2 ) then
+        return
+    end
     return os.execute(protoc_exe .. ' dll/net.proto -I./dll/ --cpp_out=' .. out_dir)
 end
 
@@ -310,7 +323,7 @@ local deps_link = {
 }
 -- add protobuf libs
 table_append(deps_link, {
-    lib_prefix .. "protobuf-lite"                 .. static_postfix,
+    lib_prefix .. "protobuf"                      .. static_postfix,
     "absl_bad_any_cast_impl"                      .. static_postfix,
     "absl_bad_optional_access"                    .. static_postfix,
     "absl_bad_variant_access"                     .. static_postfix,

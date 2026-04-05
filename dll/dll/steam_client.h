@@ -51,17 +51,20 @@
 #include "steam_parties.h"
 #include "steam_remoteplay.h"
 #include "steam_tv.h"
-#include "steam_billing.h"
-
-#include "steam_gameserver.h"
-#include "steam_gameserverstats.h"
 #include "steam_gamestats.h"
 #include "steam_timeline.h"
 #include "steam_app_disable_update.h"
+#include "steam_billing.h"
+#include "steam_user_items.h"
+
+#include "steam_gameserver.h"
 #include "steam_masterserver_updater.h"
+#include "steam_gameserverstats.h"
+#include "steam_gameserver_items.h"
 
 #include "overlay/steam_overlay.h"
 #include "playtime.h"
+#include "callback_wrapper.h"
 
 enum Steam_Pipe {
     NO_USER,
@@ -109,6 +112,8 @@ private:
     common_helpers::KillableWorker *background_thread{};
     void background_thread_proc();
 
+    std::map<CCallbackBase *, CCallBackWrapper> old_callbacks_map;
+
 public:
     Networking *network{};
     SteamCallResults *callback_results_server{}, *callback_results_client{};
@@ -153,6 +158,7 @@ public:
     Steam_Timeline *steam_timeline{};
     Steam_App_Disable_Update *steam_app_disable_update{};
     Steam_Billing *steam_billing{};
+    Steam_User_Items *steam_user_items{};
 
     Steam_GameServer *steam_gameserver{};
     Steam_User *steam_gameserver_user{};
@@ -169,6 +175,7 @@ public:
     Steam_Game_Coordinator *steam_gameserver_game_coordinator{};
     Steam_Masterserver_Updater *steam_masterserver_updater{};
     Steam_GameStats *steam_gameserver_gamestats{};
+    Steam_GameServer_Items *steam_gameserver_items{};
     
     Steam_AppTicket *steam_app_ticket{};
 
@@ -176,10 +183,11 @@ public:
 
     PlaytimeCounter* playtime_counter{};
 
-    bool steamclient_server_inited = false;
+    bool steamclient_server_inited{};
 
     bool gameserver_has_ipv6_functions{};
     int steamclient_version{};
+    bool using_old_callbacks{};
     
     unsigned steam_pipe_counter = 1;
     std::map<HSteamPipe, enum Steam_Pipe> steam_pipes{};
@@ -343,11 +351,11 @@ public:
     
     ISteamAppTicket *GetAppTicket( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-    void RegisterCallback( class CCallbackBase *pCallback, int iCallback);
-    void UnregisterCallback( class CCallbackBase *pCallback);
+    void RegisterCallback( class CCallbackBase *pCallback, int iCallback );
+    void UnregisterCallback( class CCallbackBase *pCallback) ;
 
-    void RegisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall);
-    void UnregisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall);
+    void RegisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall );
+    void UnregisterCallResult( class CCallbackBase *pCallback, SteamAPICall_t hAPICall );
     
     void RunCallbacks(bool runClientCB, bool runGameserverCB);
     void setAppID(uint32 appid);
@@ -364,36 +372,52 @@ public:
     // https://github.com/ValveSoftware/Proton/blob/proton_9.0/lsteamclient/steamworks_sdk_099v/isteamclient.h
     // https://workshop.perforce.com/files/guest/knut_wikstrom/ValveSDKCode/public/steam/isteamclient.h
 
-    // creates a global instance of a steam user, so that other processes can share it
-    // used by the steam UI, to share it's account info/connection with any games it launches
-    // fails (returns NULL) if an existing instance already exists
-    HSteamUser CreateGlobalUser( HSteamPipe *phSteamPipe );
-    // retrieves the IVac interface associated with the handle
-    // there is normally only one instance of VAC running, but using this connects it to the right user/account
-    void *GetIVAC( HSteamUser hSteamUser );
-    // returns the name of a universe
-    const char *GetUniverseName( EUniverse eUniverse );
-    void *GetISteamBilling_old( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
-
+    // SteamClient001 -----------------------------------------------------
     HSteamUser CreateGlobalInstance();
     HSteamUser ConnectToGlobalInstance();
     HSteamUser CreateLocalInstance();
     void ReleaseInstance( HSteamUser hSteamUser );
     ISteamUser *GetISteamUser( HSteamUser hSteamUser, const char *pchVersion );
-    ISteamGameServer *GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion );
-    bool BMainLoop( uint64 time );
+    // retrieves the IVac interface associated with the handle
+    // there is normally only one instance of VAC running, but using this connects it to the right user/account
+    void *GetIVAC( HSteamUser hSteamUser );
     bool BMainLoop( uint64 time, bool unk );
-    EUniverse GetConnectedUniverse();
-    bool BGetCallback( HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg, int *unk );
-    void FreeLastCallback( HSteamPipe hSteamPipe );
-    void SetEUniverse( EUniverse universe );
     void Test_SetSpew( const char *unk1, int unk2 ) {}
     void Test_SetSpewFunc( void *unk ) {}
     void Test_OverrideIPs( uint32 unIPPublic, uint32 unIPPrivate ) {}
     void Test_SetServerLoadState( bool unk1, bool unk2 ) {}
     void Test_SetStressMode( bool unk ) {}
     int Test_GetStatsVConn() { return 0; }
+    // SteamClient001 -----------------------------------------------------
+
+    // SteamClient002 -----------------------------------------------------
     void Test_RemoveAllClients() {}
+    // SteamClient002 -----------------------------------------------------
+
+    // SteamClient003 -----------------------------------------------------
+    bool BMainLoop( uint64 time );
+    // SteamClient003 -----------------------------------------------------
+
+    // SteamClient004 -----------------------------------------------------
+    ISteamGameServer *GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion );
+    // SteamClient004 -----------------------------------------------------
+
+    // SteamClient005 -----------------------------------------------------
+    // creates a global instance of a steam user, so that other processes can share it
+    // used by the steam UI, to share it's account info/connection with any games it launches
+    // fails (returns NULL) if an existing instance already exists
+    HSteamUser CreateGlobalUser( HSteamPipe *phSteamPipe );
+    EUniverse GetConnectedUniverse();
+    // returns the name of a universe
+    const char *GetUniverseName( EUniverse eUniverse );
+    bool BGetCallback( HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg, int *unk );
+    void FreeLastCallback( HSteamPipe hSteamPipe );
+    void SetEUniverse( EUniverse universe );
+    // SteamClient005 -----------------------------------------------------
+
+    // SteamClient006 -----------------------------------------------------
+    void *GetISteamBilling_old( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // SteamClient006 -----------------------------------------------------
     // older sdk ----------------------------------------------------------
 
     void report_missing_impl(std::string_view itf, std::string_view caller);

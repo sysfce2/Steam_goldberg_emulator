@@ -259,8 +259,32 @@ Steam_AppTicket::Steam_AppTicket(class Settings *settings) :
 
 uint32 Steam_AppTicket::GetAppOwnershipTicketData( uint32 nAppID, void *pvBuffer, uint32 cbBufferLength, uint32 *piAppId, uint32 *piSteamId, uint32 *piSignature, uint32 *pcbSignature )
 {
-    PRINT_DEBUG("TODO %u, %p, %u, %p, %p, %p, %p", nAppID, pvBuffer, cbBufferLength, piAppId, piSteamId, piSignature, pcbSignature);
+    PRINT_DEBUG("%u, %p, %u, %p, %p, %p, %p", nAppID, pvBuffer, cbBufferLength, piAppId, piSteamId, piSignature, pcbSignature);
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (pvBuffer != nullptr && cbBufferLength >= 24) {
+        *reinterpret_cast<uint32_t*>(pvBuffer) = nAppID;
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(pvBuffer) + 8) = settings->get_current_steam_id().ConvertToUint64();
+        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pvBuffer) + 16) = 0;
+
+        if (piAppId != nullptr) {
+            *piAppId = 0;
+        }
+
+        if (piSteamId != nullptr) {
+            *piSteamId = 8;
+        }
+
+        if (piSignature != nullptr) {
+            *piSignature = 16;
+        }
+
+        if (pcbSignature != nullptr) {
+            *pcbSignature = 8;
+        }
+
+        return 24;
+    }
 
     return 0;
 }

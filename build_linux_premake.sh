@@ -5,21 +5,22 @@ function help_page () {
   echo "switches:"
   echo "  --deps: rebuild third-party dependencies"
   echo "  --nogen: don't regenerate build files"
+  echo "  --j: parallel build jobs"
   echo "  --help: show this page"
 }
 
-# use 70%
-build_threads="$(( $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0) * 70 / 100 ))"
-[[ $build_threads -lt 2 ]] && build_threads=2
-
 BUILD_DEPS=0
 GEN_PROJECT=1
+BUILD_JOBS=-1
 for (( i=1; i<=$#; ++i )); do
   arg="${!i}"
   if [[ "$arg" = "--deps" ]]; then
     BUILD_DEPS=1
   elif [[ "$arg" = "--nogen" ]]; then
     GEN_PROJECT=0
+  elif [[ "$arg" = "--j" ]]; then
+    BUILD_JOBS="$2"
+    shift 1
   elif [[ "$arg" = "--help" ]]; then
     help_page
     exit 0
@@ -28,6 +29,11 @@ for (( i=1; i<=$#; ++i )); do
     exit 1
   fi
 done
+
+# use 70%
+build_threads="$(( $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0) * 70 / 100 ))"
+[[ $build_threads -lt 2 ]] && build_threads=2
+[[ "$BUILD_JOBS" -ge 1 ]] && build_threads="$BUILD_JOBS"
 
 premake_exe=./"third-party/common/linux/premake/premake5"
 if [[ ! -f "$premake_exe" ]]; then

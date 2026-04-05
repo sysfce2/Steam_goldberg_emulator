@@ -22,6 +22,7 @@
 #include <curl/curl.h>
 
 #define DEFAULT_PORT 47584
+#define NUM_QUERY_PORTS 10
 
 #if defined(STEAM_WIN32)
 typedef unsigned int sock_t;
@@ -67,6 +68,7 @@ enum Callback_Ids {
     CALLBACK_ID_GAMESERVER_STATS,
     CALLBACK_ID_LEADERBOARDS_STATS,
     CALLBACK_ID_USER_STATS,
+    CALLBACK_ID_GAMESERVER_ITEMS,
 
     CALLBACK_IDS_MAX
 };
