@@ -2262,6 +2262,11 @@ void Steam_Overlay::render_main_window()
 
                 // Full-size background preview — standalone window
                 if (!sce_bg_preview_key.empty()) {
+                    // Dim everything behind the preview window
+                    ImGui::GetBackgroundDrawList()->AddRectFilled(
+                        ImVec2(0, 0), io.DisplaySize,
+                        IM_COL32(0, 0, 0, 180));
+
                     auto &ftex = sce_textures[sce_bg_preview_key];
                     if (!ftex.load_attempted && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
                         ftex.load_attempted = true;
