@@ -2224,10 +2224,13 @@ void Steam_Overlay::render_main_window()
                                             IM_COL32(160, 160, 160, 255), badge);
                                     }
 
-                                    // On click: open full-size preview for any asset type
-                                    bool can_preview = is_bg ? !item->wallpaper_url.empty() : is_static;
+                                    // On click: open full-size preview for any asset type.
+                                    // Animated BGs (types 7/8) preview the wallpaper_ file;
+                                    // static BG (type 6) and all others preview the icon_ file.
+                                    bool is_animated_bg = (tidx == 7 || tidx == 8);
+                                    bool can_preview = is_animated_bg ? !item->wallpaper_url.empty() : is_static;
                                     if (clicked && can_preview) {
-                                        if (is_bg) {
+                                        if (is_animated_bg) {
                                             std::string full_ext = url_ext(item->wallpaper_url);
                                             std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
                                             sce_preview_key = folder + PATH_SEPARATOR + full_filename;
@@ -2243,7 +2246,7 @@ void Steam_Overlay::render_main_window()
                                             std::string nlbl = sanitize(nitem->name);
                                             if (nlbl.size() > 48) nlbl.resize(48);
                                             std::string npreview_file;
-                                            if (is_bg) {
+                                            if (is_animated_bg) {
                                                 if (nitem->wallpaper_url.empty()) continue;
                                                 std::string next = url_ext(nitem->wallpaper_url);
                                                 npreview_file = std::string(npfx) + "wallpaper_" + nlbl + next;
