@@ -140,6 +140,7 @@ class Steam_Overlay
     bool show_user_info = false;
     bool show_achievements = false;
     bool show_settings = false;
+    bool show_sce_browser = false;
 
     // SCE asset download progress (set by NotifySceAssetsReady, read on render thread)
     struct SceAssetProgress {

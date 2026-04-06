@@ -1547,7 +1547,7 @@ void Steam_Overlay::render_main_window()
             show_settings = !show_settings;
         }
 
-        // SCE asset download button + progress — only shown when SCE catalog data is present
+        // SCE buttons — only shown when SCE catalog data is present
         {
             Steam_User_Stats *user_stats = get_steam_client()->steam_user_stats;
             if (user_stats->sce_data_populated && !user_stats->sce_game_data.series.empty()) {
@@ -1557,21 +1557,33 @@ void Steam_Overlay::render_main_window()
                     if (ImGui::Button("Download SCE Assets")) {
                         user_stats->RequestSceAssetDownload();
                     }
+                    ImGui::SameLine();
+                    if (ImGui::Button(show_sce_browser ? "[SCE Assets]" : "Browse SCE Assets"))
+                        show_sce_browser = !show_sce_browser;
                 } else {
                     ImGui::BeginDisabled();
                     ImGui::Button("Downloading SCE Assets...");
                     ImGui::EndDisabled();
                 }
 
+                // ---- Download progress: fixed 25%-wide floating window ----
                 if (downloading) {
                     uint32_t grand_dl    = user_stats->sce_assets_downloaded.load();
                     uint32_t grand_skip  = user_stats->sce_assets_skipped.load();
                     uint32_t grand_total = user_stats->sce_assets_total.load();
                     uint32_t grand_done  = grand_dl + grand_skip;
 
-                    ImGui::Spacing();
+                    float win_w = io.DisplaySize.x * 0.25f;
+                    ImGui::SetNextWindowSize(ImVec2(win_w, 0.0f), ImGuiCond_Always);
+                    ImGui::SetNextWindowPos(
+                        ImVec2(io.DisplaySize.x * 0.5f - win_w * 0.5f, io.DisplaySize.y * 0.08f),
+                        ImGuiCond_Always);
+                    ImGui::SetNextWindowBgAlpha(0.92f);
+                    ImGui::Begin("SCE Download Progress##sce_dl", nullptr,
+                        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                        ImGuiWindowFlags_AlwaysAutoResize);
 
-                    // Total progress bar
                     if (grand_total > 0) {
                         char total_lbl[128]{};
                         snprintf(total_lbl, sizeof(total_lbl),
@@ -1579,9 +1591,11 @@ void Steam_Overlay::render_main_window()
                             grand_dl, grand_skip, grand_total);
                         float frac = (float)grand_done / (float)grand_total;
                         ImGui::ProgressBar(frac, ImVec2(-1.0f, 0.0f), total_lbl);
+                    } else {
+                        ImGui::TextUnformatted("Collecting asset URLs...");
                     }
 
-                    // Per-type progress bars (only for types that have assets)
+                    ImGui::Spacing();
                     for (int i = 0; i < Steam_User_Stats::SCE_NUM_TYPES; ++i) {
                         uint32_t tot = user_stats->sce_type_progress[i].total.load();
                         if (tot == 0) continue;
@@ -1592,6 +1606,8 @@ void Steam_Overlay::render_main_window()
                             Steam_User_Stats::SCE_TYPE_LABELS[i], cur, tot, dl);
                         ImGui::ProgressBar((float)cur / (float)tot, ImVec2(-1.0f, 0.0f), lbl);
                     }
+
+                    ImGui::End();
                 }
             }
 
@@ -1605,7 +1621,7 @@ void Steam_Overlay::render_main_window()
                     sce_asset_progress.skipped,
                     sce_asset_progress.total);
                 submit_notification(notification_type::message, msg);
-                allow_renderer_frame_processing(false); // release the frame request we added in NotifySceAssetsReady
+                allow_renderer_frame_processing(false);
             }
         }
         
@@ -1985,6 +2001,99 @@ void Steam_Overlay::render_main_window()
             }
             
             ImGui::End();
+        }
+
+        // SCE asset browser window — ≥50% wide, shown when Browse SCE Assets is toggled on
+        if (show_sce_browser) {
+            Steam_User_Stats *user_stats = get_steam_client()->steam_user_stats;
+            if (!user_stats->sce_data_populated || user_stats->sce_game_data.series.empty()) {
+                show_sce_browser = false;
+            } else {
+                const float min_w = io.DisplaySize.x * 0.50f;
+                ImGui::SetNextWindowSizeConstraints(
+                    ImVec2(min_w, io.DisplaySize.y * 0.40f),
+                    ImVec2(8192.0f, 8192.0f));
+                ImGui::SetNextWindowBgAlpha(1.0f);
+                if (ImGui::Begin("SCE Assets##sce_browser", &show_sce_browser)) {
+                    // Info header
+                    ImGui::TextDisabled("Assets folder: GSE Saves/%u/%s",
+                        user_stats->sce_game_data.appid,
+                        Steam_User_Stats::sce_assets_folder);
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    for (const auto &series : user_stats->sce_game_data.series) {
+                        // Build series header label
+                        char ser_label[128]{};
+                        if (!series.series_name.empty())
+                            snprintf(ser_label, sizeof(ser_label),
+                                "Series %d - %s", series.series_number, series.series_name.c_str());
+                        else
+                            snprintf(ser_label, sizeof(ser_label), "Series %d", series.series_number);
+
+                        if (!ImGui::CollapsingHeader(ser_label, ImGuiTreeNodeFlags_DefaultOpen))
+                            continue;
+
+                        // Group items by type
+                        std::map<int, std::vector<const Steam_User_Stats::SceItem *>> by_type;
+                        for (const auto &item : series.items)
+                            by_type[(int)item.type].push_back(&item);
+
+                        for (int tidx = 0; tidx < Steam_User_Stats::SCE_NUM_TYPES; ++tidx) {
+                            auto it = by_type.find(tidx);
+                            if (it == by_type.end() || it->second.empty()) continue;
+
+                            char type_label[64]{};
+                            snprintf(type_label, sizeof(type_label),
+                                "%s (%zu)##type_%d_%d",
+                                Steam_User_Stats::SCE_TYPE_LABELS[tidx],
+                                it->second.size(), series.series_number, tidx);
+
+                            if (!ImGui::TreeNode(type_label)) continue;
+
+                            if (ImGui::BeginTable("##items", 4,
+                                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                    ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
+                                    ImVec2(0.0f, std::min((float)it->second.size() * ImGui::GetFrameHeightWithSpacing() + 4.0f, 260.0f)))) {
+                                ImGui::TableSetupScrollFreeze(0, 1);
+                                ImGui::TableSetupColumn("#",      ImGuiTableColumnFlags_WidthFixed, 30.0f);
+                                ImGui::TableSetupColumn("Name",   ImGuiTableColumnFlags_WidthStretch);
+                                ImGui::TableSetupColumn("Rarity", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+                                ImGui::TableSetupColumn("Price",  ImGuiTableColumnFlags_WidthFixed, 90.0f);
+                                ImGui::TableHeadersRow();
+
+                                for (const auto *item : it->second) {
+                                    ImGui::TableNextRow();
+                                    ImGui::TableSetColumnIndex(0);
+                                    if (item->slot > 0)
+                                        ImGui::Text("%d", item->slot);
+                                    else
+                                        ImGui::TextDisabled("-");
+
+                                    ImGui::TableSetColumnIndex(1);
+                                    ImGui::TextUnformatted(item->name.c_str());
+
+                                    ImGui::TableSetColumnIndex(2);
+                                    if (!item->rarity.empty() && item->rarity != "Unknown")
+                                        ImGui::TextUnformatted(item->rarity.c_str());
+                                    else
+                                        ImGui::TextDisabled("-");
+
+                                    ImGui::TableSetColumnIndex(3);
+                                    if (!item->price_text.empty())
+                                        ImGui::TextUnformatted(item->price_text.c_str());
+                                    else
+                                        ImGui::TextDisabled("-");
+                                }
+                                ImGui::EndTable();
+                            }
+                            ImGui::TreePop();
+                        }
+                        ImGui::Spacing();
+                    }
+                }
+                ImGui::End();
+            }
         }
 
         // user clicked on "settings" button

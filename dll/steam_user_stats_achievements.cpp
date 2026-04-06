@@ -1436,6 +1436,33 @@ void Steam_User_Stats::RequestSceAssetDownload()
             return response;
         };
 
+        // Build up to 2 alternative CDN URLs for a given asset URL.
+        // Steam serves /steamcommunity/public/images/items/ via three interchangeable CDN hosts:
+        //   cdn.cloudflare.steamstatic.com  (Cloudflare — primary in SCE pages)
+        //   steamcdn-a.akamaihd.net         (Akamai     — used by SCE for badges, Valve docs)
+        //   cdn.fastly.steamstatic.com      (Fastly     — used by Steam store for achievement icons)
+        // For any other host (e.g. steamcommunity.com/economy/profilebackground/...) no alternatives.
+        auto build_cdn_alts = [](const std::string &url) -> std::vector<std::string> {
+            static constexpr const char *kCdnHosts[] = {
+                "cdn.cloudflare.steamstatic.com",
+                "steamcdn-a.akamaihd.net",
+                "cdn.fastly.steamstatic.com",
+            };
+            constexpr size_t kSchemeLen = 8; // strlen("https://")
+            if (url.size() <= kSchemeLen) return {};
+            size_t path_start = url.find('/', kSchemeLen);
+            if (path_start == std::string::npos) return {};
+            std::string host = url.substr(kSchemeLen, path_start - kSchemeLen);
+            std::string path = url.substr(path_start);
+            std::vector<std::string> alts;
+            for (const char *h : kCdnHosts) {
+                if (host == h) continue;
+                alts.push_back(std::string("https://") + h + path);
+                if (alts.size() >= 2) break;
+            }
+            return alts;
+        };
+
         uint32_t downloaded = 0;
         uint32_t skipped    = 0;
 
@@ -1461,6 +1488,20 @@ void Steam_User_Stats::RequestSceAssetDownload()
             }
 
             std::string data = curl_get_binary(entry.url);
+
+            // On failure, try up to 2 alternative CDN hosts before giving up
+            if (data.empty()) {
+                for (const auto &alt_url : build_cdn_alts(entry.url)) {
+                    PRINT_DEBUG("SceAssets: primary failed, trying CDN alt: %s", alt_url.c_str());
+                    data = curl_get_binary(alt_url);
+                    if (!data.empty()) {
+                        PRINT_DEBUG("SceAssets: CDN alt succeeded: %s", alt_url.c_str());
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
+            }
+
             if (!data.empty()) {
                 local_storage->store_data(entry.folder, entry.filename, &data[0], (unsigned int)data.size());
                 ++downloaded;
@@ -1468,7 +1509,7 @@ void Steam_User_Stats::RequestSceAssetDownload()
                 if (tidx >= 0) { ++sce_type_progress[tidx].downloaded; ++sce_type_progress[tidx].current; }
                 PRINT_DEBUG("SceAssets: saved %s (%zu bytes)", entry.filename.c_str(), data.size());
             } else {
-                PRINT_DEBUG("SceAssets: empty response for %s", entry.url.c_str());
+                PRINT_DEBUG("SceAssets: all CDN attempts failed for %s", entry.url.c_str());
             }
 
             // rate-limit: 200ms between requests to avoid hammering the CDN
