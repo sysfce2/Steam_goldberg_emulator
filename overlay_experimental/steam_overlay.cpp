@@ -2077,6 +2077,37 @@ void Steam_Overlay::render_main_window()
                     ImVec2(min_w, io.DisplaySize.y * 0.50f),
                     ImVec2(8192.0f, 8192.0f));
                 ImGui::SetNextWindowBgAlpha(1.0f);
+                // Build ordered list of full wallpaper keys for all BG items (for prev/next nav)
+                std::vector<std::string> sce_bg_nav_keys;
+                {
+                    for (const auto &ns : user_stats->sce_game_data.series) {
+                        char snstr[8]{};
+                        snprintf(snstr, sizeof(snstr), "%02d", ns.series_number);
+                        std::string nser_dir = std::string("Series ") + snstr;
+                        if (!ns.series_name.empty()) nser_dir += " - " + sanitize(ns.series_name);
+                        std::map<int, std::vector<const Steam_User_Stats::SceItem *>> nby_type;
+                        for (const auto &item : ns.items) nby_type[(int)item.type].push_back(&item);
+                        for (int t : {6, 7, 8}) {
+                            auto it = nby_type.find(t);
+                            if (it == nby_type.end()) continue;
+                            int nslot = 0;
+                            for (const auto *item : it->second) {
+                                ++nslot;
+                                if (item->wallpaper_url.empty()) continue;
+                                std::string ext = url_ext(item->wallpaper_url);
+                                std::string lbl = sanitize(item->name);
+                                if (lbl.size() > 48) lbl.resize(48);
+                                char pfx[8]{}; snprintf(pfx, sizeof(pfx), "%02d_", nslot);
+                                std::string fname = std::string(pfx) + "wallpaper_" + lbl + ext;
+                                std::string fld = std::string(Steam_User_Stats::sce_assets_folder)
+                                    + PATH_SEPARATOR + nser_dir
+                                    + PATH_SEPARATOR + type_subfolder(t);
+                                sce_bg_nav_keys.push_back(fld + PATH_SEPARATOR + fname);
+                            }
+                        }
+                    }
+                }
+
                 bool browser_open = show_sce_browser;
                 if (ImGui::Begin("SCE Assets##sce_browser", &browser_open)) {
                     ImGui::TextDisabled("Assets folder: GSE Saves/%u/%s",
@@ -2302,8 +2333,12 @@ void Steam_Overlay::render_main_window()
                     if (ImGui::Begin("##sce_bg_preview", &preview_open,
                             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+                        constexpr float BTN_H = 28.f;
+                        constexpr float BTN_W = 64.f;
+                        constexpr float NAV_PAD = 8.f; // padding above/below nav bar
+                        float img_avail_h = ImGui::GetContentRegionAvail().y - BTN_H - NAV_PAD * 2.f;
                         if (ftex.resource && ftex.resource->GetResourceId() != 0) {
-                            ImVec2 avail = ImGui::GetContentRegionAvail();
+                            ImVec2 avail = ImVec2(ImGui::GetContentRegionAvail().x, img_avail_h);
                             float sa = (ftex.h > 0) ? (float)ftex.w / ftex.h : 1.0f;
                             float dw = avail.x, dh = avail.x / sa;
                             if (dh > avail.y) { dh = avail.y; dw = avail.y * sa; }
@@ -2313,10 +2348,53 @@ void Steam_Overlay::render_main_window()
                                                        ImGui::GetCursorPosY() + pady));
                             ImGui::Image(ftex.resource->GetResourceId(), ImVec2(dw, dh));
                         } else {
-                            ImGui::SetCursorPosY(ph * 0.45f);
+                            ImGui::SetCursorPosY(img_avail_h * 0.45f);
                             ImGui::SetCursorPosX((pw - ImGui::CalcTextSize("Loading...").x) * 0.5f);
                             ImGui::TextDisabled("Loading...");
                         }
+                        // --- Navigation buttons ---
+                        int nav_cur = -1;
+                        for (int ni = 0; ni < (int)sce_bg_nav_keys.size(); ++ni)
+                            if (sce_bg_nav_keys[ni] == sce_bg_preview_key) { nav_cur = ni; break; }
+
+                        auto nav_to = [&](int ni) {
+                            sce_bg_preview_key = sce_bg_nav_keys[ni];
+                        };
+
+                        bool can_prev = nav_cur > 0;
+                        bool can_next = nav_cur >= 0 && nav_cur < (int)sce_bg_nav_keys.size() - 1;
+
+                        // Arrow-key navigation (NoNav is set but IsKeyPressed still works)
+                        if (can_prev && ImGui::IsKeyPressed(ImGuiKey_LeftArrow))  nav_to(nav_cur - 1);
+                        if (can_next && ImGui::IsKeyPressed(ImGuiKey_RightArrow)) nav_to(nav_cur + 1);
+
+                        // Button bar pinned to bottom of window via screen coords
+                        ImVec2 cpos = ImGui::GetWindowPos();
+                        ImVec2 csz  = ImGui::GetWindowSize();
+                        float  by   = cpos.y + csz.y - BTN_H - 6.f;
+
+                        ImGui::SetCursorScreenPos(ImVec2(cpos.x + 6.f, by));
+                        ImGui::BeginDisabled(!can_prev);
+                        if (ImGui::Button("< Prev", ImVec2(BTN_W, BTN_H)) && can_prev) nav_to(nav_cur - 1);
+                        ImGui::EndDisabled();
+
+                        // Counter label centred
+                        if (nav_cur >= 0) {
+                            char cnt[32]{};
+                            snprintf(cnt, sizeof(cnt), "%d / %d",
+                                nav_cur + 1, (int)sce_bg_nav_keys.size());
+                            ImVec2 tsz = ImGui::CalcTextSize(cnt);
+                            ImGui::SetCursorScreenPos(ImVec2(
+                                cpos.x + (csz.x - tsz.x) * 0.5f,
+                                by + (BTN_H - tsz.y) * 0.5f));
+                            ImGui::TextDisabled("%s", cnt);
+                        }
+
+                        ImGui::SetCursorScreenPos(ImVec2(cpos.x + csz.x - BTN_W - 6.f, by));
+                        ImGui::BeginDisabled(!can_next);
+                        if (ImGui::Button("Next >", ImVec2(BTN_W, BTN_H)) && can_next) nav_to(nav_cur + 1);
+                        ImGui::EndDisabled();
+
                         if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
                             ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
                             (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) &&
