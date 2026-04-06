@@ -2268,7 +2268,8 @@ void Steam_Overlay::render_main_window()
                         IM_COL32(0, 0, 0, 180));
 
                     auto &ftex = sce_textures[sce_bg_preview_key];
-                    if (!ftex.load_attempted && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
+                    if (!ftex.load_attempted) {
+                        // User explicitly opened this — bypass the per-frame cap
                         ftex.load_attempted = true;
                         size_t sep = sce_bg_preview_key.rfind(PATH_SEPARATOR[0]);
                         if (sep != std::string::npos) {
@@ -2282,7 +2283,6 @@ void Steam_Overlay::render_main_window()
                                 ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
                             }
                         }
-                        ++tex_loaded_this_frame;
                     }
 
                     float pw = io.DisplaySize.x * 0.75f;
