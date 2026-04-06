@@ -1572,7 +1572,7 @@ Steam_User_Stats::SceGameData Steam_User_Stats::ParseSteamCardExchangeHtml(const
                                 item.price_text       = tag_text(lbp, ie);
                             }
 
-                        } else { // Background
+                        } else if (itype == SceItemType::Background) {
                             // wallpaper = gallery-src href
                             size_t gsc = html.find("gallery-src\"", ip);
                             if (gsc != std::string::npos && gsc < ie)
