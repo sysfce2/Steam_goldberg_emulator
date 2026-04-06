@@ -2085,6 +2085,19 @@ void Steam_Overlay::render_main_window()
                     ImGui::Separator();
                     ImGui::Spacing();
 
+                    // Tab grouping: multiple asset types share a tab
+                    struct SceTabGroup { const char *label; int types[4]; int ntype; };
+                    static constexpr SceTabGroup kTabs[] = {
+                        { "Trading Cards",    { 0,  1, -1, -1}, 2 },
+                        { "Backgrounds",      { 6,  7,  8, -1}, 3 },
+                        { "Badges",           { 3,  4, -1, -1}, 2 },
+                        { "Emoticons",        { 5, -1, -1, -1}, 1 },
+                        { "Booster Packs",    { 2, -1, -1, -1}, 1 },
+                        { "Profiles",         { 9, -1, -1, -1}, 1 },
+                        { "Avatar Frames",    {10, -1, -1, -1}, 1 },
+                        { "Animated Avatars", {11, -1, -1, -1}, 1 },
+                    };
+
                     for (const auto &series : user_stats->sce_game_data.series) {
                         char ser_label[128]{};
                         if (!series.series_name.empty())
@@ -2107,182 +2120,210 @@ void Steam_Overlay::render_main_window()
                         for (const auto &item : series.items)
                             by_type[(int)item.type].push_back(&item);
 
-                        for (int tidx = 0; tidx < Steam_User_Stats::SCE_NUM_TYPES; ++tidx) {
-                            auto it = by_type.find(tidx);
-                            if (it == by_type.end() || it->second.empty()) continue;
+                        char tab_bar_id[32]{};
+                        snprintf(tab_bar_id, sizeof(tab_bar_id), "##tb_%d", series.series_number);
+                        if (!ImGui::BeginTabBar(tab_bar_id)) { ImGui::Spacing(); continue; }
 
-                            const auto &items_vec = it->second;
-                            float card_w = kDims[tidx].cw;
-                            float img_h  = kDims[tidx].ih;
+                        for (int tgi = 0; tgi < (int)(sizeof(kTabs)/sizeof(kTabs[0])); ++tgi) {
+                            const auto &tg = kTabs[tgi];
 
-                            char type_hdr[128]{};
-                            snprintf(type_hdr, sizeof(type_hdr), "%s (%zu)##th_%d_%d",
-                                Steam_User_Stats::SCE_TYPE_LABELS[tidx],
-                                items_vec.size(), series.series_number, tidx);
-                            if (!ImGui::CollapsingHeader(type_hdr, ImGuiTreeNodeFlags_DefaultOpen))
-                                continue;
-
-                            // Wrapping card grid
-                            float avail_w = ImGui::GetContentRegionAvail().x;
-                            int cols = std::max(1, (int)((avail_w + CARD_GAP) / (card_w + CARD_GAP)));
-                            char tbl_id[32]{};
-                            snprintf(tbl_id, sizeof(tbl_id), "##cg_%d_%d", series.series_number, tidx);
-                            if (ImGui::BeginTable(tbl_id, cols,
-                                    ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoBordersInBody |
-                                    ImGuiTableFlags_NoPadOuterX)) {
-                                for (int c = 0; c < cols; ++c)
-                                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, card_w);
-
-                                int slot_idx = 0;
-                                for (const auto *item : items_vec) {
-                                    ++slot_idx;
-                                    ImGui::TableNextColumn();
-
-                                    // Is this a (animated) background? Use dedicated thumb file.
-                                    bool is_bg = (tidx == 6 || tidx == 7 || tidx == 8);
-
-                                    // Build thumbnail file path (mirrors downloader naming)
-                                    const std::string &thumb_src = is_bg
-                                        ? (item->wallpaper_url.empty() ? item->static_img_url : item->wallpaper_url)
-                                        : (!item->icon_url.empty() ? item->icon_url : item->static_img_url);
-                                    std::string ext = url_ext(thumb_src);
-                                    std::string item_label = sanitize(item->name);
-                                    if (item_label.size() > 48) item_label.resize(48);
-                                    char prefix[8]{};
-                                    snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
-                                    // Backgrounds: "01_thumb_wallpaper_Name.jpg"; others: "01_icon_Name.ext"
-                                    std::string filename = is_bg
-                                        ? (std::string(prefix) + "thumb_wallpaper_" + item_label + ext)
-                                        : (std::string(prefix) + "icon_" + item_label + ext);
-                                    std::string type_dir = type_subfolder(tidx);
-                                    std::string folder = std::string(Steam_User_Stats::sce_assets_folder)
-                                        + PATH_SEPARATOR + ser_dir
-                                        + PATH_SEPARATOR + type_dir;
-                                    std::string tex_key = folder + PATH_SEPARATOR + filename;
-
-                                    bool is_static = (ext != ".gif" && ext != ".mp4" && ext != ".webm");
-                                    auto &tex = sce_textures[tex_key];
-                                    if (is_static && !tex.load_attempted
-                                            && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
-                                        tex.load_attempted = true;
-                                        int pw = 0, ph = 0;
-                                        tex.pixels = local_storage->load_image_from_folder(folder, filename, pw, ph);
-                                        if (!tex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
-                                            tex.resource = _renderer->CreateResource();
-                                            tex.w = pw; tex.h = ph;
-                                            tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
-                                        }
-                                        ++tex_loaded_this_frame;
-                                    }
-
-                                    // --- Card ---
-                                    ImGui::BeginGroup();
-
-                                    // Slot number above image
-                                    if (item->slot > 0)
-                                        ImGui::TextDisabled("#%d", item->slot);
-                                    else
-                                        ImGui::TextDisabled(" ");
-
-                                    // Image area: use InvisibleButton for backgrounds (clickable)
-                                    ImVec2 p0 = ImGui::GetCursorScreenPos();
-                                    ImVec2 p1 = ImVec2(p0.x + card_w, p0.y + img_h);
-                                    ImDrawList *dl = ImGui::GetWindowDrawList();
-                                    dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 50, 255));
-
-                                    char btn_id[64]{};
-                                    snprintf(btn_id, sizeof(btn_id), "##bg_%d_%d_%d", series.series_number, tidx, slot_idx);
-                                    ImGui::InvisibleButton(btn_id, ImVec2(card_w, img_h));
-                                    bool clicked = ImGui::IsItemClicked();
-
-                                    if (is_static && tex.resource
-                                            && tex.resource->GetResourceId() != 0) {
-                                        // Aspect-fit (letterbox) image into card_w × img_h
-                                        float sa = (tex.h > 0) ? (float)tex.w / tex.h : 1.0f;
-                                        float da = card_w / img_h;
-                                        float dw, dh, ox = 0.f, oy = 0.f;
-                                        if (sa >= da) {
-                                            dw = card_w; dh = card_w / sa;
-                                            oy = (img_h - dh) * 0.5f;
-                                        } else {
-                                            dh = img_h; dw = img_h * sa;
-                                            ox = (card_w - dw) * 0.5f;
-                                        }
-                                        dl->AddImage(tex.resource->GetResourceId(),
-                                            ImVec2(p0.x + ox, p0.y + oy),
-                                            ImVec2(p0.x + ox + dw, p0.y + oy + dh));
-                                        // Hover highlight for all clickable images
-                                        if (ImGui::IsItemHovered())
-                                            dl->AddRect(p0, p1, IM_COL32(200, 200, 255, 180), 0.f, 0, 2.f);
-                                    } else if (!is_static) {
-                                        // Animated/video: show extension badge centred
-                                        const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
-                                        ImVec2 tsz = ImGui::CalcTextSize(badge);
-                                        dl->AddText(
-                                            ImVec2(p0.x + (card_w - tsz.x) * 0.5f,
-                                                   p0.y + (img_h  - tsz.y) * 0.5f),
-                                            IM_COL32(160, 160, 160, 255), badge);
-                                    }
-
-                                    // On click: open full-size preview for any asset type.
-                                    // Animated BGs (types 7/8) preview the wallpaper_ file;
-                                    // static BG (type 6) and all others preview the icon_ file.
-                                    bool is_animated_bg = (tidx == 7 || tidx == 8);
-                                    bool can_preview = is_animated_bg ? !item->wallpaper_url.empty() : is_static;
-                                    if (clicked && can_preview) {
-                                        if (is_animated_bg) {
-                                            std::string full_ext = url_ext(item->wallpaper_url);
-                                            std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
-                                            sce_preview_key = folder + PATH_SEPARATOR + full_filename;
-                                        } else {
-                                            sce_preview_key = tex_key; // icon_ file is the preview
-                                        }
-                                        // Build nav keys: all items of same type in same series
-                                        sce_preview_nav_keys.clear();
-                                        for (int ni = 0; ni < (int)items_vec.size(); ++ni) {
-                                            const auto *nitem = items_vec[ni];
-                                            int nslot2 = ni + 1;
-                                            char npfx[8]{}; snprintf(npfx, sizeof(npfx), "%02d_", nslot2);
-                                            std::string nlbl = sanitize(nitem->name);
-                                            if (nlbl.size() > 48) nlbl.resize(48);
-                                            std::string npreview_file;
-                                            if (is_animated_bg) {
-                                                if (nitem->wallpaper_url.empty()) continue;
-                                                std::string next = url_ext(nitem->wallpaper_url);
-                                                npreview_file = std::string(npfx) + "wallpaper_" + nlbl + next;
-                                            } else {
-                                                const std::string &nsrc = !nitem->icon_url.empty() ? nitem->icon_url : nitem->static_img_url;
-                                                std::string next = url_ext(nsrc);
-                                                npreview_file = std::string(npfx) + "icon_" + nlbl + next;
-                                            }
-                                            sce_preview_nav_keys.push_back(folder + PATH_SEPARATOR + npreview_file);
-                                        }
-                                    }
-
-                                    // Name (wrapped to card width)
-                                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + card_w);
-                                    ImGui::TextUnformatted(item->name.c_str());
-                                    ImGui::PopTextWrapPos();
-
-                                    // Rarity (coloured)
-                                    if (!item->rarity.empty() && item->rarity != "Unknown")
-                                        ImGui::TextColored(rarity_color(item->rarity),
-                                            "%s", item->rarity.c_str());
-                                    else
-                                        ImGui::TextDisabled(" ");
-
-                                    // Price
-                                    if (!item->price_text.empty())
-                                        ImGui::TextDisabled("%s", item->price_text.c_str());
-                                    else
-                                        ImGui::TextDisabled(" ");
-
-                                    ImGui::EndGroup();
-                                }
-                                ImGui::EndTable();
+                            // Count total items for this tab group in this series
+                            int tab_total = 0;
+                            for (int ti = 0; ti < tg.ntype; ++ti) {
+                                auto it2 = by_type.find(tg.types[ti]);
+                                if (it2 != by_type.end()) tab_total += (int)it2->second.size();
                             }
-                            ImGui::Spacing();
+                            if (tab_total == 0) continue;
+
+                            char tab_lbl[80]{};
+                            snprintf(tab_lbl, sizeof(tab_lbl), "%s (%d)##tb_%d_%d",
+                                tg.label, tab_total, series.series_number, tgi);
+                            if (!ImGui::BeginTabItem(tab_lbl)) continue;
+
+                            bool first_type = true;
+                            for (int ti = 0; ti < tg.ntype; ++ti) {
+                                int tidx = tg.types[ti];
+                                auto it = by_type.find(tidx);
+                                if (it == by_type.end() || it->second.empty()) continue;
+
+                                const auto &items_vec = it->second;
+                                float card_w = kDims[tidx].cw;
+                                float img_h  = kDims[tidx].ih;
+
+                                // Sub-header when tab contains multiple types
+                                if (tg.ntype > 1) {
+                                    if (!first_type) ImGui::Spacing();
+                                    ImGui::TextDisabled("%s  (%zu)",
+                                        Steam_User_Stats::SCE_TYPE_LABELS[tidx], items_vec.size());
+                                    ImGui::Separator();
+                                    ImGui::Spacing();
+                                }
+                                first_type = false;
+
+                                // Wrapping card grid
+                                float avail_w = ImGui::GetContentRegionAvail().x;
+                                int cols = std::max(1, (int)((avail_w + CARD_GAP) / (card_w + CARD_GAP)));
+                                char tbl_id[32]{};
+                                snprintf(tbl_id, sizeof(tbl_id), "##cg_%d_%d", series.series_number, tidx);
+                                if (ImGui::BeginTable(tbl_id, cols,
+                                        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoBordersInBody |
+                                        ImGuiTableFlags_NoPadOuterX)) {
+                                    for (int c = 0; c < cols; ++c)
+                                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, card_w);
+
+                                    int slot_idx = 0;
+                                    for (const auto *item : items_vec) {
+                                        ++slot_idx;
+                                        ImGui::TableNextColumn();
+
+                                        // Is this a (animated) background? Use dedicated thumb file.
+                                        bool is_bg = (tidx == 6 || tidx == 7 || tidx == 8);
+
+                                        // Build thumbnail file path (mirrors downloader naming)
+                                        const std::string &thumb_src = is_bg
+                                            ? (item->wallpaper_url.empty() ? item->static_img_url : item->wallpaper_url)
+                                            : (!item->icon_url.empty() ? item->icon_url : item->static_img_url);
+                                        std::string ext = url_ext(thumb_src);
+                                        std::string item_label = sanitize(item->name);
+                                        if (item_label.size() > 48) item_label.resize(48);
+                                        char prefix[8]{};
+                                        snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
+                                        // Backgrounds: "01_thumb_wallpaper_Name.jpg"; others: "01_icon_Name.ext"
+                                        std::string filename = is_bg
+                                            ? (std::string(prefix) + "thumb_wallpaper_" + item_label + ext)
+                                            : (std::string(prefix) + "icon_" + item_label + ext);
+                                        std::string type_dir = type_subfolder(tidx);
+                                        std::string folder = std::string(Steam_User_Stats::sce_assets_folder)
+                                            + PATH_SEPARATOR + ser_dir
+                                            + PATH_SEPARATOR + type_dir;
+                                        std::string tex_key = folder + PATH_SEPARATOR + filename;
+
+                                        bool is_static = (ext != ".gif" && ext != ".mp4" && ext != ".webm");
+                                        auto &tex = sce_textures[tex_key];
+                                        if (is_static && !tex.load_attempted
+                                                && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
+                                            tex.load_attempted = true;
+                                            int pw = 0, ph = 0;
+                                            tex.pixels = local_storage->load_image_from_folder(folder, filename, pw, ph);
+                                            if (!tex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
+                                                tex.resource = _renderer->CreateResource();
+                                                tex.w = pw; tex.h = ph;
+                                                tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
+                                            }
+                                            ++tex_loaded_this_frame;
+                                        }
+
+                                        // --- Card ---
+                                        ImGui::BeginGroup();
+
+                                        // Slot number above image
+                                        if (item->slot > 0)
+                                            ImGui::TextDisabled("#%d", item->slot);
+                                        else
+                                            ImGui::TextDisabled(" ");
+
+                                        // Image area
+                                        ImVec2 p0 = ImGui::GetCursorScreenPos();
+                                        ImVec2 p1 = ImVec2(p0.x + card_w, p0.y + img_h);
+                                        ImDrawList *dl = ImGui::GetWindowDrawList();
+                                        dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 50, 255));
+
+                                        char btn_id[64]{};
+                                        snprintf(btn_id, sizeof(btn_id), "##bg_%d_%d_%d", series.series_number, tidx, slot_idx);
+                                        ImGui::InvisibleButton(btn_id, ImVec2(card_w, img_h));
+                                        bool clicked = ImGui::IsItemClicked();
+
+                                        if (is_static && tex.resource
+                                                && tex.resource->GetResourceId() != 0) {
+                                            // Aspect-fit (letterbox) image into card_w × img_h
+                                            float sa = (tex.h > 0) ? (float)tex.w / tex.h : 1.0f;
+                                            float da = card_w / img_h;
+                                            float dw, dh, ox = 0.f, oy = 0.f;
+                                            if (sa >= da) {
+                                                dw = card_w; dh = card_w / sa;
+                                                oy = (img_h - dh) * 0.5f;
+                                            } else {
+                                                dh = img_h; dw = img_h * sa;
+                                                ox = (card_w - dw) * 0.5f;
+                                            }
+                                            dl->AddImage(tex.resource->GetResourceId(),
+                                                ImVec2(p0.x + ox, p0.y + oy),
+                                                ImVec2(p0.x + ox + dw, p0.y + oy + dh));
+                                            // Hover highlight
+                                            if (ImGui::IsItemHovered())
+                                                dl->AddRect(p0, p1, IM_COL32(200, 200, 255, 180), 0.f, 0, 2.f);
+                                        } else if (!is_static) {
+                                            // Animated/video: show extension badge centred
+                                            const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
+                                            ImVec2 tsz = ImGui::CalcTextSize(badge);
+                                            dl->AddText(
+                                                ImVec2(p0.x + (card_w - tsz.x) * 0.5f,
+                                                       p0.y + (img_h  - tsz.y) * 0.5f),
+                                                IM_COL32(160, 160, 160, 255), badge);
+                                        }
+
+                                        // On click: open full-size preview.
+                                        // Animated BGs (types 7/8) use wallpaper_ file; all others use icon_.
+                                        bool is_animated_bg = (tidx == 7 || tidx == 8);
+                                        bool can_preview = is_animated_bg ? !item->wallpaper_url.empty() : is_static;
+                                        if (clicked && can_preview) {
+                                            if (is_animated_bg) {
+                                                std::string full_ext = url_ext(item->wallpaper_url);
+                                                std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
+                                                sce_preview_key = folder + PATH_SEPARATOR + full_filename;
+                                            } else {
+                                                sce_preview_key = tex_key;
+                                            }
+                                            // Build nav keys: same type within same series
+                                            sce_preview_nav_keys.clear();
+                                            for (int ni = 0; ni < (int)items_vec.size(); ++ni) {
+                                                const auto *nitem = items_vec[ni];
+                                                int nslot2 = ni + 1;
+                                                char npfx[8]{}; snprintf(npfx, sizeof(npfx), "%02d_", nslot2);
+                                                std::string nlbl = sanitize(nitem->name);
+                                                if (nlbl.size() > 48) nlbl.resize(48);
+                                                std::string npreview_file;
+                                                if (is_animated_bg) {
+                                                    if (nitem->wallpaper_url.empty()) continue;
+                                                    std::string next = url_ext(nitem->wallpaper_url);
+                                                    npreview_file = std::string(npfx) + "wallpaper_" + nlbl + next;
+                                                } else {
+                                                    const std::string &nsrc = !nitem->icon_url.empty() ? nitem->icon_url : nitem->static_img_url;
+                                                    std::string next = url_ext(nsrc);
+                                                    npreview_file = std::string(npfx) + "icon_" + nlbl + next;
+                                                }
+                                                sce_preview_nav_keys.push_back(folder + PATH_SEPARATOR + npreview_file);
+                                            }
+                                        }
+
+                                        // Name (wrapped to card width)
+                                        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + card_w);
+                                        ImGui::TextUnformatted(item->name.c_str());
+                                        ImGui::PopTextWrapPos();
+
+                                        // Rarity (coloured)
+                                        if (!item->rarity.empty() && item->rarity != "Unknown")
+                                            ImGui::TextColored(rarity_color(item->rarity),
+                                                "%s", item->rarity.c_str());
+                                        else
+                                            ImGui::TextDisabled(" ");
+
+                                        // Price
+                                        if (!item->price_text.empty())
+                                            ImGui::TextDisabled("%s", item->price_text.c_str());
+                                        else
+                                            ImGui::TextDisabled(" ");
+
+                                        ImGui::EndGroup();
+                                    }
+                                    ImGui::EndTable();
+                                }
+                                ImGui::Spacing();
+                            }
+
+                            ImGui::EndTabItem();
                         }
+                        ImGui::EndTabBar();
                         ImGui::Spacing();
                     }
                 }
