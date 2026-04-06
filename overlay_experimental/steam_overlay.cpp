@@ -2364,9 +2364,9 @@ void Steam_Overlay::render_main_window()
                         bool can_prev = nav_cur > 0;
                         bool can_next = nav_cur >= 0 && nav_cur < (int)sce_bg_nav_keys.size() - 1;
 
-                        // Arrow-key navigation (NoNav is set but IsKeyPressed still works)
-                        if (can_prev && ImGui::IsKeyPressed(ImGuiKey_LeftArrow))  nav_to(nav_cur - 1);
-                        if (can_next && ImGui::IsKeyPressed(ImGuiKey_RightArrow)) nav_to(nav_cur + 1);
+                        // Arrow / A-D key navigation (NoNav is set but IsKeyPressed still works)
+                        if (can_prev && (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)  || ImGui::IsKeyPressed(ImGuiKey_A))) nav_to(nav_cur - 1);
+                        if (can_next && (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_D))) nav_to(nav_cur + 1);
 
                         // Button bar pinned to bottom of window via screen coords
                         ImVec2 cpos = ImGui::GetWindowPos();
