@@ -2224,12 +2224,11 @@ void Steam_Overlay::render_main_window()
                                             IM_COL32(160, 160, 160, 255), badge);
                                     }
 
-                                    // On click: open full-size wallpaper popup
+                                    // On click: open full-size wallpaper preview window
                                     if (is_bg && clicked && !item->wallpaper_url.empty()) {
                                         std::string full_ext = url_ext(item->wallpaper_url);
                                         std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
                                         sce_bg_preview_key = folder + PATH_SEPARATOR + full_filename;
-                                        ImGui::OpenPopup("##sce_bg_preview");
                                     }
 
                                     // Name (wrapped to card width)
@@ -2261,46 +2260,67 @@ void Steam_Overlay::render_main_window()
                 }
                 ImGui::End();
 
-                // Full-size background preview popup
-                ImGui::SetNextWindowBgAlpha(0.95f);
-                ImGui::SetNextWindowSizeConstraints(
-                    ImVec2(io.DisplaySize.x * 0.50f, io.DisplaySize.y * 0.40f),
-                    ImVec2(io.DisplaySize.x * 0.92f, io.DisplaySize.y * 0.92f));
-                if (ImGui::BeginPopup("##sce_bg_preview",
-                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
-                    if (!sce_bg_preview_key.empty()) {
-                        auto &ftex = sce_textures[sce_bg_preview_key];
-                        if (!ftex.load_attempted && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
-                            ftex.load_attempted = true;
-                            // Extract folder/filename from the key
-                            size_t sep = sce_bg_preview_key.rfind(PATH_SEPARATOR[0]);
-                            if (sep != std::string::npos) {
-                                std::string f_folder = sce_bg_preview_key.substr(0, sep);
-                                std::string f_file   = sce_bg_preview_key.substr(sep + 1);
-                                int pw = 0, ph = 0;
-                                ftex.pixels = local_storage->load_image_from_folder(f_folder, f_file, pw, ph);
-                                if (!ftex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
-                                    ftex.resource = _renderer->CreateResource();
-                                    ftex.w = pw; ftex.h = ph;
-                                    ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
-                                }
+                // Full-size background preview — standalone window
+                if (!sce_bg_preview_key.empty()) {
+                    auto &ftex = sce_textures[sce_bg_preview_key];
+                    if (!ftex.load_attempted && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
+                        ftex.load_attempted = true;
+                        size_t sep = sce_bg_preview_key.rfind(PATH_SEPARATOR[0]);
+                        if (sep != std::string::npos) {
+                            std::string f_folder = sce_bg_preview_key.substr(0, sep);
+                            std::string f_file   = sce_bg_preview_key.substr(sep + 1);
+                            int pw = 0, ph = 0;
+                            ftex.pixels = local_storage->load_image_from_folder(f_folder, f_file, pw, ph);
+                            if (!ftex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
+                                ftex.resource = _renderer->CreateResource();
+                                ftex.w = pw; ftex.h = ph;
+                                ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
                             }
-                            ++tex_loaded_this_frame;
                         }
+                        ++tex_loaded_this_frame;
+                    }
+
+                    float pw = io.DisplaySize.x * 0.75f;
+                    float ph = pw * (9.f / 16.f); // default 16:9
+                    if (ftex.w > 0 && ftex.h > 0) {
+                        ph = pw * ((float)ftex.h / ftex.w);
+                        float max_h = io.DisplaySize.y * 0.85f;
+                        if (ph > max_h) { ph = max_h; pw = ph * ((float)ftex.w / ftex.h); }
+                    }
+                    ImVec2 wpos(
+                        (io.DisplaySize.x - pw) * 0.5f,
+                        (io.DisplaySize.y - ph) * 0.5f);
+                    ImGui::SetNextWindowPos(wpos, ImGuiCond_Always);
+                    ImGui::SetNextWindowSize(ImVec2(pw, ph), ImGuiCond_Always);
+                    ImGui::SetNextWindowBgAlpha(0.97f);
+                    bool preview_open = true;
+                    if (ImGui::Begin("##sce_bg_preview", &preview_open,
+                            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
+                            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
                         if (ftex.resource && ftex.resource->GetResourceId() != 0) {
-                            // Fit the image into the available content area, maintaining aspect ratio
                             ImVec2 avail = ImGui::GetContentRegionAvail();
                             float sa = (ftex.h > 0) ? (float)ftex.w / ftex.h : 1.0f;
                             float dw = avail.x, dh = avail.x / sa;
                             if (dh > avail.y) { dh = avail.y; dw = avail.y * sa; }
+                            float padx = (avail.x - dw) * 0.5f;
+                            float pady = (avail.y - dh) * 0.5f;
+                            ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + padx,
+                                                       ImGui::GetCursorPosY() + pady));
                             ImGui::Image(ftex.resource->GetResourceId(), ImVec2(dw, dh));
                         } else {
+                            ImGui::SetCursorPosY(ph * 0.45f);
+                            ImGui::SetCursorPosX((pw - ImGui::CalcTextSize("Loading...").x) * 0.5f);
                             ImGui::TextDisabled("Loading...");
                         }
+                        if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+                            ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+                            (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) &&
+                              ImGui::IsMouseClicked(ImGuiMouseButton_Left)))
+                            preview_open = false;
                     }
-                    if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-                        ImGui::CloseCurrentPopup();
-                    ImGui::EndPopup();
+                    ImGui::End();
+                    if (!preview_open)
+                        sce_bg_preview_key.clear();
                 }
 
                 // Free textures when the window is closed
