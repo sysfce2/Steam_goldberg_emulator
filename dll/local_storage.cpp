@@ -895,6 +895,22 @@ std::vector<image_pixel_t> Local_Storage::load_image(std::string const& image_pa
     return res;
 }
 
+std::vector<image_pixel_t> Local_Storage::load_image_from_folder(std::string folder, std::string file, int &width, int &height)
+{
+    std::vector<image_pixel_t> res{};
+    width = 0; height = 0;
+    if (folder.size() && folder.back() != *PATH_SEPARATOR) folder.append(PATH_SEPARATOR);
+    std::string full_path = save_directory + appid + folder + file;
+    image_pixel_t *img = (image_pixel_t*)stbi_load(full_path.c_str(), &width, &height, nullptr, 4);
+    if (img) {
+        res.resize((size_t)width * height);
+        std::copy(img, img + (size_t)width * height, res.begin());
+        stbi_image_free(img);
+    }
+    reset_LastError();
+    return res;
+}
+
 std::string Local_Storage::load_image_resized(std::string const& image_path, std::string const& image_data, int resolution)
 {
     std::string resized_image{};

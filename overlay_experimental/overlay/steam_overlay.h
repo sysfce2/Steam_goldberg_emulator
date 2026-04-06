@@ -150,6 +150,23 @@ class Steam_Overlay
         uint32_t total{0};
     } sce_asset_progress{};
 
+    // Per-item GPU texture cache for the SCE asset browser.
+    // Key: "folder/filename" (relative to app storage root).
+    // Lifecycle: created lazily on first render, freed when show_sce_browser is closed.
+    struct SceTexture {
+        InGameOverlay::RendererResource_t *resource{nullptr}; // owned, must be Delete()d
+        int   w{0};
+        int   h{0};
+        bool  load_attempted{false};
+    };
+    std::map<std::string, SceTexture> sce_textures{};
+    void sce_textures_free_all()
+    {
+        for (auto &[k, t] : sce_textures)
+            if (t.resource) { t.resource->Delete(); t.resource = nullptr; }
+        sce_textures.clear();
+    }
+
     // achievement list display options
     bool ach_group_by_sh{false};       // group achievements by SteamHunters DLC/update groups
     bool ach_sort_schema_order{false}; // false = sort locked by global % (Steam default); true = schema/DLC order
