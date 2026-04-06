@@ -2138,15 +2138,22 @@ void Steam_Overlay::render_main_window()
                                     ++slot_idx;
                                     ImGui::TableNextColumn();
 
-                                    // Build file path (mirrors downloader naming)
-                                    const std::string &thumb_src = !item->icon_url.empty()
-                                        ? item->icon_url : item->static_img_url;
+                                    // Is this a (animated) background? Use dedicated thumb file.
+                                    bool is_bg = (tidx == 6 || tidx == 7 || tidx == 8);
+
+                                    // Build thumbnail file path (mirrors downloader naming)
+                                    const std::string &thumb_src = is_bg
+                                        ? (item->wallpaper_url.empty() ? item->static_img_url : item->wallpaper_url)
+                                        : (!item->icon_url.empty() ? item->icon_url : item->static_img_url);
                                     std::string ext = url_ext(thumb_src);
                                     std::string item_label = sanitize(item->name);
                                     if (item_label.size() > 48) item_label.resize(48);
                                     char prefix[8]{};
                                     snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
-                                    std::string filename = std::string(prefix) + "icon_" + item_label + ext;
+                                    // Backgrounds: "01_thumb_wallpaper_Name.jpg"; others: "01_icon_Name.ext"
+                                    std::string filename = is_bg
+                                        ? (std::string(prefix) + "thumb_wallpaper_" + item_label + ext)
+                                        : (std::string(prefix) + "icon_" + item_label + ext);
                                     std::string type_dir = type_subfolder(tidx);
                                     std::string folder = std::string(Steam_User_Stats::sce_assets_folder)
                                         + PATH_SEPARATOR + ser_dir
@@ -2163,7 +2170,6 @@ void Steam_Overlay::render_main_window()
                                         if (!tex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
                                             tex.resource = _renderer->CreateResource();
                                             tex.w = pw; tex.h = ph;
-                                            // AttachResource stores the raw pointer — tex.pixels must stay alive
                                             tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
                                         }
                                         ++tex_loaded_this_frame;
@@ -2178,12 +2184,16 @@ void Steam_Overlay::render_main_window()
                                     else
                                         ImGui::TextDisabled(" ");
 
-                                    // Image area (reserved via Dummy, painted via DrawList)
+                                    // Image area: use InvisibleButton for backgrounds (clickable)
                                     ImVec2 p0 = ImGui::GetCursorScreenPos();
                                     ImVec2 p1 = ImVec2(p0.x + card_w, p0.y + img_h);
-                                    ImGui::Dummy(ImVec2(card_w, img_h));
                                     ImDrawList *dl = ImGui::GetWindowDrawList();
                                     dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 50, 255));
+
+                                    char btn_id[64]{};
+                                    snprintf(btn_id, sizeof(btn_id), "##bg_%d_%d_%d", series.series_number, tidx, slot_idx);
+                                    ImGui::InvisibleButton(btn_id, ImVec2(card_w, img_h));
+                                    bool clicked = ImGui::IsItemClicked();
 
                                     if (is_static && tex.resource
                                             && tex.resource->GetResourceId() != 0) {
@@ -2201,6 +2211,9 @@ void Steam_Overlay::render_main_window()
                                         dl->AddImage(tex.resource->GetResourceId(),
                                             ImVec2(p0.x + ox, p0.y + oy),
                                             ImVec2(p0.x + ox + dw, p0.y + oy + dh));
+                                        // Hover highlight for clickable backgrounds
+                                        if (is_bg && ImGui::IsItemHovered())
+                                            dl->AddRect(p0, p1, IM_COL32(200, 200, 255, 180), 0.f, 0, 2.f);
                                     } else if (!is_static) {
                                         // Animated/video: show extension badge centred
                                         const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
@@ -2209,6 +2222,14 @@ void Steam_Overlay::render_main_window()
                                             ImVec2(p0.x + (card_w - tsz.x) * 0.5f,
                                                    p0.y + (img_h  - tsz.y) * 0.5f),
                                             IM_COL32(160, 160, 160, 255), badge);
+                                    }
+
+                                    // On click: open full-size wallpaper popup
+                                    if (is_bg && clicked && !item->wallpaper_url.empty()) {
+                                        std::string full_ext = url_ext(item->wallpaper_url);
+                                        std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
+                                        sce_bg_preview_key = folder + PATH_SEPARATOR + full_filename;
+                                        ImGui::OpenPopup("##sce_bg_preview");
                                     }
 
                                     // Name (wrapped to card width)
@@ -2240,9 +2261,52 @@ void Steam_Overlay::render_main_window()
                 }
                 ImGui::End();
 
+                // Full-size background preview popup
+                ImGui::SetNextWindowBgAlpha(0.95f);
+                ImGui::SetNextWindowSizeConstraints(
+                    ImVec2(io.DisplaySize.x * 0.50f, io.DisplaySize.y * 0.40f),
+                    ImVec2(io.DisplaySize.x * 0.92f, io.DisplaySize.y * 0.92f));
+                if (ImGui::BeginPopup("##sce_bg_preview",
+                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+                    if (!sce_bg_preview_key.empty()) {
+                        auto &ftex = sce_textures[sce_bg_preview_key];
+                        if (!ftex.load_attempted && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
+                            ftex.load_attempted = true;
+                            // Extract folder/filename from the key
+                            size_t sep = sce_bg_preview_key.rfind(PATH_SEPARATOR[0]);
+                            if (sep != std::string::npos) {
+                                std::string f_folder = sce_bg_preview_key.substr(0, sep);
+                                std::string f_file   = sce_bg_preview_key.substr(sep + 1);
+                                int pw = 0, ph = 0;
+                                ftex.pixels = local_storage->load_image_from_folder(f_folder, f_file, pw, ph);
+                                if (!ftex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
+                                    ftex.resource = _renderer->CreateResource();
+                                    ftex.w = pw; ftex.h = ph;
+                                    ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
+                                }
+                            }
+                            ++tex_loaded_this_frame;
+                        }
+                        if (ftex.resource && ftex.resource->GetResourceId() != 0) {
+                            // Fit the image into the available content area, maintaining aspect ratio
+                            ImVec2 avail = ImGui::GetContentRegionAvail();
+                            float sa = (ftex.h > 0) ? (float)ftex.w / ftex.h : 1.0f;
+                            float dw = avail.x, dh = avail.x / sa;
+                            if (dh > avail.y) { dh = avail.y; dw = avail.y * sa; }
+                            ImGui::Image(ftex.resource->GetResourceId(), ImVec2(dw, dh));
+                        } else {
+                            ImGui::TextDisabled("Loading...");
+                        }
+                    }
+                    if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                        ImGui::CloseCurrentPopup();
+                    ImGui::EndPopup();
+                }
+
                 // Free textures when the window is closed
                 if (!browser_open) {
                     show_sce_browser = false;
+                    sce_bg_preview_key.clear();
                     sce_textures_free_all();
                 }
             }

@@ -1407,6 +1407,27 @@ void Steam_User_Stats::RequestSceAssetDownload()
                         queue.push_back({ *r.url, full_folder, filename, tidx });
                         ++type_totals[tidx];
                     }
+
+                    // For backgrounds: also download a CDN-resized thumbnail (300×180)
+                    // saved as "01_thumb_wallpaper_Name.ext" for fast display in the browser.
+                    bool is_bg_type = (item.type == SceItemType::Background ||
+                                       item.type == SceItemType::AnimatedBackground ||
+                                       item.type == SceItemType::AnimatedMiniBackground);
+                    if (is_bg_type && !item.wallpaper_url.empty()) {
+                        std::string thumb_url = item.wallpaper_url + "?size=300x180f";
+                        if (seen_urls.insert(thumb_url).second) {
+                            std::string orig_name = url_filename(item.wallpaper_url);
+                            std::string ext;
+                            size_t dot = orig_name.rfind('.');
+                            if (dot != std::string::npos) ext = orig_name.substr(dot);
+                            std::string item_label = sanitize(item.name);
+                            if (item_label.size() > 48) item_label.resize(48);
+                            std::string tfilename = std::string(prefix) + "thumb_wallpaper_" + item_label + ext;
+                            int tidx = (int)item.type;
+                            queue.push_back({ thumb_url, full_folder, tfilename, tidx });
+                            ++type_totals[tidx];
+                        }
+                    }
                 }
             }
         }
