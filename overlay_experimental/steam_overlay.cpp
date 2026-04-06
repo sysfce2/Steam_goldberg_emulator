@@ -2010,7 +2010,7 @@ void Steam_Overlay::render_main_window()
                 show_sce_browser = false;
                 sce_textures_free_all();
             } else {
-                auto local_storage = get_steam_client()->steam_user_stats->local_storage;
+                auto local_storage = get_steam_client()->local_storage;
 
                 // Same subfolder mapping as the downloader
                 auto type_subfolder = [](int tidx) -> const char * {
