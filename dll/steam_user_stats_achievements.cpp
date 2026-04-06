@@ -1081,37 +1081,20 @@ void Steam_User_Stats::RequestSteamCardExchangeData()
         };
 
         // ---- helpers for JSON serialization of SceGameData ----
-        auto item_type_str = [](SceItemType t) -> const char * {
-            switch (t) {
-                case SceItemType::TradingCard:             return "TradingCard";
-                case SceItemType::FoilCard:                return "FoilCard";
-                case SceItemType::BoosterPack:             return "BoosterPack";
-                case SceItemType::Badge:                   return "Badge";
-                case SceItemType::FoilBadge:               return "FoilBadge";
-                case SceItemType::Emoticon:                return "Emoticon";
-                case SceItemType::Background:              return "Background";
-                case SceItemType::AnimatedBackground:      return "AnimatedBackground";
-                case SceItemType::AnimatedMiniBackground:  return "AnimatedMiniBackground";
-                case SceItemType::Profile:                 return "Profile";
-                case SceItemType::AvatarFrame:             return "AvatarFrame";
-                case SceItemType::AnimatedAvatar:          return "AnimatedAvatar";
-                default:                                   return "Unknown";
-            }
-        };
-
-        auto item_type_from_str = [](const std::string &s) -> SceItemType {
-            if (s == "FoilCard")               return SceItemType::FoilCard;
-            if (s == "BoosterPack")            return SceItemType::BoosterPack;
-            if (s == "Badge")                  return SceItemType::Badge;
-            if (s == "FoilBadge")              return SceItemType::FoilBadge;
-            if (s == "Emoticon")               return SceItemType::Emoticon;
-            if (s == "Background")             return SceItemType::Background;
-            if (s == "AnimatedBackground")     return SceItemType::AnimatedBackground;
-            if (s == "AnimatedMiniBackground") return SceItemType::AnimatedMiniBackground;
-            if (s == "Profile")                return SceItemType::Profile;
-            if (s == "AvatarFrame")            return SceItemType::AvatarFrame;
-            if (s == "AnimatedAvatar")         return SceItemType::AnimatedAvatar;
-            return SceItemType::TradingCard;
+        // SCE page order: each entry is (json_key, SceItemType)
+        const std::pair<const char*, SceItemType> sce_type_order[] = {
+            {"cards",                     SceItemType::TradingCard},
+            {"foil_cards",                SceItemType::FoilCard},
+            {"booster_packs",             SceItemType::BoosterPack},
+            {"badges",                    SceItemType::Badge},
+            {"foil_badges",               SceItemType::FoilBadge},
+            {"emoticons",                 SceItemType::Emoticon},
+            {"backgrounds",               SceItemType::Background},
+            {"animated_backgrounds",      SceItemType::AnimatedBackground},
+            {"animated_mini_backgrounds", SceItemType::AnimatedMiniBackground},
+            {"profiles",                  SceItemType::Profile},
+            {"avatar_frames",             SceItemType::AvatarFrame},
+            {"animated_avatars",          SceItemType::AnimatedAvatar},
         };
 
         auto serialize_game_data = [&](const SceGameData &gd) -> nlohmann::json {
@@ -1121,32 +1104,33 @@ void Steam_User_Stats::RequestSteamCardExchangeData()
             for (const auto &s : gd.series) {
                 nlohmann::json sobj = nlohmann::json::object();
                 sobj["series_number"] = s.series_number;
-                sobj["series_name"]   = s.series_name;
-                nlohmann::json items_arr = nlohmann::json::array();
-                for (const auto &item : s.items) {
-                    nlohmann::json iobj = nlohmann::json::object();
-                    iobj["name"]             = item.name;
-                    iobj["type"]             = item_type_str(item.type);
-                    iobj["series"]           = item.series;
-                    iobj["slot"]             = item.slot;
-                    iobj["total"]            = item.total;
-                    iobj["icon_url"]         = item.icon_url;
-                    iobj["wallpaper_url"]    = item.wallpaper_url;
-                    iobj["animated_url"]     = item.animated_url;
-                    iobj["market_hash_name"] = item.market_hash_name;
-                    iobj["price_text"]       = item.price_text;
-                    iobj["badge_level"]      = item.badge_level;
-                    iobj["badge_xp"]         = item.badge_xp;
-                    iobj["emoticon_name"]    = item.emoticon_name;
-                    iobj["rarity"]           = item.rarity;
-                    iobj["video_webm_url"]   = item.video_webm_url;
-                    iobj["video_mp4_url"]    = item.video_mp4_url;
-                    iobj["static_img_url"]   = item.static_img_url;
-                    iobj["points_price"]     = item.points_price;
-                    iobj["preview_url"]      = item.preview_url;
-                    items_arr.push_back(std::move(iobj));
+                if (!s.series_name.empty()) sobj["series_name"] = s.series_name;
+                for (const auto &[key, itype] : sce_type_order) {
+                    nlohmann::json arr = nlohmann::json::array();
+                    for (const auto &item : s.items) {
+                        if (item.type != itype) continue;
+                        nlohmann::json iobj = nlohmann::json::object();
+                        iobj["name"] = item.name;
+                        if (item.slot > 0)                  iobj["slot"]             = item.slot;
+                        if (item.total > 0)                 iobj["total"]            = item.total;
+                        if (!item.icon_url.empty())         iobj["icon_url"]         = item.icon_url;
+                        if (!item.wallpaper_url.empty())    iobj["wallpaper_url"]    = item.wallpaper_url;
+                        if (!item.animated_url.empty())     iobj["animated_url"]     = item.animated_url;
+                        if (!item.market_hash_name.empty()) iobj["market_hash_name"] = item.market_hash_name;
+                        if (!item.price_text.empty())       iobj["price_text"]       = item.price_text;
+                        if (item.badge_level > 0)           iobj["badge_level"]      = item.badge_level;
+                        if (item.badge_xp > 0)             iobj["badge_xp"]         = item.badge_xp;
+                        if (!item.emoticon_name.empty())    iobj["emoticon_name"]    = item.emoticon_name;
+                        if (!item.rarity.empty())           iobj["rarity"]           = item.rarity;
+                        if (!item.video_webm_url.empty())   iobj["video_webm_url"]   = item.video_webm_url;
+                        if (!item.video_mp4_url.empty())    iobj["video_mp4_url"]    = item.video_mp4_url;
+                        if (!item.static_img_url.empty())   iobj["static_img_url"]   = item.static_img_url;
+                        if (!item.points_price.empty())     iobj["points_price"]     = item.points_price;
+                        if (!item.preview_url.empty())      iobj["preview_url"]      = item.preview_url;
+                        arr.push_back(std::move(iobj));
+                    }
+                    if (!arr.empty()) sobj[key] = std::move(arr);
                 }
-                sobj["items"] = std::move(items_arr);
                 series_arr.push_back(std::move(sobj));
             }
             root["series"] = std::move(series_arr);
@@ -1160,28 +1144,31 @@ void Steam_User_Stats::RequestSteamCardExchangeData()
                 SceSeries s{};
                 s.series_number = sobj.value("series_number", 0);
                 s.series_name   = sobj.value("series_name",   std::string{});
-                for (const auto &iobj : sobj.value("items", nlohmann::json::array())) {
-                    SceItem item{};
-                    item.name             = iobj.value("name",             std::string{});
-                    item.type             = item_type_from_str(iobj.value("type", std::string{"TradingCard"}));
-                    item.series           = iobj.value("series",           0);
-                    item.slot             = iobj.value("slot",             0);
-                    item.total            = iobj.value("total",            0);
-                    item.icon_url         = iobj.value("icon_url",         std::string{});
-                    item.wallpaper_url    = iobj.value("wallpaper_url",    std::string{});
-                    item.animated_url     = iobj.value("animated_url",     std::string{});
-                    item.market_hash_name = iobj.value("market_hash_name", std::string{});
-                    item.price_text       = iobj.value("price_text",       std::string{});
-                    item.badge_level      = iobj.value("badge_level",      0);
-                    item.badge_xp         = iobj.value("badge_xp",         0);
-                    item.emoticon_name    = iobj.value("emoticon_name",    std::string{});
-                    item.rarity           = iobj.value("rarity",           std::string{});
-                    item.video_webm_url   = iobj.value("video_webm_url",   std::string{});
-                    item.video_mp4_url    = iobj.value("video_mp4_url",    std::string{});
-                    item.static_img_url   = iobj.value("static_img_url",   std::string{});
-                    item.points_price     = iobj.value("points_price",     std::string{});
-                    item.preview_url      = iobj.value("preview_url",      std::string{});
-                    s.items.push_back(std::move(item));
+                for (const auto &[key, itype] : sce_type_order) {
+                    if (!sobj.contains(key)) continue;
+                    for (const auto &iobj : sobj[key]) {
+                        SceItem item{};
+                        item.type             = itype;
+                        item.series           = s.series_number;
+                        item.name             = iobj.value("name",             std::string{});
+                        item.slot             = iobj.value("slot",             0);
+                        item.total            = iobj.value("total",            0);
+                        item.icon_url         = iobj.value("icon_url",         std::string{});
+                        item.wallpaper_url    = iobj.value("wallpaper_url",    std::string{});
+                        item.animated_url     = iobj.value("animated_url",     std::string{});
+                        item.market_hash_name = iobj.value("market_hash_name", std::string{});
+                        item.price_text       = iobj.value("price_text",       std::string{});
+                        item.badge_level      = iobj.value("badge_level",      0);
+                        item.badge_xp         = iobj.value("badge_xp",         0);
+                        item.emoticon_name    = iobj.value("emoticon_name",    std::string{});
+                        item.rarity           = iobj.value("rarity",           std::string{});
+                        item.video_webm_url   = iobj.value("video_webm_url",   std::string{});
+                        item.video_mp4_url    = iobj.value("video_mp4_url",    std::string{});
+                        item.static_img_url   = iobj.value("static_img_url",   std::string{});
+                        item.points_price     = iobj.value("points_price",     std::string{});
+                        item.preview_url      = iobj.value("preview_url",      std::string{});
+                        s.items.push_back(std::move(item));
+                    }
                 }
                 gd.series.push_back(std::move(s));
             }
