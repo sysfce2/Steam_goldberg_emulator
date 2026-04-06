@@ -141,6 +141,14 @@ class Steam_Overlay
     bool show_achievements = false;
     bool show_settings = false;
 
+    // SCE asset download progress (set by NotifySceAssetsReady, read on render thread)
+    struct SceAssetProgress {
+        bool   pending_notification{false};
+        uint32_t downloaded{0};
+        uint32_t skipped{0};
+        uint32_t total{0};
+    } sce_asset_progress{};
+
     // achievement list display options
     bool ach_group_by_sh{false};       // group achievements by SteamHunters DLC/update groups
     bool ach_sort_schema_order{false}; // false = sort locked by global % (Steam default); true = schema/DLC order
@@ -307,6 +315,9 @@ public:
 
     // Called by Steam_User_Stats after SteamHunters data arrives asynchronously
     void UpdateSteamHuntersData();
+
+    // Called by Steam_User_Stats when SCE asset downloads finish
+    void NotifySceAssetsReady(uint32_t downloaded, uint32_t skipped, uint32_t total);
 };
 
 #else // EMU_OVERLAY
@@ -330,6 +341,7 @@ public:
     void OpenOverlayInvite(CSteamID lobbyId) {}
     void SortAchievementsByGlobalPercent(const std::map<std::string, float> &) {}
     void UpdateSteamHuntersData() {}
+    void NotifySceAssetsReady(uint32_t downloaded, uint32_t skipped, uint32_t total) {}
     void OpenOverlay(const char* pchDialog) {}
     void OpenOverlayWebpage(const char* pchURL) {}
 

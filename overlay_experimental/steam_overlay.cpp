@@ -510,6 +510,18 @@ void Steam_Overlay::UpdateSteamHuntersData()
     }
 }
 
+void Steam_Overlay::NotifySceAssetsReady(uint32_t downloaded, uint32_t skipped, uint32_t total)
+{
+    PRINT_DEBUG("SceAssets: downloaded=%u skipped=%u total=%u", downloaded, skipped, total);
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    sce_asset_progress.downloaded           = downloaded;
+    sce_asset_progress.skipped              = skipped;
+    sce_asset_progress.total                = total;
+    sce_asset_progress.pending_notification = true;
+    // request a frame render so the notification is shown promptly
+    allow_renderer_frame_processing(true);
+}
+
 // called initially and when window size is updated
 void Steam_Overlay::overlay_state_hook(bool ready)
 {
@@ -1533,6 +1545,68 @@ void Steam_Overlay::render_main_window()
         // user clicked on "settings"
         if (ImGui::Button(translationSettings[current_language])) {
             show_settings = !show_settings;
+        }
+
+        // SCE asset download button + progress — only shown when SCE catalog data is present
+        {
+            Steam_User_Stats *user_stats = get_steam_client()->steam_user_stats;
+            if (user_stats->sce_data_populated && !user_stats->sce_game_data.series.empty()) {
+                ImGui::SameLine();
+                bool downloading = user_stats->sce_assets_downloading.load();
+                if (!downloading) {
+                    if (ImGui::Button("Download SCE Assets")) {
+                        user_stats->RequestSceAssetDownload();
+                    }
+                } else {
+                    ImGui::BeginDisabled();
+                    ImGui::Button("Downloading SCE Assets...");
+                    ImGui::EndDisabled();
+                }
+
+                if (downloading) {
+                    uint32_t grand_dl    = user_stats->sce_assets_downloaded.load();
+                    uint32_t grand_skip  = user_stats->sce_assets_skipped.load();
+                    uint32_t grand_total = user_stats->sce_assets_total.load();
+                    uint32_t grand_done  = grand_dl + grand_skip;
+
+                    ImGui::Spacing();
+
+                    // Total progress bar
+                    if (grand_total > 0) {
+                        char total_lbl[128]{};
+                        snprintf(total_lbl, sizeof(total_lbl),
+                            "Total: %u downloaded, %u cached of %u",
+                            grand_dl, grand_skip, grand_total);
+                        float frac = (float)grand_done / (float)grand_total;
+                        ImGui::ProgressBar(frac, ImVec2(-1.0f, 0.0f), total_lbl);
+                    }
+
+                    // Per-type progress bars (only for types that have assets)
+                    for (int i = 0; i < Steam_User_Stats::SCE_NUM_TYPES; ++i) {
+                        uint32_t tot = user_stats->sce_type_progress[i].total.load();
+                        if (tot == 0) continue;
+                        uint32_t cur = user_stats->sce_type_progress[i].current.load();
+                        uint32_t dl  = user_stats->sce_type_progress[i].downloaded.load();
+                        char lbl[128]{};
+                        snprintf(lbl, sizeof(lbl), "%s: %u of %u (%u new)",
+                            Steam_User_Stats::SCE_TYPE_LABELS[i], cur, tot, dl);
+                        ImGui::ProgressBar((float)cur / (float)tot, ImVec2(-1.0f, 0.0f), lbl);
+                    }
+                }
+            }
+
+            // flush pending completion notification
+            if (sce_asset_progress.pending_notification) {
+                sce_asset_progress.pending_notification = false;
+                char msg[256]{};
+                snprintf(msg, sizeof(msg),
+                    "SCE assets ready: %u downloaded, %u already cached (%u total)",
+                    sce_asset_progress.downloaded,
+                    sce_asset_progress.skipped,
+                    sce_asset_progress.total);
+                submit_notification(notification_type::message, msg);
+                allow_renderer_frame_processing(false); // release the frame request we added in NotifySceAssetsReady
+            }
         }
         
         ImGui::Spacing();

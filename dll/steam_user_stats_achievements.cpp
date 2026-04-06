@@ -1280,6 +1280,214 @@ void Steam_User_Stats::RequestSteamCardExchangeData()
 }
 
 
+// Collect all unique non-empty URLs from all items in sce_game_data, download any that
+// are not yet cached to disk (sce_assets/ subfolder), then notify the overlay.
+// A 200ms delay is inserted between each network request to avoid hammering the Steam CDN.
+void Steam_User_Stats::RequestSceAssetDownload()
+{
+    PRINT_DEBUG_ENTRY();
+
+    // Guard: only one download run at a time; also refuse if catalog not ready
+    {
+        std::lock_guard<std::recursive_mutex> lock(global_mutex);
+        if (sce_assets_downloading || !sce_data_populated) return;
+        if (sce_game_data.series.empty()) return;
+        sce_assets_downloading = true;
+        sce_assets_downloaded  = 0;
+        sce_assets_skipped     = 0;
+        sce_assets_total       = 0;
+        for (int i = 0; i < SCE_NUM_TYPES; ++i) {
+            sce_type_progress[i].total      = 0;
+            sce_type_progress[i].downloaded = 0;
+            sce_type_progress[i].skipped    = 0;
+            sce_type_progress[i].current    = 0;
+        }
+    }
+
+    std::thread([this]() {
+
+        // Maps SceItemType → human-readable subfolder name matching sce_type_order keys
+        auto type_subfolder = [](SceItemType t) -> const char * {
+            switch (t) {
+                case SceItemType::TradingCard:            return "cards";
+                case SceItemType::FoilCard:               return "foil_cards";
+                case SceItemType::BoosterPack:            return "booster_packs";
+                case SceItemType::Badge:                  return "badges";
+                case SceItemType::FoilBadge:              return "foil_badges";
+                case SceItemType::Emoticon:               return "emoticons";
+                case SceItemType::Background:             return "backgrounds";
+                case SceItemType::AnimatedBackground:     return "animated_backgrounds";
+                case SceItemType::AnimatedMiniBackground: return "animated_mini_backgrounds";
+                case SceItemType::Profile:                return "profiles";
+                case SceItemType::AvatarFrame:            return "avatar_frames";
+                case SceItemType::AnimatedAvatar:         return "animated_avatars";
+                default:                                  return "misc";
+            }
+        };
+
+        // Sanitize a string for use as a directory/file name component
+        auto sanitize = [](std::string s) -> std::string {
+            for (char &c : s) {
+                if (c == '/' || c == '\\' || c == ':' || c == '*' ||
+                    c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
+                    c = '_';
+            }
+            return s;
+        };
+
+        // Extract just the filename portion of a URL (last path segment, no query)
+        auto url_filename = [](const std::string &url) -> std::string {
+            size_t slash = url.rfind('/');
+            std::string name = (slash != std::string::npos) ? url.substr(slash + 1) : url;
+            size_t q = name.find('?');
+            if (q != std::string::npos) name.resize(q);
+            if (name.find('.') == std::string::npos) name += ".png";
+            return name;
+        };
+
+        struct AssetEntry {
+            std::string url;
+            std::string folder;   // relative folder inside sce_assets_folder
+            std::string filename; // e.g. "01_wallpaper_abc123.jpg"
+            int         type_idx; // (int)SceItemType — for per-type progress
+        };
+
+        // ---- collect unique URLs, organized by series / type ----
+        // Also tally per-type totals (each unique URL = 1 work unit)
+        std::map<int, uint32_t> type_totals; // type_idx -> count
+        std::vector<AssetEntry> queue;
+        {
+            std::set<std::string> seen_urls;
+            std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+            for (const auto &s : sce_game_data.series) {
+                // "Series 01 - Name" or just "Series 01"
+                char ser_num_str[8]{};
+                snprintf(ser_num_str, sizeof(ser_num_str), "%02d", s.series_number);
+                std::string ser_dir = std::string("Series ") + ser_num_str;
+                if (!s.series_name.empty()) ser_dir += " - " + sanitize(s.series_name);
+
+                // count items per type for slot numbering
+                std::map<SceItemType, int> slot_counter;
+
+                for (const auto &item : s.items) {
+                    int slot_idx = ++slot_counter[item.type];
+                    char prefix[8]{};
+                    snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
+
+                    std::string type_dir = ser_dir + PATH_SEPARATOR + type_subfolder(item.type);
+                    std::string full_folder = std::string(sce_assets_folder) + PATH_SEPARATOR + type_dir;
+
+                    // which URLs does this item carry?
+                    struct UrlRole { const std::string *url; const char *role; };
+                    UrlRole roles[] = {
+                        { &item.icon_url,       "icon"       },
+                        { &item.wallpaper_url,  "wallpaper"  },
+                        { &item.animated_url,   "animated"   },
+                        { &item.static_img_url, "static"     },
+                        { &item.video_mp4_url,  "video_mp4"  },
+                        { &item.video_webm_url, "video_webm" },
+                    };
+                    for (const auto &r : roles) {
+                        if (r.url->empty()) continue;
+                        if (!seen_urls.insert(*r.url).second) continue; // duplicate
+
+                        std::string orig_name = url_filename(*r.url);
+                        // derive extension from original filename
+                        std::string ext;
+                        size_t dot = orig_name.rfind('.');
+                        if (dot != std::string::npos) ext = orig_name.substr(dot); // e.g. ".jpg"
+
+                        // filename: "01_icon_Name.jpg" (name sanitized, truncated to 48 chars)
+                        std::string item_label = sanitize(item.name);
+                        if (item_label.size() > 48) item_label.resize(48);
+                        std::string filename = std::string(prefix) + r.role + "_" + item_label + ext;
+
+                        int tidx = (int)item.type;
+                        queue.push_back({ *r.url, full_folder, filename, tidx });
+                        ++type_totals[tidx];
+                    }
+                }
+            }
+        }
+
+        sce_assets_total = (uint32_t)queue.size();
+        for (const auto &[tidx, cnt] : type_totals)
+            if (tidx >= 0 && tidx < SCE_NUM_TYPES) sce_type_progress[tidx].total = cnt;
+        PRINT_DEBUG("SceAssets: %zu unique URLs to process", queue.size());
+
+        // re-use the same curl setup as other fetches
+        auto curl_get_binary = [](const std::string &url) -> std::string {
+            std::string response{};
+            CURL *curl = curl_easy_init();
+            if (curl) {
+                curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, global_ach_percent_curl_write);
+                curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+                curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+                curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+                curl_easy_setopt(curl, CURLOPT_USERAGENT,
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.142.86 Safari/537.36");
+                curl_easy_perform(curl);
+                curl_easy_cleanup(curl);
+            }
+            return response;
+        };
+
+        uint32_t downloaded = 0;
+        uint32_t skipped    = 0;
+
+        for (const auto &entry : queue) {
+            int tidx = (entry.type_idx >= 0 && entry.type_idx < SCE_NUM_TYPES) ? entry.type_idx : -1;
+
+            // skip if file already exists on disk
+            if (local_storage->file_size(entry.folder, entry.filename) > 0) {
+                ++skipped;
+                sce_assets_skipped = skipped;
+                if (tidx >= 0) { ++sce_type_progress[tidx].skipped; ++sce_type_progress[tidx].current; }
+                PRINT_DEBUG("SceAssets: skip (exists) %s/%s", entry.folder.c_str(), entry.filename.c_str());
+                continue;
+            }
+
+            if (tidx >= 0) {
+                uint32_t cur = sce_type_progress[tidx].current.load() + 1;
+                uint32_t tot = sce_type_progress[tidx].total.load();
+                PRINT_DEBUG("SceAssets [%s %u/%u]: fetch %s",
+                    SCE_TYPE_LABELS[tidx], cur, tot, entry.url.c_str());
+            } else {
+                PRINT_DEBUG("SceAssets: fetch %s -> %s/%s", entry.url.c_str(), entry.folder.c_str(), entry.filename.c_str());
+            }
+
+            std::string data = curl_get_binary(entry.url);
+            if (!data.empty()) {
+                local_storage->store_data(entry.folder, entry.filename, &data[0], (unsigned int)data.size());
+                ++downloaded;
+                sce_assets_downloaded = downloaded;
+                if (tidx >= 0) { ++sce_type_progress[tidx].downloaded; ++sce_type_progress[tidx].current; }
+                PRINT_DEBUG("SceAssets: saved %s (%zu bytes)", entry.filename.c_str(), data.size());
+            } else {
+                PRINT_DEBUG("SceAssets: empty response for %s", entry.url.c_str());
+            }
+
+            // rate-limit: 200ms between requests to avoid hammering the CDN
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+
+        PRINT_DEBUG("SceAssets: done — %u downloaded, %u skipped of %zu total", downloaded, skipped, queue.size());
+
+        {
+            std::lock_guard<std::recursive_mutex> lock(global_mutex);
+            sce_assets_downloading = false;
+        }
+
+        if (overlay) overlay->NotifySceAssetsReady(downloaded, skipped, (uint32_t)queue.size());
+
+    }).detach();
+}
+
+
 // Parse the SteamCardExchange game page HTML into a structured catalog of all series,
 // cards, foil cards, badges, foil badges, booster packs, emoticons and backgrounds.
 // Uses only std::string::find / rfind — no external HTML parser required.

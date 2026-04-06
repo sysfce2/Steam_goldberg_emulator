@@ -254,6 +254,29 @@ public:
     SceGameData sce_game_data{};
     static SceGameData ParseSteamCardExchangeHtml(const std::string &html, uint32 app_id);
 
+    // Per-item-type download progress (index = (int)SceItemType, 12 types)
+    static constexpr int SCE_NUM_TYPES = 12;
+    static constexpr const char* SCE_TYPE_LABELS[SCE_NUM_TYPES] = {
+        "Cards", "Foil Cards", "Booster Packs",
+        "Badges", "Foil Badges",
+        "Emoticons",
+        "Backgrounds", "Animated Backgrounds", "Animated Mini Backgrounds",
+        "Profiles", "Avatar Frames", "Animated Avatars"
+    };
+    struct SceTypeProgress {
+        std::atomic<uint32_t> total{0};
+        std::atomic<uint32_t> downloaded{0};
+        std::atomic<uint32_t> skipped{0};
+        std::atomic<uint32_t> current{0}; // "X of total" counter (downloaded+skipped so far)
+    };
+    // Non-copyable atomics require a fixed array, not a vector
+    SceTypeProgress         sce_type_progress[SCE_NUM_TYPES]{};
+    std::atomic<bool>       sce_assets_downloading{false};
+    std::atomic<uint32_t>   sce_assets_downloaded{0};   // grand total fetched this run
+    std::atomic<uint32_t>   sce_assets_skipped{0};      // grand total skipped
+    std::atomic<uint32_t>   sce_assets_total{0};        // grand total unique URLs
+    static constexpr const auto sce_assets_folder = "sce_assets";
+
     // Trigger an async fetch of SteamHunters achievement groups + global percentages.
     // Safe to call multiple times; will only fire once per object lifetime.
     void RequestSteamHuntersData();
@@ -261,6 +284,11 @@ public:
     // Trigger an async fetch + disk cache of the SteamCardExchange game page HTML.
     // Raw HTML is stored in sce_html once complete. Same TTL as other caches.
     void RequestSteamCardExchangeData();
+
+    // Trigger async download of all image/video assets referenced in sce_game_data.
+    // Already-cached assets (file exists on disk) are skipped.
+    // Calls overlay->NotifySceAssetsReady() when done (or if nothing to do).
+    void RequestSceAssetDownload();
 
     // After global percentages are populated, write "global_percent" into each user_achievement entry
     // and persist achievements.json to disk.  Safe to call under global_mutex.
