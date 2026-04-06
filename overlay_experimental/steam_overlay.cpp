@@ -2159,11 +2159,12 @@ void Steam_Overlay::render_main_window()
                                             && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
                                         tex.load_attempted = true;
                                         int pw = 0, ph = 0;
-                                        auto px = local_storage->load_image_from_folder(folder, filename, pw, ph);
-                                        if (!px.empty() && _renderer) {
+                                        tex.pixels = local_storage->load_image_from_folder(folder, filename, pw, ph);
+                                        if (!tex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
                                             tex.resource = _renderer->CreateResource();
                                             tex.w = pw; tex.h = ph;
-                                            tex.resource->AttachResource(px.data(), (uint32_t)pw, (uint32_t)ph);
+                                            // AttachResource stores the raw pointer — tex.pixels must stay alive
+                                            tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
                                         }
                                         ++tex_loaded_this_frame;
                                     }

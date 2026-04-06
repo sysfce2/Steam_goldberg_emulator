@@ -155,6 +155,7 @@ class Steam_Overlay
     // Lifecycle: created lazily on first render, freed when show_sce_browser is closed.
     struct SceTexture {
         InGameOverlay::RendererResource_t *resource{nullptr}; // owned, must be Delete()d
+        std::vector<image_pixel_t> pixels{};                  // kept alive for AttachResource
         int   w{0};
         int   h{0};
         bool  load_attempted{false};
