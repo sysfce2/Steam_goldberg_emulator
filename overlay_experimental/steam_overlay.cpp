@@ -2043,19 +2043,42 @@ void Steam_Overlay::render_main_window()
                     return (dot != std::string::npos) ? name.substr(dot) : ".png";
                 };
 
-                // Thumbnail display size
-                constexpr float THUMB_SZ = 64.0f;
-                constexpr int   MAX_TEX_PER_FRAME = 4; // limit GPU uploads per frame
-                int tex_loaded_this_frame = 0;
+                // Per-type card dimensions: {card_width, image_height}
+                // Mirrors SCE website proportions: portrait for cards, landscape for BGs, etc.
+                struct CardDims { float cw, ih; };
+                static constexpr CardDims kDims[12] = {
+                    {120.f, 169.f},  // 0  cards                 (portrait 0.71)
+                    {120.f, 169.f},  // 1  foil_cards
+                    {120.f, 120.f},  // 2  booster_packs          (square)
+                    { 80.f,  80.f},  // 3  badges
+                    { 80.f,  80.f},  // 4  foil_badges
+                    { 64.f,  64.f},  // 5  emoticons              (small square)
+                    {160.f,  90.f},  // 6  backgrounds            (16:9)
+                    {160.f,  90.f},  // 7  animated_backgrounds
+                    {160.f,  90.f},  // 8  animated_mini_backgrounds
+                    {120.f, 120.f},  // 9  profiles
+                    {120.f, 120.f},  // 10 avatar_frames
+                    {120.f, 120.f},  // 11 animated_avatars
+                };
 
-                const float min_w = io.DisplaySize.x * 0.50f;
+                // Rarity colours matching SCE site: common=grey, uncommon=green, rare=red
+                auto rarity_color = [](const std::string &r) -> ImVec4 {
+                    if (r == "Uncommon") return {0.20f, 0.85f, 0.20f, 1.0f};
+                    if (r == "Rare")     return {0.90f, 0.20f, 0.20f, 1.0f};
+                    return {0.60f, 0.60f, 0.60f, 1.0f};
+                };
+
+                constexpr int MAX_TEX_PER_FRAME = 4;
+                int tex_loaded_this_frame = 0;
+                constexpr float CARD_GAP = 8.0f;
+
+                const float min_w = io.DisplaySize.x * 0.60f;
                 ImGui::SetNextWindowSizeConstraints(
-                    ImVec2(min_w, io.DisplaySize.y * 0.40f),
+                    ImVec2(min_w, io.DisplaySize.y * 0.50f),
                     ImVec2(8192.0f, 8192.0f));
                 ImGui::SetNextWindowBgAlpha(1.0f);
                 bool browser_open = show_sce_browser;
                 if (ImGui::Begin("SCE Assets##sce_browser", &browser_open)) {
-                    // Info header
                     ImGui::TextDisabled("Assets folder: GSE Saves/%u/%s",
                         user_stats->sce_game_data.appid,
                         Steam_User_Stats::sce_assets_folder);
@@ -2063,7 +2086,6 @@ void Steam_Overlay::render_main_window()
                     ImGui::Spacing();
 
                     for (const auto &series : user_stats->sce_game_data.series) {
-                        // Series header
                         char ser_label[128]{};
                         if (!series.series_name.empty())
                             snprintf(ser_label, sizeof(ser_label),
@@ -2071,7 +2093,6 @@ void Steam_Overlay::render_main_window()
                         else
                             snprintf(ser_label, sizeof(ser_label), "Series %d", series.series_number);
 
-                        // Series subfolder: "Series NN" or "Series NN - Name"
                         char ser_num_str[8]{};
                         snprintf(ser_num_str, sizeof(ser_num_str), "%02d", series.series_number);
                         std::string ser_dir = std::string("Series ") + ser_num_str;
@@ -2081,9 +2102,8 @@ void Steam_Overlay::render_main_window()
                         if (!ImGui::CollapsingHeader(ser_label, ImGuiTreeNodeFlags_DefaultOpen))
                             continue;
 
-                        // Group items by type, preserving slot order
+                        // Group items by type
                         std::map<int, std::vector<const Steam_User_Stats::SceItem *>> by_type;
-                        std::map<Steam_User_Stats::SceItemType, int> slot_counter;
                         for (const auto &item : series.items)
                             by_type[(int)item.type].push_back(&item);
 
@@ -2091,122 +2111,128 @@ void Steam_Overlay::render_main_window()
                             auto it = by_type.find(tidx);
                             if (it == by_type.end() || it->second.empty()) continue;
 
-                            char type_label[64]{};
-                            snprintf(type_label, sizeof(type_label),
-                                "%s (%zu)##type_%d_%d",
+                            const auto &items_vec = it->second;
+                            float card_w = kDims[tidx].cw;
+                            float img_h  = kDims[tidx].ih;
+
+                            char type_hdr[128]{};
+                            snprintf(type_hdr, sizeof(type_hdr), "%s (%zu)##th_%d_%d",
                                 Steam_User_Stats::SCE_TYPE_LABELS[tidx],
-                                it->second.size(), series.series_number, tidx);
+                                items_vec.size(), series.series_number, tidx);
+                            if (!ImGui::CollapsingHeader(type_hdr, ImGuiTreeNodeFlags_DefaultOpen))
+                                continue;
 
-                            if (!ImGui::TreeNode(type_label)) continue;
-
-                            // 5-column table: thumbnail | slot | name | rarity | price
-                            const char *tbl_id = "##sce_tbl";
-                            float row_h = THUMB_SZ + ImGui::GetStyle().CellPadding.y * 2.0f;
-                            float tbl_h = std::min(
-                                (float)it->second.size() * row_h + ImGui::GetFrameHeightWithSpacing(),
-                                320.0f);
-                            if (ImGui::BeginTable(tbl_id, 5,
-                                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                                    ImGuiTableFlags_SizingFixedFit  | ImGuiTableFlags_ScrollY,
-                                    ImVec2(0.0f, tbl_h))) {
-                                ImGui::TableSetupScrollFreeze(0, 1);
-                                ImGui::TableSetupColumn("",       ImGuiTableColumnFlags_WidthFixed, THUMB_SZ + 4.0f);
-                                ImGui::TableSetupColumn("#",      ImGuiTableColumnFlags_WidthFixed, 28.0f);
-                                ImGui::TableSetupColumn("Name",   ImGuiTableColumnFlags_WidthStretch);
-                                ImGui::TableSetupColumn("Rarity", ImGuiTableColumnFlags_WidthFixed, 88.0f);
-                                ImGui::TableSetupColumn("Price",  ImGuiTableColumnFlags_WidthFixed, 88.0f);
-                                ImGui::TableHeadersRow();
+                            // Wrapping card grid
+                            float avail_w = ImGui::GetContentRegionAvail().x;
+                            int cols = std::max(1, (int)((avail_w + CARD_GAP) / (card_w + CARD_GAP)));
+                            char tbl_id[32]{};
+                            snprintf(tbl_id, sizeof(tbl_id), "##cg_%d_%d", series.series_number, tidx);
+                            if (ImGui::BeginTable(tbl_id, cols,
+                                    ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoBordersInBody |
+                                    ImGuiTableFlags_NoPadOuterX)) {
+                                for (int c = 0; c < cols; ++c)
+                                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, card_w);
 
                                 int slot_idx = 0;
-                                for (const auto *item : it->second) {
+                                for (const auto *item : items_vec) {
                                     ++slot_idx;
-                                    ImGui::TableNextRow(ImGuiTableRowFlags_None, row_h);
+                                    ImGui::TableNextColumn();
 
-                                    // --- Thumbnail column ---
-                                    ImGui::TableSetColumnIndex(0);
-
-                                    // Pick the best available URL for the icon filename
-                                    const std::string *icon_url   = &item->icon_url;
-                                    const std::string *static_url = &item->static_img_url;
-                                    const std::string &thumb_url  = (!icon_url->empty()) ? *icon_url
-                                                                  : (!static_url->empty()) ? *static_url
-                                                                  : *icon_url;
-
-                                    std::string ext = url_ext(thumb_url);
-                                    // Skip GIF/MP4/WEBM (can't display as static thumbnails)
-                                    bool is_static = (ext != ".gif" && ext != ".mp4" && ext != ".webm");
-
-                                    char prefix[8]{};
-                                    snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
+                                    // Build file path (mirrors downloader naming)
+                                    const std::string &thumb_src = !item->icon_url.empty()
+                                        ? item->icon_url : item->static_img_url;
+                                    std::string ext = url_ext(thumb_src);
                                     std::string item_label = sanitize(item->name);
                                     if (item_label.size() > 48) item_label.resize(48);
+                                    char prefix[8]{};
+                                    snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
                                     std::string filename = std::string(prefix) + "icon_" + item_label + ext;
                                     std::string type_dir = type_subfolder(tidx);
                                     std::string folder = std::string(Steam_User_Stats::sce_assets_folder)
                                         + PATH_SEPARATOR + ser_dir
                                         + PATH_SEPARATOR + type_dir;
-
                                     std::string tex_key = folder + PATH_SEPARATOR + filename;
 
-                                    if (is_static) {
-                                        auto &tex = sce_textures[tex_key];
-                                        if (!tex.load_attempted && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
-                                            tex.load_attempted = true;
-                                            int w = 0, h = 0;
-                                            auto pixels = local_storage->load_image_from_folder(folder, filename, w, h);
-                                            if (!pixels.empty() && _renderer) {
-                                                tex.resource = _renderer->CreateResource();
-                                                tex.w = w; tex.h = h;
-                                                tex.resource->AttachResource(pixels.data(), (uint32_t)w, (uint32_t)h);
-                                            }
-                                            ++tex_loaded_this_frame;
+                                    bool is_static = (ext != ".gif" && ext != ".mp4" && ext != ".webm");
+                                    auto &tex = sce_textures[tex_key];
+                                    if (is_static && !tex.load_attempted
+                                            && tex_loaded_this_frame < MAX_TEX_PER_FRAME) {
+                                        tex.load_attempted = true;
+                                        int pw = 0, ph = 0;
+                                        auto px = local_storage->load_image_from_folder(folder, filename, pw, ph);
+                                        if (!px.empty() && _renderer) {
+                                            tex.resource = _renderer->CreateResource();
+                                            tex.w = pw; tex.h = ph;
+                                            tex.resource->AttachResource(px.data(), (uint32_t)pw, (uint32_t)ph);
                                         }
-
-                                        if (tex.resource && tex.resource->GetResourceId() != 0) {
-                                            float aspect = (tex.h > 0 && tex.w > 0)
-                                                ? (float)tex.w / tex.h : 1.0f;
-                                            float tw = THUMB_SZ * aspect;
-                                            float th = THUMB_SZ;
-                                            if (tw > THUMB_SZ) { th = THUMB_SZ / aspect; tw = THUMB_SZ; }
-                                            ImGui::Image(tex.resource->GetResourceId(), ImVec2(tw, th));
-                                        } else if (!tex.load_attempted) {
-                                            ImGui::TextDisabled("...");
-                                        } else {
-                                            ImGui::TextDisabled("[N/A]");
-                                        }
-                                    } else {
-                                        // Animated / video — show extension badge
-                                        ImGui::TextDisabled("%s", ext.c_str() + 1); // skip leading dot
+                                        ++tex_loaded_this_frame;
                                     }
 
-                                    // --- Slot column ---
-                                    ImGui::TableSetColumnIndex(1);
+                                    // --- Card ---
+                                    ImGui::BeginGroup();
+
+                                    // Slot number above image
                                     if (item->slot > 0)
-                                        ImGui::Text("%d", item->slot);
+                                        ImGui::TextDisabled("#%d", item->slot);
                                     else
-                                        ImGui::TextDisabled("-");
+                                        ImGui::TextDisabled(" ");
 
-                                    // --- Name column ---
-                                    ImGui::TableSetColumnIndex(2);
+                                    // Image area (reserved via Dummy, painted via DrawList)
+                                    ImVec2 p0 = ImGui::GetCursorScreenPos();
+                                    ImVec2 p1 = ImVec2(p0.x + card_w, p0.y + img_h);
+                                    ImGui::Dummy(ImVec2(card_w, img_h));
+                                    ImDrawList *dl = ImGui::GetWindowDrawList();
+                                    dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 50, 255));
+
+                                    if (is_static && tex.resource
+                                            && tex.resource->GetResourceId() != 0) {
+                                        // Aspect-fit (letterbox) image into card_w × img_h
+                                        float sa = (tex.h > 0) ? (float)tex.w / tex.h : 1.0f;
+                                        float da = card_w / img_h;
+                                        float dw, dh, ox = 0.f, oy = 0.f;
+                                        if (sa >= da) {
+                                            dw = card_w; dh = card_w / sa;
+                                            oy = (img_h - dh) * 0.5f;
+                                        } else {
+                                            dh = img_h; dw = img_h * sa;
+                                            ox = (card_w - dw) * 0.5f;
+                                        }
+                                        dl->AddImage(tex.resource->GetResourceId(),
+                                            ImVec2(p0.x + ox, p0.y + oy),
+                                            ImVec2(p0.x + ox + dw, p0.y + oy + dh));
+                                    } else if (!is_static) {
+                                        // Animated/video: show extension badge centred
+                                        const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
+                                        ImVec2 tsz = ImGui::CalcTextSize(badge);
+                                        dl->AddText(
+                                            ImVec2(p0.x + (card_w - tsz.x) * 0.5f,
+                                                   p0.y + (img_h  - tsz.y) * 0.5f),
+                                            IM_COL32(160, 160, 160, 255), badge);
+                                    }
+
+                                    // Name (wrapped to card width)
+                                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + card_w);
                                     ImGui::TextUnformatted(item->name.c_str());
+                                    ImGui::PopTextWrapPos();
 
-                                    // --- Rarity column ---
-                                    ImGui::TableSetColumnIndex(3);
+                                    // Rarity (coloured)
                                     if (!item->rarity.empty() && item->rarity != "Unknown")
-                                        ImGui::TextUnformatted(item->rarity.c_str());
+                                        ImGui::TextColored(rarity_color(item->rarity),
+                                            "%s", item->rarity.c_str());
                                     else
-                                        ImGui::TextDisabled("-");
+                                        ImGui::TextDisabled(" ");
 
-                                    // --- Price column ---
-                                    ImGui::TableSetColumnIndex(4);
+                                    // Price
                                     if (!item->price_text.empty())
-                                        ImGui::TextUnformatted(item->price_text.c_str());
+                                        ImGui::TextDisabled("%s", item->price_text.c_str());
                                     else
-                                        ImGui::TextDisabled("-");
+                                        ImGui::TextDisabled(" ");
+
+                                    ImGui::EndGroup();
                                 }
                                 ImGui::EndTable();
                             }
-                            ImGui::TreePop();
+                            ImGui::Spacing();
                         }
                         ImGui::Spacing();
                     }
