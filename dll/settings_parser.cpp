@@ -1728,6 +1728,13 @@ static void parse_stats_features(class Settings *settings_client, class Settings
 
     settings_client->record_playtime = ini.GetBoolValue("main::stats", "record_playtime", settings_client->record_playtime);
     settings_server->record_playtime = ini.GetBoolValue("main::stats", "record_playtime", settings_server->record_playtime);
+
+    {
+        long ttl_client = ini.GetLongValue("main::stats", "achievements_cache_ttl", (long)settings_client->achievements_cache_ttl);
+        if (ttl_client > 0) settings_client->achievements_cache_ttl = static_cast<uint32>(ttl_client);
+        long ttl_server = ini.GetLongValue("main::stats", "achievements_cache_ttl", (long)settings_server->achievements_cache_ttl);
+        if (ttl_server > 0) settings_server->achievements_cache_ttl = static_cast<uint32>(ttl_server);
+    }
 }
 
 

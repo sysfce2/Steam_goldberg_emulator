@@ -183,18 +183,35 @@ public:
 
     // SteamHunters data (achievement groups + supplemental global %) fetched once per launch
     struct SteamHunters_AchievementGroup {
-        std::string name{};                          // optional sub-group name (e.g. "Gwent")
-        int         dlcAppId{};                      // DLC App ID (0 = base game)
-        std::string dlcAppName{};                    // DLC display name (empty = base game)
+        std::string name{};                             // optional sub-group name (e.g. "Gwent")
+        int         dlcAppId{};                         // DLC App ID (0 = base game)
+        std::string dlcAppName{};                       // DLC display name (empty = base game)
         std::vector<std::string> achievementApiNames{}; // ordered list of achievement API names
     };
+    // Per-achievement metadata from SteamHunters /api/apps/{id}/achievements
+    struct SteamHunters_AchievementData {
+        float steamPercentage{-1.0f};  // same as Steam global %
+        float localPercentage{-1.0f};  // SH community hunters % (more accurate for hunters)
+        int   points{};                // SH rarity score
+        int   steamPoints{};           // Steam point value
+        // obtainability: 0=normal, 1=missable, 2=deprecated/glitched, 3=online-only, etc.
+        int   obtainability{};
+    };
     std::vector<SteamHunters_AchievementGroup> steamhunters_achievement_groups{};
+    std::map<std::string, SteamHunters_AchievementData> steamhunters_achievement_data{}; // keyed by apiName
     bool steamhunters_data_populated{false};
     bool steamhunters_data_fetching{false};
+
+    static constexpr const auto steamhunters_cache_file = "achievements_sh.json";
+    static constexpr const auto steam_ach_percentages_cache_file = "achievements_st.json";
 
     // Trigger an async fetch of SteamHunters achievement groups + global percentages.
     // Safe to call multiple times; will only fire once per object lifetime.
     void RequestSteamHuntersData();
+
+    // After global percentages are populated, write "global_percent" into each user_achievement entry
+    // and persist achievements.json to disk.  Safe to call under global_mutex.
+    void update_user_achievements_with_global_percent();
 
     Steam_User_Stats(Settings *settings, class Networking *network, Local_Storage *local_storage, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, Steam_Overlay* overlay);
     ~Steam_User_Stats();

@@ -297,6 +297,9 @@ public:
     // >0 == load icons in the background as mentioned above
     int paginated_achievements_icons = 10;
 
+    // cache TTL for Steam global achievement percentages and SteamHunters data (seconds, default 1 day)
+    uint32 achievements_cache_ttl = 86400;
+
     // whether to record playtime
     bool record_playtime = false;
 
