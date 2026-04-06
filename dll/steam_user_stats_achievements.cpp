@@ -673,12 +673,14 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
             try {
                 int64_t ts = cache.value("fetched_at", (int64_t)0);
                 int64_t now = (int64_t)std::time(nullptr);
-                if ((now - ts) < cache_ttl && cache.contains("achievements")) {
+                if ((now - ts) < cache_ttl && cache.contains("response")) {
+                    // parse using same logic as the live fetch
                     std::map<std::string, float> percentages{};
-                    for (const auto &entry : cache["achievements"]) {
-                        percentages[entry["name"].get<std::string>()] = entry["percent"].get<float>();
+                    for (const auto &entry : cache["response"].at("achievementpercentages").at("achievements")) {
+                        auto &pct_val = entry.at("percent");
+                        float pct = pct_val.is_string() ? std::stof(pct_val.get<std::string>()) : pct_val.get<float>();
+                        percentages[entry.at("name").get<std::string>()] = pct;
                     }
-                    // treat as fresh even if empty (API returned no data last time, honor TTL)
                     cache_fresh = true;
                     if (!percentages.empty()) {
                         commit_percentages(std::move(percentages));
@@ -733,14 +735,12 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                         }
                     } catch (...) {}
                 }
-                // always save cache
+                // always save raw API response as cache
                 {
                     nlohmann::json to_save;
                     to_save["fetched_at"] = (int64_t)std::time(nullptr);
                     to_save["appid"] = game_id;
-                    to_save["achievements"] = nlohmann::json::array();
-                    for (const auto &[n, p] : percentages)
-                        to_save["achievements"].push_back({ {"name", n}, {"percent", p} });
+                    try { to_save["response"] = nlohmann::json::parse(response); } catch (...) { to_save["response"] = nullptr; }
                     local_storage->write_json_file("", steam_ach_percentages_cache_file, to_save);
                 }
                 {
@@ -811,14 +811,12 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
             } catch (...) {}
         }
 
-        // always save cache (empty achievements = API returned no data / error; honors TTL)
+        // always save raw API response as cache (even on failure, to honor TTL and avoid hammering)
         {
             nlohmann::json to_save;
             to_save["fetched_at"] = (int64_t)std::time(nullptr);
             to_save["appid"] = game_id;
-            to_save["achievements"] = nlohmann::json::array();
-            for (const auto &[n, p] : percentages)
-                to_save["achievements"].push_back({ {"name", n}, {"percent", p} });
+            try { to_save["response"] = nlohmann::json::parse(response); } catch (...) { to_save["response"] = nullptr; }
             local_storage->write_json_file("", steam_ach_percentages_cache_file, to_save);
         }
 
