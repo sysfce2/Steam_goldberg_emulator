@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <random>
 #include <ctime>
+#include <numeric>
 
 #include "InGameOverlay/RendererDetector.h"
 
@@ -1622,6 +1623,7 @@ void Steam_Overlay::render_main_window()
                     static std::mt19937 rng(std::random_device{}());
                     std::uniform_int_distribution<uint32_t> percent_dist(0, 100);
                     std::uniform_real_distribution<float> global_dist(0.5f, 99.9f);
+                    std::uniform_int_distribution<uint32_t> time_dist(0, 5u * 24u * 3600u); // up to 5 days ago
                     const uint32_t now_ts = (uint32_t)std::time(nullptr);
 
                     for (auto &ax : achievements) {
@@ -1633,7 +1635,7 @@ void Steam_Overlay::render_main_window()
                             if (roll < 40) {
                                 ax.achieved = true;
                                 ax.progress = ax.max_progress;
-                                ax.unlock_time = now_ts - percent_dist(rng) * 86400u;
+                                ax.unlock_time = now_ts - time_dist(rng);
                             } else if (roll < 80) {
                                 ax.achieved = false;
                                 std::uniform_int_distribution<uint32_t> prog_dist(1, ax.max_progress - 1);
@@ -1648,7 +1650,7 @@ void Steam_Overlay::render_main_window()
                             // regular achievement: ~50% chance achieved
                             if (roll < 50) {
                                 ax.achieved = true;
-                                ax.unlock_time = now_ts - percent_dist(rng) * 86400u;
+                                ax.unlock_time = now_ts - time_dist(rng);
                             } else {
                                 ax.achieved = false;
                                 ax.unlock_time = 0;
@@ -1660,7 +1662,33 @@ void Steam_Overlay::render_main_window()
                     }
                 }
                 ImGui::BeginChild(translationAchievements[current_language]);
-                for (auto & x : achievements) {
+
+                // build a sorted index: unlocked (most recent first) → locked non-hidden (by global % desc) → hidden
+                std::vector<size_t> sorted_idx(achievements.size());
+                std::iota(sorted_idx.begin(), sorted_idx.end(), 0);
+                std::stable_sort(sorted_idx.begin(), sorted_idx.end(), [&](size_t ai, size_t bi) {
+                    const auto &a = achievements[ai];
+                    const auto &b = achievements[bi];
+                    bool a_hidden = a.hidden && !a.achieved;
+                    bool b_hidden = b.hidden && !b.achieved;
+                    // hidden always last
+                    if (a_hidden != b_hidden) return !a_hidden;
+                    // both hidden: keep stable order
+                    if (a_hidden) return false;
+                    // unlocked before locked
+                    if (a.achieved != b.achieved) return a.achieved > b.achieved;
+                    // both unlocked: most recent first
+                    if (a.achieved) return a.unlock_time > b.unlock_time;
+                    // both locked non-hidden: higher global % first
+                    auto ita = ach_global_percentages.find(a.name);
+                    auto itb = ach_global_percentages.find(b.name);
+                    float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
+                    float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
+                    return pa > pb;
+                });
+
+                for (size_t si = 0; si < sorted_idx.size(); ++si) {
+                    auto & x = achievements[sorted_idx[si]];
                     bool achieved = x.achieved;
                     bool hidden = x.hidden && !achieved;
 
