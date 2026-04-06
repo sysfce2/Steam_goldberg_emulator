@@ -129,6 +129,7 @@ Steam_User_Stats::Steam_User_Stats(Settings *settings, class Networking *network
     // at construction time so cache is warm before the game or overlay ever requests it.
     RequestGlobalAchievementPercentages();
     RequestSteamHuntersData();
+    RequestSteamCardExchangeData();
 }
 
 Steam_User_Stats::~Steam_User_Stats()

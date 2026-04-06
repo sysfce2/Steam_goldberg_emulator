@@ -1045,6 +1045,761 @@ void Steam_User_Stats::RequestSteamHuntersData()
 }
 
 
+// Async fetch + disk cache of the SteamCardExchange game page HTML.
+// Cache file: steamcardexchange_sce.html (raw HTML bytes), TTL same as other caches.
+// On cache hit the in-memory sce_html is populated without a network request.
+void Steam_User_Stats::RequestSteamCardExchangeData()
+{
+    PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (sce_data_fetching || sce_data_populated) return;
+    sce_data_fetching = true;
+
+    uint64 app_id = settings->get_local_game_id().AppID();
+    int64_t cache_ttl = (int64_t)settings->achievements_cache_ttl;
+
+    std::thread([this, app_id, cache_ttl]() {
+
+        auto curl_get = [](const std::string &url) -> std::string {
+            std::string response{};
+            CURL *curl = curl_easy_init();
+            if (curl) {
+                curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, global_ach_percent_curl_write);
+                curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+                curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+                curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+                curl_easy_setopt(curl, CURLOPT_USERAGENT,
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.142.86 Safari/537.36");
+                curl_easy_perform(curl);
+                curl_easy_cleanup(curl);
+            }
+            return response;
+        };
+
+        // ---- helpers for JSON serialization of SceGameData ----
+        auto item_type_str = [](SceItemType t) -> const char * {
+            switch (t) {
+                case SceItemType::TradingCard:             return "TradingCard";
+                case SceItemType::FoilCard:                return "FoilCard";
+                case SceItemType::BoosterPack:             return "BoosterPack";
+                case SceItemType::Badge:                   return "Badge";
+                case SceItemType::FoilBadge:               return "FoilBadge";
+                case SceItemType::Emoticon:                return "Emoticon";
+                case SceItemType::Background:              return "Background";
+                case SceItemType::AnimatedBackground:      return "AnimatedBackground";
+                case SceItemType::AnimatedMiniBackground:  return "AnimatedMiniBackground";
+                case SceItemType::Profile:                 return "Profile";
+                case SceItemType::AvatarFrame:             return "AvatarFrame";
+                case SceItemType::AnimatedAvatar:          return "AnimatedAvatar";
+                default:                                   return "Unknown";
+            }
+        };
+
+        auto item_type_from_str = [](const std::string &s) -> SceItemType {
+            if (s == "FoilCard")               return SceItemType::FoilCard;
+            if (s == "BoosterPack")            return SceItemType::BoosterPack;
+            if (s == "Badge")                  return SceItemType::Badge;
+            if (s == "FoilBadge")              return SceItemType::FoilBadge;
+            if (s == "Emoticon")               return SceItemType::Emoticon;
+            if (s == "Background")             return SceItemType::Background;
+            if (s == "AnimatedBackground")     return SceItemType::AnimatedBackground;
+            if (s == "AnimatedMiniBackground") return SceItemType::AnimatedMiniBackground;
+            if (s == "Profile")                return SceItemType::Profile;
+            if (s == "AvatarFrame")            return SceItemType::AvatarFrame;
+            if (s == "AnimatedAvatar")         return SceItemType::AnimatedAvatar;
+            return SceItemType::TradingCard;
+        };
+
+        auto serialize_game_data = [&](const SceGameData &gd) -> nlohmann::json {
+            nlohmann::json root = nlohmann::json::object();
+            root["appid"] = gd.appid;
+            nlohmann::json series_arr = nlohmann::json::array();
+            for (const auto &s : gd.series) {
+                nlohmann::json sobj = nlohmann::json::object();
+                sobj["series_number"] = s.series_number;
+                sobj["series_name"]   = s.series_name;
+                nlohmann::json items_arr = nlohmann::json::array();
+                for (const auto &item : s.items) {
+                    nlohmann::json iobj = nlohmann::json::object();
+                    iobj["name"]             = item.name;
+                    iobj["type"]             = item_type_str(item.type);
+                    iobj["series"]           = item.series;
+                    iobj["slot"]             = item.slot;
+                    iobj["total"]            = item.total;
+                    iobj["icon_url"]         = item.icon_url;
+                    iobj["wallpaper_url"]    = item.wallpaper_url;
+                    iobj["animated_url"]     = item.animated_url;
+                    iobj["market_hash_name"] = item.market_hash_name;
+                    iobj["price_text"]       = item.price_text;
+                    iobj["badge_level"]      = item.badge_level;
+                    iobj["badge_xp"]         = item.badge_xp;
+                    iobj["emoticon_name"]    = item.emoticon_name;
+                    iobj["rarity"]           = item.rarity;
+                    iobj["video_webm_url"]   = item.video_webm_url;
+                    iobj["video_mp4_url"]    = item.video_mp4_url;
+                    iobj["static_img_url"]   = item.static_img_url;
+                    iobj["points_price"]     = item.points_price;
+                    iobj["preview_url"]      = item.preview_url;
+                    items_arr.push_back(std::move(iobj));
+                }
+                sobj["items"] = std::move(items_arr);
+                series_arr.push_back(std::move(sobj));
+            }
+            root["series"] = std::move(series_arr);
+            return root;
+        };
+
+        auto deserialize_game_data = [&](const nlohmann::json &root) -> SceGameData {
+            SceGameData gd{};
+            gd.appid = root.value("appid", (uint32)0);
+            for (const auto &sobj : root.value("series", nlohmann::json::array())) {
+                SceSeries s{};
+                s.series_number = sobj.value("series_number", 0);
+                s.series_name   = sobj.value("series_name",   std::string{});
+                for (const auto &iobj : sobj.value("items", nlohmann::json::array())) {
+                    SceItem item{};
+                    item.name             = iobj.value("name",             std::string{});
+                    item.type             = item_type_from_str(iobj.value("type", std::string{"TradingCard"}));
+                    item.series           = iobj.value("series",           0);
+                    item.slot             = iobj.value("slot",             0);
+                    item.total            = iobj.value("total",            0);
+                    item.icon_url         = iobj.value("icon_url",         std::string{});
+                    item.wallpaper_url    = iobj.value("wallpaper_url",    std::string{});
+                    item.animated_url     = iobj.value("animated_url",     std::string{});
+                    item.market_hash_name = iobj.value("market_hash_name", std::string{});
+                    item.price_text       = iobj.value("price_text",       std::string{});
+                    item.badge_level      = iobj.value("badge_level",      0);
+                    item.badge_xp         = iobj.value("badge_xp",         0);
+                    item.emoticon_name    = iobj.value("emoticon_name",    std::string{});
+                    item.rarity           = iobj.value("rarity",           std::string{});
+                    item.video_webm_url   = iobj.value("video_webm_url",   std::string{});
+                    item.video_mp4_url    = iobj.value("video_mp4_url",    std::string{});
+                    item.static_img_url   = iobj.value("static_img_url",   std::string{});
+                    item.points_price     = iobj.value("points_price",     std::string{});
+                    item.preview_url      = iobj.value("preview_url",      std::string{});
+                    s.items.push_back(std::move(item));
+                }
+                gd.series.push_back(std::move(s));
+            }
+            return gd;
+        };
+
+        std::string html{};
+        SceGameData parsed{};
+        bool loaded_from_cache = false;
+        nlohmann::json stale_jcache{};   // expired JSON kept for size-based revalidation
+        bool have_stale_json = false;
+
+        // ---- try loading parsed JSON cache first ----
+        {
+            nlohmann::json jcache{};
+            if (local_storage->load_json_file("", steamcardexchange_json_cache_file, jcache)) {
+                try {
+                    int64_t ts  = jcache.value("fetched_at", (int64_t)0);
+                    int64_t now = (int64_t)std::time(nullptr);
+                    if ((now - ts) < cache_ttl && jcache.contains("series")) {
+                        parsed = deserialize_game_data(jcache);
+                        loaded_from_cache = true;
+                        PRINT_DEBUG("SteamCardExchange: loaded parsed data from JSON cache (%zu series)", parsed.series.size());
+                    } else {
+                        // keep stale data: if new HTML is the same size we can revalidate without re-parsing
+                        if (jcache.contains("series")) {
+                            stale_jcache   = std::move(jcache);
+                            have_stale_json = true;
+                        }
+                        PRINT_DEBUG("SteamCardExchange: JSON cache expired (ttl=%llds), re-fetching", cache_ttl);
+                    }
+                } catch (...) {}
+            }
+        }
+
+        // ---- fall back to raw HTML cache ----
+        if (!loaded_from_cache) {
+            uint64_t file_ts = local_storage->file_timestamp("", steamcardexchange_cache_file);
+            int64_t now = (int64_t)std::time(nullptr);
+            if (file_ts > 0 && (now - (int64_t)file_ts) < cache_ttl) {
+                unsigned int sz = local_storage->file_size("", steamcardexchange_cache_file);
+                if (sz > 0) {
+                    std::string buf(sz, '\0');
+                    int got = local_storage->get_data("", steamcardexchange_cache_file, &buf[0], sz);
+                    if (got > 0) {
+                        html = buf.substr(0, (size_t)got);
+                        PRINT_DEBUG("SteamCardExchange: loaded HTML from cache, will re-parse (%u bytes)", sz);
+                    }
+                }
+            } else if (file_ts > 0) {
+                PRINT_DEBUG("SteamCardExchange: HTML cache expired (ttl=%llds), re-fetching", cache_ttl);
+            }
+        }
+
+        // ---- fetch from network if both caches miss ----
+        if (!loaded_from_cache && html.empty() && !settings->disable_networking && !settings->is_offline()) {
+            // record old HTML size before fetching so we can skip re-parsing if content is unchanged
+            unsigned int old_html_sz = local_storage->file_size("", steamcardexchange_cache_file);
+
+            std::string url = "https://www.steamcardexchange.net/index.php?gamepage-appid-" + std::to_string(app_id);
+            html = curl_get(url);
+            if (!html.empty()) {
+                // size match + stale JSON present → revalidate without re-parsing
+                if (have_stale_json && old_html_sz > 0 && html.size() == (size_t)old_html_sz) {
+                    PRINT_DEBUG("SteamCardExchange: new HTML same size (%u bytes), revalidating JSON cache", old_html_sz);
+                    try {
+                        stale_jcache["fetched_at"] = (int64_t)std::time(nullptr);
+                        local_storage->write_json_file("", steamcardexchange_json_cache_file, stale_jcache);
+                        parsed = deserialize_game_data(stale_jcache);
+                        loaded_from_cache = true;
+                    } catch (...) {}
+                }
+                local_storage->store_data("", steamcardexchange_cache_file, &html[0], (unsigned int)html.size());
+                if (loaded_from_cache) {
+                    html.clear(); // no need to keep full HTML in memory
+                } else {
+                    PRINT_DEBUG("SteamCardExchange: fetched and cached HTML (%zu bytes) for app %llu", html.size(), app_id);
+                }
+            } else {
+                PRINT_DEBUG("SteamCardExchange: fetch returned empty body for app %llu", app_id);
+            }
+        }
+
+        // ---- parse HTML if we didn't load from JSON cache ----
+        if (!loaded_from_cache && !html.empty()) {
+            parsed = ParseSteamCardExchangeHtml(html, (uint32)app_id);
+            PRINT_DEBUG("SteamCardExchange: parsed %zu series from HTML", parsed.series.size());
+
+            // persist parsed data as JSON so future startups skip HTML parsing
+            if (!parsed.series.empty()) {
+                try {
+                    nlohmann::json jout = serialize_game_data(parsed);
+                    jout["fetched_at"] = (int64_t)std::time(nullptr);
+                    local_storage->write_json_file("", steamcardexchange_json_cache_file, jout);
+                    PRINT_DEBUG("SteamCardExchange: JSON cache written");
+                } catch (...) {}
+            }
+        }
+
+        // ---- commit results under lock ----
+        {
+            std::lock_guard<std::recursive_mutex> lock(global_mutex);
+            sce_data_fetching  = false;
+            sce_data_populated = true;
+            sce_html           = std::move(html);
+            sce_game_data      = std::move(parsed);
+        }
+    }).detach();
+}
+
+
+// Parse the SteamCardExchange game page HTML into a structured catalog of all series,
+// cards, foil cards, badges, foil badges, booster packs, emoticons and backgrounds.
+// Uses only std::string::find / rfind — no external HTML parser required.
+Steam_User_Stats::SceGameData Steam_User_Stats::ParseSteamCardExchangeHtml(const std::string &html, uint32 app_id)
+{
+    SceGameData data{};
+    data.appid = app_id;
+
+    // ---- helpers (all capture html by ref) ----
+
+    // Extract the value of attr="..." searching forward from 'from', stop at 'limit'.
+    auto attr_val = [&](size_t from, size_t limit, const char *attr) -> std::string {
+        std::string needle = std::string(attr) + "=\"";
+        size_t p = html.find(needle, from);
+        if (p == std::string::npos || p >= limit) return {};
+        p += needle.size();
+        size_t e = html.find('"', p);
+        if (e == std::string::npos || e > limit) return {};
+        return html.substr(p, e - p);
+    };
+
+    // Extract inner text of the next tag starting at 'from' (reads between > and <).
+    auto tag_text = [&](size_t from, size_t limit) -> std::string {
+        size_t gt = html.find('>', from);
+        if (gt == std::string::npos || gt >= limit) return {};
+        gt++;
+        size_t lt = html.find('<', gt);
+        if (lt == std::string::npos || lt > limit) return {};
+        return html.substr(gt, lt - gt);
+    };
+
+    // URL-decode a percent-encoded string.
+    auto url_decode = [](const std::string &src) -> std::string {
+        std::string out;
+        out.reserve(src.size());
+        for (size_t i = 0; i < src.size(); ++i) {
+            if (src[i] == '%' && i + 2 < src.size()) {
+                int v = 0;
+                sscanf(src.c_str() + i + 1, "%2x", &v);
+                out += (char)v;
+                i += 2;
+            } else if (src[i] == '+') {
+                out += ' ';
+            } else {
+                out += src[i];
+            }
+        }
+        return out;
+    };
+
+    // Find the href="..." of the <a> tag whose class contains 'anchor_pos',
+    // searching backward within [min_pos, anchor_pos].
+    auto href_before = [&](size_t anchor_pos, size_t min_pos) -> std::string {
+        size_t hp = html.rfind("href=\"", anchor_pos);
+        if (hp == std::string::npos || hp < min_pos) return {};
+        hp += 6;
+        size_t he = html.find('"', hp);
+        if (he == std::string::npos) return {};
+        return html.substr(hp, he - hp);
+    };
+
+    // Extract the steam market hash name from a /market/listings/753/... URL.
+    auto market_hash = [&](const std::string &url) -> std::string {
+        const char *marker = "/market/listings/753/";
+        size_t p = url.find(marker);
+        if (p == std::string::npos) return {};
+        return url_decode(url.substr(p + strlen(marker)));
+    };
+
+    // Find the last occurrence of needle in html[min_pos, limit).
+    auto rfind_in = [&](const std::string &needle, size_t min_pos, size_t limit) -> size_t {
+        size_t last = std::string::npos;
+        size_t p = min_pos;
+        while (true) {
+            size_t f = html.find(needle, p);
+            if (f == std::string::npos || f >= limit) break;
+            last = f;
+            p = f + 1;
+        }
+        return last;
+    };
+
+    // ---- parse all series ----
+    const std::string SERIES_PFX = "id=\"series-";
+    // Item card div is identified by this unique class combination.
+    const std::string ITEM_DIV   = "class=\"flex flex-col items-center p-5 gap-y-2 bg-gray-light\"";
+
+    size_t pos = 0;
+    while (true) {
+        size_t sp = html.find(SERIES_PFX, pos);
+        if (sp == std::string::npos) break;
+
+        size_t id_s = sp + SERIES_PFX.size();
+        size_t id_e = html.find('"', id_s);
+        if (id_e == std::string::npos) break;
+        std::string id_val = html.substr(id_s, id_e - id_s);
+
+        // Top-level series anchor: id="series-N" where N is purely numeric.
+        bool top_level = !id_val.empty();
+        for (char c : id_val) if (!isdigit((unsigned char)c)) { top_level = false; break; }
+
+        if (top_level) {
+            int ser_num = std::stoi(id_val);
+
+            // Find the end of this series block: start of the next top-level series anchor.
+            size_t ser_end = html.size();
+            size_t sf = id_e + 1;
+            while (true) {
+                size_t nsp = html.find(SERIES_PFX, sf);
+                if (nsp == std::string::npos) break;
+                size_t ns_s = nsp + SERIES_PFX.size();
+                size_t ns_e = html.find('"', ns_s);
+                if (ns_e == std::string::npos) break;
+                std::string nid = html.substr(ns_s, ns_e - ns_s);
+                bool ntop = !nid.empty();
+                for (char c : nid) if (!isdigit((unsigned char)c)) { ntop = false; break; }
+                if (ntop) { ser_end = nsp; break; }
+                sf = ns_e + 1;
+            }
+
+            SceSeries series{};
+            series.series_number = ser_num;
+            series.series_name   = "Series " + std::to_string(ser_num);
+
+            // ---- find all sections within this series block ----
+            std::string sec_pfx = "id=\"series-" + std::to_string(ser_num) + "-";
+            size_t sec_search = sp;
+
+            while (sec_search < ser_end) {
+                size_t secp = html.find(sec_pfx, sec_search);
+                if (secp == std::string::npos || secp >= ser_end) break;
+
+                size_t st_s = secp + sec_pfx.size();
+                size_t st_e = html.find('"', st_s);
+                if (st_e == std::string::npos) break;
+                std::string sec_type = html.substr(st_s, st_e - st_s);
+
+                // Section ends at the next section or series anchor.
+                size_t sec_end = ser_end;
+                {
+                    size_t ns = html.find(sec_pfx, st_e + 1);
+                    if (ns != std::string::npos && ns < sec_end) sec_end = ns;
+                    size_t ts = html.find(SERIES_PFX, st_e + 1);
+                    if (ts != std::string::npos && ts < sec_end) sec_end = ts;
+                }
+
+                SceItemType itype;
+                bool known = true;
+                if      (sec_type == "cards")                    itype = SceItemType::TradingCard;
+                else if (sec_type == "foilcards")                itype = SceItemType::FoilCard;
+                else if (sec_type == "booster")                  itype = SceItemType::BoosterPack;
+                else if (sec_type == "badges")                   itype = SceItemType::Badge;
+                else if (sec_type == "foilbadges")               itype = SceItemType::FoilBadge;
+                else if (sec_type == "emoticons")                itype = SceItemType::Emoticon;
+                else if (sec_type == "backgrounds")              itype = SceItemType::Background;
+                else if (sec_type == "animatedbackgrounds")      itype = SceItemType::AnimatedBackground;
+                else if (sec_type == "animatedminibackgrounds")  itype = SceItemType::AnimatedMiniBackground;
+                else if (sec_type == "profiles")                 itype = SceItemType::Profile;
+                else if (sec_type == "avatarframes")             itype = SceItemType::AvatarFrame;
+                else if (sec_type == "avataranimated")           itype = SceItemType::AnimatedAvatar;
+                else                                             known = false;
+
+                if (known) {
+                    size_t item_search = secp;
+                    while (item_search < sec_end) {
+                        size_t ip = html.find(ITEM_DIV, item_search);
+                        if (ip == std::string::npos || ip >= sec_end) break;
+
+                        // Item block ends at the next item block or section end.
+                        size_t ni = html.find(ITEM_DIV, ip + ITEM_DIV.size());
+                        size_t ie = (ni != std::string::npos && ni < sec_end) ? ni : sec_end;
+
+                        SceItem item{};
+                        item.type   = itype;
+                        item.series = ser_num;
+
+                        if (itype == SceItemType::TradingCard || itype == SceItemType::FoilCard) {
+                            // data-gallery-desc="Series N - Card M of T - NAME"
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Card %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+
+                                // icon_url = src of the <img> that owns data-gallery-desc
+                                size_t img_s = html.rfind("<img", dgp);
+                                if (img_s != std::string::npos && img_s > ip) {
+                                    size_t img_e = html.find('>', dgp);
+                                    size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                    item.icon_url = attr_val(img_s, lim, "src");
+                                }
+                            }
+                            // wallpaper = href of the gallery-src link
+                            size_t gsc = html.find("gallery-src\"", ip);
+                            if (gsc != std::string::npos && gsc < ie)
+                                item.wallpaper_url = href_before(gsc, ip);
+
+                            // market link + price = last btn-primary in block
+                            size_t lbp = rfind_in("btn-primary\"", ip, ie);
+                            if (lbp != std::string::npos) {
+                                item.market_hash_name = market_hash(href_before(lbp, ip));
+                                item.price_text       = tag_text(lbp, ie);
+                            }
+
+                        } else if (itype == SceItemType::BoosterPack) {
+                            item.name = "Booster Pack";
+                            // icon = boosterpack img src
+                            size_t bpp = html.find("boosterpack/", ip);
+                            if (bpp != std::string::npos && bpp < ie) {
+                                size_t srcp = html.rfind("src=\"", bpp);
+                                if (srcp != std::string::npos && srcp > ip) {
+                                    srcp += 5;
+                                    size_t srce = html.find('"', srcp);
+                                    if (srce != std::string::npos) item.icon_url = html.substr(srcp, srce - srcp);
+                                }
+                            }
+                            size_t lbp = rfind_in("btn-primary\"", ip, ie);
+                            if (lbp != std::string::npos) {
+                                item.market_hash_name = market_hash(href_before(lbp, ip));
+                                item.price_text       = tag_text(lbp, ie);
+                            }
+
+                        } else if (itype == SceItemType::Badge || itype == SceItemType::FoilBadge) {
+                            // first <img> is the badge icon; alt="Series N - NAME"
+                            size_t img_p = html.find("<img", ip);
+                            if (img_p != std::string::npos && img_p < ie) {
+                                size_t img_e = html.find('>', img_p);
+                                size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                item.icon_url = attr_val(img_p, lim, "src");
+                                std::string alt = attr_val(img_p, lim, "alt");
+                                size_t dash = alt.find(" - ");
+                                if (dash != std::string::npos) item.name = alt.substr(dash + 3);
+                            }
+                            size_t lp = html.find("Level ", ip);
+                            if (lp != std::string::npos && lp < ie)
+                                sscanf(html.c_str() + lp + 6, "%d", &item.badge_level);
+                            size_t xp = html.find("XP: ", ip);
+                            if (xp != std::string::npos && xp < ie)
+                                sscanf(html.c_str() + xp + 4, "%d", &item.badge_xp);
+
+                        } else if (itype == SceItemType::Emoticon) {
+                            // first <img> = animated preview; second <img> = static icon
+                            size_t img1 = html.find("<img", ip);
+                            if (img1 != std::string::npos && img1 < ie) {
+                                size_t img1e = html.find('>', img1);
+                                size_t lim1  = img1e != std::string::npos ? img1e + 1 : ie;
+                                item.animated_url = attr_val(img1, lim1, "src");
+                                std::string alt1  = attr_val(img1, lim1, "alt");
+                                // alt1 = ":NAME: Chat Preview"
+                                size_t cp = alt1.find(" Chat Preview");
+                                if (cp != std::string::npos) alt1.resize(cp);
+                                if (alt1.size() >= 2 && alt1.front() == ':') {
+                                    size_t cl = alt1.rfind(':');
+                                    if (cl > 0) item.emoticon_name = alt1.substr(1, cl - 1);
+                                }
+                                size_t img2 = html.find("<img", img1 + 1);
+                                if (img2 != std::string::npos && img2 < ie) {
+                                    size_t img2e = html.find('>', img2);
+                                    item.icon_url = attr_val(img2, img2e != std::string::npos ? img2e + 1 : ie, "src");
+                                }
+                            }
+                            // name from break-all div
+                            size_t na = html.find("break-all\"", ip);
+                            if (na != std::string::npos && na < ie) item.name = tag_text(na, ie);
+                            // rarity from text-rarity-* class
+                            size_t ra = html.find("text-rarity-", ip);
+                            if (ra != std::string::npos && ra < ie) item.rarity = tag_text(ra, ie);
+                            // market + price
+                            size_t lbp = rfind_in("btn-primary\"", ip, ie);
+                            if (lbp != std::string::npos) {
+                                item.market_hash_name = market_hash(href_before(lbp, ip));
+                                item.price_text       = tag_text(lbp, ie);
+                            }
+
+                        } else { // Background
+                            // wallpaper = gallery-src href
+                            size_t gsc = html.find("gallery-src\"", ip);
+                            if (gsc != std::string::npos && gsc < ie)
+                                item.wallpaper_url = href_before(gsc, ip);
+
+                            // data-gallery-desc="Series N - Background M of T - NAME"
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Background %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+
+                                // icon_url = img src (the thumbnail; strip ?size=... query)
+                                size_t img_s = html.rfind("<img", dgp);
+                                if (img_s != std::string::npos && img_s > ip) {
+                                    size_t img_e = html.find('>', dgp);
+                                    size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                    std::string src = attr_val(img_s, lim, "src");
+                                    size_t q = src.find('?');
+                                    if (q != std::string::npos) src.resize(q);
+                                    item.icon_url = src;
+                                }
+                            }
+                            // rarity
+                            size_t ra = html.find("text-rarity-", ip);
+                            if (ra != std::string::npos && ra < ie) item.rarity = tag_text(ra, ie);
+                            // market + price = last btn-primary (Preview link comes first)
+                            size_t lbp = rfind_in("btn-primary\"", ip, ie);
+                            if (lbp != std::string::npos) {
+                                std::string murl = href_before(lbp, ip);
+                                if (murl.find("/market/listings/") != std::string::npos) {
+                                    item.market_hash_name = market_hash(murl);
+                                    item.price_text       = tag_text(lbp, ie);
+                                }
+                            }
+
+                        } else if (itype == SceItemType::AnimatedBackground ||
+                                   itype == SceItemType::AnimatedMiniBackground) {
+                            // data-gallery-desc="Series N - Animated Background M of T - NAME"
+                            // or                "Series N - Animated Mini Background M of T - NAME"
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Animated Background %d of %d", &sn, &slot, &tot) == 3 ||
+                                    sscanf(desc.c_str(), "Series %d - Animated Mini Background %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                            }
+                            // video-src link (first link in top row = mp4)
+                            size_t gvs = html.find("gallery-video-src\"", ip);
+                            if (gvs != std::string::npos && gvs < ie)
+                                item.video_mp4_url = href_before(gvs, ip);
+                            // wallpaper link (second link in top row)
+                            {
+                                size_t wp_search = (gvs != std::string::npos) ? gvs + 1 : ip;
+                                size_t hp2 = html.find("href=\"", wp_search);
+                                if (hp2 != std::string::npos && hp2 < ie) {
+                                    hp2 += 6;
+                                    size_t he2 = html.find('"', hp2);
+                                    if (he2 != std::string::npos && he2 < ie) {
+                                        std::string u = html.substr(hp2, he2 - hp2);
+                                        if (u.find("profilebackground") != std::string::npos ||
+                                            u.find(".jpg") != std::string::npos)
+                                            item.wallpaper_url = u;
+                                    }
+                                }
+                            }
+                            // static thumbnail img src (hover-toggle-primary > img)
+                            {
+                                size_t htp = html.find("hover-toggle-primary", ip);
+                                if (htp != std::string::npos && htp < ie) {
+                                    size_t img_p = html.find("<img", htp);
+                                    if (img_p != std::string::npos && img_p < ie) {
+                                        size_t img_e = html.find('>', img_p);
+                                        size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                        std::string src = attr_val(img_p, lim, "src");
+                                        size_t q = src.find('?');
+                                        if (q != std::string::npos) src.resize(q);
+                                        item.static_img_url = src;
+                                    }
+                                }
+                            }
+                            // webm source
+                            {
+                                size_t sp2 = html.find("video/webm", ip);
+                                if (sp2 != std::string::npos && sp2 < ie) {
+                                    size_t srcp = html.rfind("src=\"", sp2);
+                                    if (srcp != std::string::npos && srcp > ip) {
+                                        srcp += 5;
+                                        size_t srce = html.find('"', srcp);
+                                        if (srce != std::string::npos) item.video_webm_url = html.substr(srcp, srce - srcp);
+                                    }
+                                }
+                            }
+                            item.rarity = tag_text(html.find("text-rarity-", ip), ie);
+
+                        } else if (itype == SceItemType::Profile) {
+                            // simple static image, no market link — points shop only
+                            size_t img_p = html.find("<img", ip);
+                            if (img_p != std::string::npos && img_p < ie) {
+                                size_t img_e = html.find('>', img_p);
+                                size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                item.icon_url = attr_val(img_p, lim, "src");
+                                item.name     = attr_val(img_p, lim, "alt");
+                            }
+                            item.rarity = tag_text(html.find("text-rarity-", ip), ie);
+                            // Steam Points price (inside btn-primary with steam-points.svg)
+                            size_t spp = html.find("steam-points.svg", ip);
+                            if (spp != std::string::npos && spp < ie) {
+                                size_t sp2 = html.find("<span>", spp);
+                                if (sp2 != std::string::npos && sp2 < ie) {
+                                    sp2 += 6;
+                                    size_t sp3 = html.find("</span>", sp2);
+                                    if (sp3 != std::string::npos && sp3 < ie) item.points_price = html.substr(sp2, sp3 - sp2);
+                                }
+                            }
+                            // preview URL (first btn-primary href in block)
+                            size_t pbp = html.find("btn-primary\"", ip);
+                            if (pbp != std::string::npos && pbp < ie)
+                                item.preview_url = href_before(pbp, ip);
+
+                        } else if (itype == SceItemType::AvatarFrame) {
+                            // data-gallery-desc="Series N - Avatar Frame M of T - NAME"
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Avatar Frame %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                            }
+                            // gallery-src link = animated PNG
+                            size_t gsc = html.find("gallery-src\"", ip);
+                            if (gsc != std::string::npos && gsc < ie)
+                                item.wallpaper_url = href_before(gsc, ip);  // animated variant
+                            // static img from hover-toggle-primary
+                            {
+                                size_t htp = html.find("hover-toggle-primary", ip);
+                                if (htp != std::string::npos && htp < ie) {
+                                    size_t img_p = html.find("<img", htp);
+                                    if (img_p != std::string::npos && img_p < ie) {
+                                        size_t img_e = html.find('>', img_p);
+                                        size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                        item.static_img_url = attr_val(img_p, lim, "src");
+                                    }
+                                }
+                            }
+                            item.rarity = tag_text(html.find("text-rarity-", ip), ie);
+
+                        } else { // AnimatedAvatar
+                            // data-gallery-desc="Series N - Animated Avatar M of T - NAME"
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Animated Avatar %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                            }
+                            // gallery-src link = .gif animation
+                            size_t gsc = html.find("gallery-src\"", ip);
+                            if (gsc != std::string::npos && gsc < ie)
+                                item.video_mp4_url = href_before(gsc, ip);  // reuse mp4 field for gif
+                            // static img from hover-toggle-primary
+                            {
+                                size_t htp = html.find("hover-toggle-primary", ip);
+                                if (htp != std::string::npos && htp < ie) {
+                                    size_t img_p = html.find("<img", htp);
+                                    if (img_p != std::string::npos && img_p < ie) {
+                                        size_t img_e = html.find('>', img_p);
+                                        size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                        item.static_img_url = attr_val(img_p, lim, "src");
+                                    }
+                                }
+                            }
+                            // animated gif from hover-toggle-secondary
+                            {
+                                size_t hts = html.find("hover-toggle-secondary", ip);
+                                if (hts != std::string::npos && hts < ie) {
+                                    size_t img_p = html.find("<img", hts);
+                                    if (img_p != std::string::npos && img_p < ie) {
+                                        size_t img_e = html.find('>', img_p);
+                                        size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                        item.icon_url = attr_val(img_p, lim, "src");  // gif shown on hover
+                                    }
+                                }
+                            }
+                            item.rarity = tag_text(html.find("text-rarity-", ip), ie);
+                        }
+
+                        if (!item.name.empty())
+                            series.items.push_back(std::move(item));
+
+                        item_search = ip + ITEM_DIV.size();
+                    }
+                }
+
+                sec_search = st_e + 1;
+            }
+
+            if (!series.items.empty())
+                data.series.push_back(std::move(series));
+        }
+
+        pos = id_e + 1;
+    }
+
+    return data;
+}
+
+
 // Get the info on the most achieved achievement for the game, returns an iterator index you can use to fetch
 // the next most achieved afterwards.  Will return -1 if there is no data on achievement 
 // percentages (ie, you haven't called RequestGlobalAchievementPercentages and waited on the callback).

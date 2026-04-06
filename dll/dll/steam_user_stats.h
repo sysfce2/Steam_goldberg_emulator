@@ -204,10 +204,63 @@ public:
 
     static constexpr const auto steamhunters_cache_file = "achievements_sh.json";
     static constexpr const auto steam_ach_percentages_cache_file = "achievements_st.json";
+    static constexpr const auto steamcardexchange_cache_file      = "steamcardexchange_sce.html";
+    static constexpr const auto steamcardexchange_json_cache_file = "steamcardexchange_sce.json";
+
+    std::string sce_html{};
+    bool sce_data_populated{false};
+    bool sce_data_fetching{false};
+
+    // Parsed item catalog from the SteamCardExchange game page
+    enum class SceItemType {
+        TradingCard, FoilCard, BoosterPack,
+        Badge, FoilBadge,
+        Emoticon,
+        Background, AnimatedBackground, AnimatedMiniBackground,
+        Profile, AvatarFrame, AnimatedAvatar
+    };
+    struct SceItem {
+        std::string name{};
+        SceItemType type{SceItemType::TradingCard};
+        int         series{0};
+        int         slot{0};             // card/bg position N-of-M (1-based, 0=N/A)
+        int         total{0};            // total count M (0=N/A)
+        std::string icon_url{};          // primary thumbnail/economy image full URL
+        std::string wallpaper_url{};     // full-res wallpaper URL (cards, backgrounds)
+        std::string animated_url{};      // emoticon animated preview URL
+        std::string market_hash_name{};  // e.g. "2989180-Darwin"
+        std::string price_text{};        // "$0.26", "NA", "Last seen: $X.XX"
+        int         badge_level{0};      // badge craft level (0=N/A)
+        int         badge_xp{0};         // badge XP value (0=N/A)
+        std::string emoticon_name{};     // without surrounding colons, e.g. "DPalien"
+        std::string rarity{};            // "Unknown", "Common", "Uncommon", "Rare", ""
+        // animated items (animated backgrounds, mini-backgrounds, avatar frames, animated avatars)
+        std::string video_webm_url{};    // .webm source URL
+        std::string video_mp4_url{};     // .mp4 source URL  (or .gif for animated avatars)
+        std::string static_img_url{};    // static thumbnail/frame URL
+        // profile page items (Profiles, AvatarFrames)
+        std::string points_price{};      // e.g. "10.000" (Steam Points cost, empty if N/A)
+        std::string preview_url{};       // SCE background-viewer or Steam profile preview URL
+    };
+    struct SceSeries {
+        int                  series_number{0};
+        std::string          series_name{};
+        std::vector<SceItem> items{};
+    };
+    struct SceGameData {
+        uint32               appid{0};
+        std::vector<SceSeries> series{};
+    };
+    SceGameData sce_game_data{};
+    static SceGameData ParseSteamCardExchangeHtml(const std::string &html, uint32 app_id);
 
     // Trigger an async fetch of SteamHunters achievement groups + global percentages.
     // Safe to call multiple times; will only fire once per object lifetime.
     void RequestSteamHuntersData();
+
+    // Trigger an async fetch + disk cache of the SteamCardExchange game page HTML.
+    // Raw HTML is stored in sce_html once complete. Same TTL as other caches.
+    void RequestSteamCardExchangeData();
 
     // After global percentages are populated, write "global_percent" into each user_achievement entry
     // and persist achievements.json to disk.  Safe to call under global_mutex.
