@@ -678,10 +678,13 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                     for (const auto &entry : cache["achievements"]) {
                         percentages[entry["name"].get<std::string>()] = entry["percent"].get<float>();
                     }
+                    // treat as fresh even if empty (API returned no data last time, honor TTL)
+                    cache_fresh = true;
                     if (!percentages.empty()) {
                         commit_percentages(std::move(percentages));
-                        cache_fresh = true;
                         PRINT_DEBUG("Steam global %%: loaded %zu entries from cache", global_achievement_percentages.size());
+                    } else {
+                        PRINT_DEBUG("Steam global %%: cache hit but empty (API returned no data last time)");
                     }
                 } else {
                     PRINT_DEBUG("Steam global %%: cache expired or invalid, will re-fetch");
@@ -714,27 +717,34 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
                     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
                     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+                    curl_easy_setopt(curl, CURLOPT_USERAGENT,
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.142.86 Safari/537.36");
                     curl_easy_perform(curl);
                     curl_easy_cleanup(curl);
                 }
+                std::map<std::string, float> percentages{};
                 if (!response.empty()) {
                     try {
                         auto j = nlohmann::json::parse(response);
-                        std::map<std::string, float> percentages{};
                         for (const auto &entry : j.at("achievementpercentages").at("achievements")) {
                             percentages[entry.at("name").get<std::string>()] = entry.at("percent").get<float>();
                         }
-                        // save cache
-                        nlohmann::json to_save;
-                        to_save["fetched_at"] = (int64_t)std::time(nullptr);
-                        to_save["appid"] = game_id;
-                        to_save["achievements"] = nlohmann::json::array();
-                        for (const auto &[n, p] : percentages)
-                            to_save["achievements"].push_back({ {"name", n}, {"percent", p} });
-                        local_storage->write_json_file("", steam_ach_percentages_cache_file, to_save);
-                        // commit
-                        std::lock_guard<std::recursive_mutex> lock(global_mutex);
-                        global_achievement_percentages_fetching = false;
+                    } catch (...) {}
+                }
+                // always save cache (empty achievements = API returned no data; honors TTL)
+                {
+                    nlohmann::json to_save;
+                    to_save["fetched_at"] = (int64_t)std::time(nullptr);
+                    to_save["appid"] = game_id;
+                    to_save["achievements"] = nlohmann::json::array();
+                    for (const auto &[n, p] : percentages)
+                        to_save["achievements"].push_back({ {"name", n}, {"percent", p} });
+                    local_storage->write_json_file("", steam_ach_percentages_cache_file, to_save);
+                }
+                {
+                    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+                    global_achievement_percentages_fetching = false;
+                    if (!percentages.empty()) {
                         global_achievement_percentages = std::move(percentages);
                         sorted_global_achievement_percentages.clear();
                         for (const auto &kv : global_achievement_percentages)
@@ -744,13 +754,9 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                         global_achievement_percentages_populated = true;
                         update_user_achievements_with_global_percent();
                         PRINT_DEBUG("Steam global %%: background refetch done, %zu entries", global_achievement_percentages.size());
-                    } catch (...) {
-                        std::lock_guard<std::recursive_mutex> lock(global_mutex);
-                        global_achievement_percentages_fetching = false;
+                    } else {
+                        PRINT_DEBUG("Steam global %%: background refetch returned no data");
                     }
-                } else {
-                    std::lock_guard<std::recursive_mutex> lock(global_mutex);
-                    global_achievement_percentages_fetching = false;
                 }
             }).detach();
         }
@@ -785,11 +791,12 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
             curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+            curl_easy_setopt(curl, CURLOPT_USERAGENT,
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.142.86 Safari/537.36");
             curl_easy_perform(curl);
             curl_easy_cleanup(curl);
         }
 
-        bool ok = false;
         std::map<std::string, float> percentages{};
         if (!response.empty()) {
             try {
@@ -797,12 +804,11 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                 for (const auto &entry : j.at("achievementpercentages").at("achievements")) {
                     percentages[entry.at("name").get<std::string>()] = entry.at("percent").get<float>();
                 }
-                ok = true;
             } catch (...) {}
         }
 
-        if (ok) {
-            // save cache
+        // always save cache (empty achievements = API returned no data / error; honors TTL)
+        {
             nlohmann::json to_save;
             to_save["fetched_at"] = (int64_t)std::time(nullptr);
             to_save["appid"] = game_id;
@@ -815,7 +821,7 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
         {
             std::lock_guard<std::recursive_mutex> lock(global_mutex);
             global_achievement_percentages_fetching = false;
-            if (ok) {
+            if (!percentages.empty()) {
                 global_achievement_percentages = std::move(percentages);
                 sorted_global_achievement_percentages.clear();
                 for (const auto &kv : global_achievement_percentages)
@@ -825,11 +831,13 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                 global_achievement_percentages_populated = true;
                 update_user_achievements_with_global_percent();
                 PRINT_DEBUG("Steam global %%: fetched %zu entries", global_achievement_percentages.size());
+            } else {
+                PRINT_DEBUG("Steam global %%: API returned no data (response: %s)", response.substr(0, 200).c_str());
             }
         }
 
         GlobalAchievementPercentagesReady_t data{};
-        data.m_eResult = ok ? EResult::k_EResultOK : EResult::k_EResultFail;
+        data.m_eResult = !percentages.empty() ? EResult::k_EResultOK : EResult::k_EResultFail;
         data.m_nGameID = game_id;
         callback_results->addCallResult(call_res_id, data.k_iCallback, &data, sizeof(data));
         callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
@@ -847,9 +855,10 @@ void Steam_User_Stats::update_user_achievements_with_global_percent()
     for (auto &[name, pct] : global_achievement_percentages) {
         auto it = user_achievements.find(name);
         if (it != user_achievements.end()) {
+            float rounded = std::round(pct * 10.0f) / 10.0f;
             float old_pct = it->value("global_percent", -1.0f);
-            if (old_pct != pct) {
-                (*it)["global_percent"] = pct;
+            if (old_pct != rounded) {
+                (*it)["global_percent"] = rounded;
                 changed = true;
             }
         }

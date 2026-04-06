@@ -1682,8 +1682,9 @@ void Steam_Overlay::render_main_window()
                             }
                         }
 
-                        // simulate a global percentage for this achievement
-                        ach_global_percentages[ax.name] = global_dist(rng);
+                        // simulate a global percentage only if we don't have a real one
+                        if (ach_global_percentages.find(ax.name) == ach_global_percentages.end())
+                            ach_global_percentages[ax.name] = global_dist(rng);
                     }
                 }
                 ImGui::BeginChild(translationAchievements[current_language]);

@@ -124,6 +124,11 @@ Steam_User_Stats::Steam_User_Stats(Settings *settings, class Networking *network
     this->network->setCallback(CALLBACK_ID_USER_STATS, settings->get_local_steam_id(), &Steam_User_Stats::steam_user_stats_network_stats, this);
     this->network->setCallback(CALLBACK_ID_USER_STATUS, settings->get_local_steam_id(), &Steam_User_Stats::steam_user_stats_network_low_level, this);
     this->run_every_runcb->add(&Steam_User_Stats::steam_user_stats_run_every_runcb, this);
+
+    // Proactively start fetching Steam global achievement percentages and SteamHunters data
+    // at construction time so cache is warm before the game or overlay ever requests it.
+    RequestGlobalAchievementPercentages();
+    RequestSteamHuntersData();
 }
 
 Steam_User_Stats::~Steam_User_Stats()
