@@ -181,6 +181,21 @@ public:
     bool global_achievement_percentages_fetching{false};
     bool global_achievement_percentages_overlay_sorted{false}; // whether the overlay sort has already been applied
 
+    // SteamHunters data (achievement groups + supplemental global %) fetched once per launch
+    struct SteamHunters_AchievementGroup {
+        std::string name{};                          // optional sub-group name (e.g. "Gwent")
+        int         dlcAppId{};                      // DLC App ID (0 = base game)
+        std::string dlcAppName{};                    // DLC display name (empty = base game)
+        std::vector<std::string> achievementApiNames{}; // ordered list of achievement API names
+    };
+    std::vector<SteamHunters_AchievementGroup> steamhunters_achievement_groups{};
+    bool steamhunters_data_populated{false};
+    bool steamhunters_data_fetching{false};
+
+    // Trigger an async fetch of SteamHunters achievement groups + global percentages.
+    // Safe to call multiple times; will only fire once per object lifetime.
+    void RequestSteamHuntersData();
+
     Steam_User_Stats(Settings *settings, class Networking *network, Local_Storage *local_storage, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, class RunEveryRunCB *run_every_runcb, Steam_Overlay* overlay);
     ~Steam_User_Stats();
 

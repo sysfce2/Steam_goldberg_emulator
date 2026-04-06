@@ -460,6 +460,9 @@ void Steam_Overlay::load_achievements_data()
         // trigger fetch if the game hasn't done so yet; result arrives via steam_run_callback
         steamUserStats->RequestGlobalAchievementPercentages();
     }
+
+    // Always trigger SteamHunters fetch once per launch (groups + supplemental % fallback)
+    steamUserStats->RequestSteamHuntersData();
 }
 
 void Steam_Overlay::SortAchievementsByGlobalPercent(const std::map<std::string, float> &percentages)
@@ -483,6 +486,28 @@ void Steam_Overlay::SortAchievementsByGlobalPercent(const std::map<std::string, 
         }
     );
     PRINT_DEBUG("achievements re-sorted (unlocked by recency, locked by global %)");
+}
+
+// Called from Steam_User_Stats background thread once SteamHunters data has arrived.
+// Picks up any newly populated global percentages (in case Steam API hadn't returned yet).
+void Steam_Overlay::UpdateSteamHuntersData()
+{
+    PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    Steam_User_Stats *steamUserStats = get_steam_client()->steam_user_stats;
+    if (!steamUserStats->global_achievement_percentages_populated) return;
+
+    // If we don't have percentages yet in the overlay, grab them now
+    if (ach_global_percentages.empty()) {
+        if (settings->overlay_achievement_sort_by_global_percent) {
+            SortAchievementsByGlobalPercent(steamUserStats->global_achievement_percentages);
+        } else {
+            ach_global_percentages = steamUserStats->global_achievement_percentages;
+            ach_global_percentages_snapshot = ach_global_percentages;
+        }
+        PRINT_DEBUG("UpdateSteamHuntersData: overlay percentages updated from SteamHunters fallback");
+    }
 }
 
 // called initially and when window size is updated
@@ -1663,87 +1688,84 @@ void Steam_Overlay::render_main_window()
                 }
                 ImGui::BeginChild(translationAchievements[current_language]);
 
-                // build a sorted index: unlocked (most recent first) → locked non-hidden (by global % desc) → hidden
-                std::vector<size_t> sorted_idx(achievements.size());
-                std::iota(sorted_idx.begin(), sorted_idx.end(), 0);
-                std::stable_sort(sorted_idx.begin(), sorted_idx.end(), [&](size_t ai, size_t bi) {
+                // ---- sort / group controls ----
+                Steam_User_Stats *steamUserStats_sh = get_steam_client()->steam_user_stats;
+                bool has_sh_groups = steamUserStats_sh->steamhunters_data_populated
+                                     && !steamUserStats_sh->steamhunters_achievement_groups.empty();
+
+                if (has_sh_groups) {
+                    if (ImGui::Button(ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
+                        ach_group_by_sh = !ach_group_by_sh;
+                    ImGui::SameLine();
+                }
+                if (ImGui::Button(ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %%##ach_srt"))
+                    ach_sort_schema_order = !ach_sort_schema_order;
+
+                ImGui::Separator();
+
+                // ---- comparator (unlocked-recent → locked → hidden; schema or global % for locked) ----
+                auto ach_compare = [&](size_t ai, size_t bi) -> bool {
                     const auto &a = achievements[ai];
                     const auto &b = achievements[bi];
                     bool a_hidden = a.hidden && !a.achieved;
                     bool b_hidden = b.hidden && !b.achieved;
-                    // hidden always last
                     if (a_hidden != b_hidden) return !a_hidden;
-                    // both hidden: keep stable order
                     if (a_hidden) return false;
-                    // unlocked before locked
                     if (a.achieved != b.achieved) return a.achieved > b.achieved;
-                    // both unlocked: most recent first
                     if (a.achieved) return a.unlock_time > b.unlock_time;
-                    // both locked non-hidden: higher global % first
-                    auto ita = ach_global_percentages.find(a.name);
-                    auto itb = ach_global_percentages.find(b.name);
-                    float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
-                    float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
-                    return pa > pb;
-                });
+                    if (!ach_sort_schema_order) {
+                        auto ita = ach_global_percentages.find(a.name);
+                        auto itb = ach_global_percentages.find(b.name);
+                        float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
+                        float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
+                        if (pa != pb) return pa > pb;
+                    }
+                    return ai < bi; // tie-break: schema order
+                };
 
-                for (size_t si = 0; si < sorted_idx.size(); ++si) {
-                    auto & x = achievements[sorted_idx[si]];
+                // ---- per-achievement render lambda ----
+                auto render_ach_item = [&](Overlay_Achievement &x) {
                     bool achieved = x.achieved;
                     bool hidden = x.hidden && !achieved;
 
-                    // force upload to GPU if the pagination is request-based
-                    try_load_ach_icon(x, true, settings->paginated_achievements_icons == 0);
+                    try_load_ach_icon(x, true,  settings->paginated_achievements_icons == 0);
                     try_load_ach_icon(x, false, settings->paginated_achievements_icons == 0);
 
                     ImGui::Separator();
 
                     const float icon_col_w = settings->overlay_appearance.icon_size;
-                    const float bar_h = settings->overlay_appearance.font_size;
+                    const float bar_h      = settings->overlay_appearance.font_size;
                     bool has_icon = x.icon->GetResourceId() != 0 || x.icon_gray->GetResourceId() != 0;
                     bool rendered = false;
 
                     if (has_icon) {
-                        // title above the table, left edge aligned with the ✓/✗ symbol
                         {
                             const char *sym_for_measure = achieved ? u8"\u2713" : u8"\u2717";
                             float sym_w = ImGui::CalcTextSize(sym_for_measure).x;
                             float title_x_offset = (icon_col_w - sym_w) * 0.5f;
                             if (title_x_offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + title_x_offset);
                         }
-                        if (hidden) {
-                            ImGui::Text("%s", translationHiddenAchievement[current_language]);
-                        } else {
-                            ImGui::Text("%s", x.title.c_str());
-                        }
+                        if (hidden) ImGui::Text("%s", translationHiddenAchievement[current_language]);
+                        else        ImGui::Text("%s", x.title.c_str());
 
-                        // unique table id per achievement
                         std::string tbl_id = std::string("##ach_") + x.name;
                         if (ImGui::BeginTable(tbl_id.c_str(), 2)) {
                             rendered = true;
                             ImGui::TableSetupColumn("img", ImGuiTableColumnFlags_WidthFixed, icon_col_w);
                             ImGui::TableSetupColumn("txt");
-
-                            // --- Row 1: icon | description ---
                             ImGui::TableNextRow(ImGuiTableRowFlags_None, icon_col_w);
                             ImGui::TableSetColumnIndex(0);
                             auto &icon_rsrc = (achieved && !hidden) ? x.icon : x.icon_gray;
-                            if (icon_rsrc->GetResourceId() != 0) {
+                            if (icon_rsrc->GetResourceId() != 0)
                                 ImGui::Image(icon_rsrc->GetResourceId(), ImVec2(icon_col_w, icon_col_w));
-                            }
                             ImGui::TableSetColumnIndex(1);
-                            if (!hidden) {
-                                ImGui::TextWrapped("%s", x.description.c_str());
-                            } else {
-                                ImGui::TextDisabled("%s", x.description.c_str());
-                            }
-
+                            if (!hidden) ImGui::TextWrapped("%s", x.description.c_str());
+                            else         ImGui::TextDisabled("%s", x.description.c_str());
                             ImGui::EndTable();
                         }
                     }
 
                     if (!rendered) {
-                        // no icon: render everything inline
                         if (hidden) {
                             ImGui::Text("%s", translationHiddenAchievement[current_language]);
                             ImGui::TextDisabled("%s", x.description.c_str());
@@ -1753,24 +1775,19 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // --- Bar: always rendered; symbol + date (if achieved) inside at left, x/y at right ---
+                    // --- status bar ---
                     {
-                        // pick symbol based on state
                         const char *sym;
                         ImU32 sym_col;
                         bool has_progress = !achieved && x.max_progress > 0;
                         if (achieved) {
-                            sym = u8"\u2713"; // ✓
-                            sym_col = IM_COL32(0, 220, 0, 255);
+                            sym = u8"\u2713"; sym_col = IM_COL32(0, 220, 0, 255);
                         } else if (has_progress && x.progress > 0) {
-                            sym = u8"\u25B6"; // ▶ in-progress
-                            sym_col = IM_COL32(255, 180, 0, 255);
+                            sym = u8"\u25B6"; sym_col = IM_COL32(255, 180, 0, 255);
                         } else {
-                            sym = u8"\u2717"; // ✗
-                            sym_col = IM_COL32(220, 0, 0, 255);
+                            sym = u8"\u2717"; sym_col = IM_COL32(220, 0, 0, 255);
                         }
 
-                        // build date string (only when achieved)
                         char date_buf[128]{};
                         if (achieved) {
                             char tmp[80]{};
@@ -1780,22 +1797,18 @@ void Steam_Overlay::render_main_window()
                             snprintf(date_buf, sizeof(date_buf), "%s", tmp);
                         }
 
-                        // build x/y string
                         char pbuf[32]{};
-                        if (has_progress) {
-                            snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
-                        }
+                        if (has_progress) snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
 
                         float fill = achieved ? 1.0f : (has_progress ? (float)x.progress / (float)x.max_progress : 0.0f);
-                        ImVec2 bar_pos = ImGui::GetCursorScreenPos();
-                        float bar_width = ImGui::GetContentRegionAvail().x;
+                        ImVec2 bar_pos   = ImGui::GetCursorScreenPos();
+                        float  bar_width = ImGui::GetContentRegionAvail().x;
                         ImGui::ProgressBar(fill, ImVec2(-1.0f, bar_h), "");
-                        auto *dl = ImGui::GetWindowDrawList();
+                        auto  *dl  = ImGui::GetWindowDrawList();
                         ImFont *fnt = ImGui::GetFont();
-                        const float sym_font_sz = bar_h * 0.8f; // slightly smaller so it fits neatly
+                        const float sym_font_sz = bar_h * 0.8f;
                         constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
 
-                        // helper: draw text with a 1px dark shadow for readability over any bar color
                         auto draw_shadowed = [&](ImVec2 pos, ImU32 col, const char *text) {
                             dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
                             dl->AddText(pos, col, text);
@@ -1805,37 +1818,94 @@ void Steam_Overlay::render_main_window()
                             dl->AddText(f, sz, pos, col, text);
                         };
 
-                        // symbol at left inside bar, vertically centered
-                        ImVec2 sym_sz = fnt->CalcTextSizeA(sym_font_sz, FLT_MAX, 0.0f, sym);
+                        ImVec2 sym_sz  = fnt->CalcTextSizeA(sym_font_sz, FLT_MAX, 0.0f, sym);
                         ImVec2 sym_pos = { bar_pos.x + 4.0f, bar_pos.y + (bar_h - sym_sz.y) * 0.5f };
                         draw_shadowed_ex(fnt, sym_font_sz, sym_pos, sym_col, sym);
 
-                        // date after symbol (only when achieved)
                         if (achieved && date_buf[0]) {
-                            float date_x = sym_pos.x + sym_sz.x + 4.0f;
-                            ImVec2 date_sz = ImGui::CalcTextSize(date_buf);
+                            float  date_x   = sym_pos.x + sym_sz.x + 4.0f;
+                            ImVec2 date_sz  = ImGui::CalcTextSize(date_buf);
                             ImVec2 date_pos = { date_x, bar_pos.y + (bar_h - date_sz.y) * 0.5f };
                             draw_shadowed(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
                         }
 
-                        // x/y centered inside bar
                         if (has_progress) {
-                            ImVec2 pbar_sz = ImGui::CalcTextSize(pbuf);
+                            ImVec2 pbar_sz  = ImGui::CalcTextSize(pbuf);
                             ImVec2 pbar_pos = { bar_pos.x + (bar_width - pbar_sz.x) * 0.5f, bar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
                             draw_shadowed(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
                         }
                     }
 
-                    // --- Global % ---
+                    // --- global % ---
                     {
                         auto it = ach_global_percentages.find(x.name);
-                        if (it != ach_global_percentages.end()) {
+                        if (it != ach_global_percentages.end())
                             ImGui::TextDisabled(translationGlobalAchievementPercent[current_language], it->second);
-                        }
                     }
 
                     ImGui::Separator();
+                }; // end render_ach_item
+
+                // ---- build name → index map (needed for grouping) ----
+                std::unordered_map<std::string, size_t> ach_name_idx;
+                ach_name_idx.reserve(achievements.size());
+                for (size_t i = 0; i < achievements.size(); ++i)
+                    ach_name_idx[achievements[i].name] = i;
+
+                if (ach_group_by_sh && has_sh_groups) {
+                    // === GROUPED RENDER ===
+                    std::unordered_set<size_t> rendered_set;
+
+                    for (const auto &grp : steamUserStats_sh->steamhunters_achievement_groups) {
+                        std::vector<size_t> grp_idx;
+                        for (const auto &api_name : grp.achievementApiNames) {
+                            auto it = ach_name_idx.find(api_name);
+                            if (it != ach_name_idx.end()) {
+                                grp_idx.push_back(it->second);
+                                rendered_set.insert(it->second);
+                            }
+                        }
+                        if (grp_idx.empty()) continue;
+                        std::stable_sort(grp_idx.begin(), grp_idx.end(), ach_compare);
+
+                        // group header: "DLC Name" or "DLC Name — Sub-group"
+                        std::string hdr = grp.dlcAppName.empty() ? "Base Game" : grp.dlcAppName;
+                        if (!grp.name.empty()) hdr += " \xe2\x80\x94 " + grp.name; // em-dash
+
+                        // collapsible tree node; default open
+                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+                        bool open = ImGui::CollapsingHeader(hdr.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+                        ImGui::PopStyleColor(3);
+                        if (open) {
+                            for (size_t gi : grp_idx) render_ach_item(achievements[gi]);
+                        }
+                    }
+
+                    // render any achievements not assigned to any group as "Base Game"
+                    std::vector<size_t> ungrouped;
+                    for (size_t i = 0; i < achievements.size(); ++i)
+                        if (rendered_set.find(i) == rendered_set.end()) ungrouped.push_back(i);
+                    if (!ungrouped.empty()) {
+                        std::stable_sort(ungrouped.begin(), ungrouped.end(), ach_compare);
+                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+                        bool open = ImGui::CollapsingHeader("Base Game##ach_base", ImGuiTreeNodeFlags_DefaultOpen);
+                        ImGui::PopStyleColor(3);
+                        if (open) {
+                            for (size_t gi : ungrouped) render_ach_item(achievements[gi]);
+                        }
+                    }
+                } else {
+                    // === FLAT SORTED RENDER ===
+                    std::vector<size_t> sorted_idx(achievements.size());
+                    std::iota(sorted_idx.begin(), sorted_idx.end(), 0);
+                    std::stable_sort(sorted_idx.begin(), sorted_idx.end(), ach_compare);
+                    for (size_t si : sorted_idx) render_ach_item(achievements[si]);
                 }
+
                 ImGui::EndChild();
             }
             

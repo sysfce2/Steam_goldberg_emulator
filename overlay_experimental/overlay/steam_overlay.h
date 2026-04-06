@@ -141,6 +141,10 @@ class Steam_Overlay
     bool show_achievements = false;
     bool show_settings = false;
 
+    // achievement list display options
+    bool ach_group_by_sh{false};       // group achievements by SteamHunters DLC/update groups
+    bool ach_sort_schema_order{false}; // false = sort locked by global % (Steam default); true = schema/DLC order
+
     // warn when using local save
     bool warn_local_save = false;
     // warn when app ID = 0
@@ -300,6 +304,9 @@ public:
     void AddAchievementNotification(const std::string &ach_name, nlohmann::json const& ach, bool for_progress);
 
     void SortAchievementsByGlobalPercent(const std::map<std::string, float> &percentages);
+
+    // Called by Steam_User_Stats after SteamHunters data arrives asynchronously
+    void UpdateSteamHuntersData();
 };
 
 #else // EMU_OVERLAY
@@ -322,6 +329,7 @@ public:
 
     void OpenOverlayInvite(CSteamID lobbyId) {}
     void SortAchievementsByGlobalPercent(const std::map<std::string, float> &) {}
+    void UpdateSteamHuntersData() {}
     void OpenOverlay(const char* pchDialog) {}
     void OpenOverlayWebpage(const char* pchURL) {}
 

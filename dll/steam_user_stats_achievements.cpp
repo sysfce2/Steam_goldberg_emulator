@@ -723,6 +723,121 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
 }
 
 
+// Async fetch of SteamHunters achievement groups and global percentages.
+// Fires at most once per object lifetime (guarded by steamhunters_data_fetching / _populated).
+// Groups are stored in steamhunters_achievement_groups.
+// Global percentages from SteamHunters are used as a fallback if the Steam Web API hasn't returned yet.
+void Steam_User_Stats::RequestSteamHuntersData()
+{
+    PRINT_DEBUG_ENTRY();
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    if (settings->disable_networking || settings->is_offline()) return;
+    if (steamhunters_data_fetching || steamhunters_data_populated) return;
+
+    steamhunters_data_fetching = true;
+
+    uint64 app_id = settings->get_local_game_id().AppID();
+
+    std::thread([this, app_id]() {
+        // --- helper: simple blocking GET via curl ---
+        auto curl_get = [](const std::string &url) -> std::string {
+            std::string response{};
+            CURL *curl = curl_easy_init();
+            if (curl) {
+                curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, global_ach_percent_curl_write);
+                curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+                curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+                curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+                curl_easy_setopt(curl, CURLOPT_USERAGENT,
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.142.86 Safari/537.36");
+                curl_easy_perform(curl);
+                curl_easy_cleanup(curl);
+            }
+            return response;
+        };
+
+        // ---- 1. Fetch achievement groups ----
+        std::vector<SteamHunters_AchievementGroup> groups{};
+        {
+            std::string url = "https://steamhunters.com/api/GetAchievementGroups/v1?appid=" + std::to_string(app_id);
+            std::string body = curl_get(url);
+            if (!body.empty()) {
+                try {
+                    auto j = nlohmann::json::parse(body);
+                    for (const auto &g : j.at("groups")) {
+                        SteamHunters_AchievementGroup grp{};
+                        if (g.contains("name") && g["name"].is_string()) grp.name = g["name"].get<std::string>();
+                        if (g.contains("dlcAppId") && g["dlcAppId"].is_number_integer()) grp.dlcAppId = g["dlcAppId"].get<int>();
+                        if (g.contains("dlcAppName") && g["dlcAppName"].is_string()) grp.dlcAppName = g["dlcAppName"].get<std::string>();
+                        if (g.contains("achievementApiNames")) {
+                            for (const auto &n : g["achievementApiNames"]) {
+                                if (n.is_string()) grp.achievementApiNames.push_back(n.get<std::string>());
+                            }
+                        }
+                        groups.push_back(std::move(grp));
+                    }
+                    PRINT_DEBUG("SteamHunters: fetched %zu achievement groups for app %llu", groups.size(), app_id);
+                } catch (const std::exception &e) {
+                    PRINT_DEBUG("SteamHunters: failed to parse groups JSON: %s", e.what());
+                }
+            }
+        }
+
+        // ---- 2. Fetch achievement data (for supplemental global %) ----
+        std::map<std::string, float> sh_percentages{};
+        {
+            std::string url = "https://steamhunters.com/api/apps/" + std::to_string(app_id) + "/achievements";
+            std::string body = curl_get(url);
+            if (!body.empty()) {
+                try {
+                    auto j = nlohmann::json::parse(body);
+                    for (const auto &entry : j) {
+                        std::string api_name = entry.at("apiName").get<std::string>();
+                        float pct = entry.value("steamPercentage", -1.0f);
+                        if (pct >= 0.0f) sh_percentages[api_name] = pct;
+                    }
+                    PRINT_DEBUG("SteamHunters: fetched %zu achievement percentages for app %llu", sh_percentages.size(), app_id);
+                } catch (const std::exception &e) {
+                    PRINT_DEBUG("SteamHunters: failed to parse achievements JSON: %s", e.what());
+                }
+            }
+        }
+
+        // ---- commit results under lock ----
+        {
+            std::lock_guard<std::recursive_mutex> lock(global_mutex);
+            steamhunters_data_fetching = false;
+            steamhunters_data_populated = true;
+            if (!groups.empty()) steamhunters_achievement_groups = std::move(groups);
+
+            // use SteamHunters percentages only as fallback (Steam API authority preserved)
+            if (!global_achievement_percentages_populated && !sh_percentages.empty()) {
+                global_achievement_percentages = std::move(sh_percentages);
+                sorted_global_achievement_percentages.clear();
+                for (const auto &kv : global_achievement_percentages) {
+                    sorted_global_achievement_percentages.emplace_back(kv.first, kv.second);
+                }
+                std::sort(sorted_global_achievement_percentages.begin(), sorted_global_achievement_percentages.end(),
+                    [](const std::pair<std::string, float> &a, const std::pair<std::string, float> &b) {
+                        return a.second > b.second;
+                    });
+                global_achievement_percentages_populated = true;
+                PRINT_DEBUG("SteamHunters: using SteamHunters percentages as fallback (Steam API not yet populated)");
+            }
+        }
+
+        // Notify overlay so it can pick up the new percentages / groups
+        if (overlay) {
+            overlay->UpdateSteamHuntersData();
+        }
+    }).detach();
+}
+
+
 // Get the info on the most achieved achievement for the game, returns an iterator index you can use to fetch
 // the next most achieved afterwards.  Will return -1 if there is no data on achievement 
 // percentages (ie, you haven't called RequestGlobalAchievementPercentages and waited on the callback).
