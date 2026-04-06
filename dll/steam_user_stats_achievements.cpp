@@ -727,11 +727,13 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
                     try {
                         auto j = nlohmann::json::parse(response);
                         for (const auto &entry : j.at("achievementpercentages").at("achievements")) {
-                            percentages[entry.at("name").get<std::string>()] = entry.at("percent").get<float>();
+                            auto &pct_val = entry.at("percent");
+                            float pct = pct_val.is_string() ? std::stof(pct_val.get<std::string>()) : pct_val.get<float>();
+                            percentages[entry.at("name").get<std::string>()] = pct;
                         }
                     } catch (...) {}
                 }
-                // always save cache (empty achievements = API returned no data; honors TTL)
+                // always save cache
                 {
                     nlohmann::json to_save;
                     to_save["fetched_at"] = (int64_t)std::time(nullptr);
@@ -802,7 +804,9 @@ SteamAPICall_t Steam_User_Stats::RequestGlobalAchievementPercentages()
             try {
                 auto j = nlohmann::json::parse(response);
                 for (const auto &entry : j.at("achievementpercentages").at("achievements")) {
-                    percentages[entry.at("name").get<std::string>()] = entry.at("percent").get<float>();
+                    auto &pct_val = entry.at("percent");
+                    float pct = pct_val.is_string() ? std::stof(pct_val.get<std::string>()) : pct_val.get<float>();
+                    percentages[entry.at("name").get<std::string>()] = pct;
                 }
             } catch (...) {}
         }
