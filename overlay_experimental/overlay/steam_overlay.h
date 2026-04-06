@@ -161,7 +161,8 @@ class Steam_Overlay
         bool  load_attempted{false};
     };
     std::map<std::string, SceTexture> sce_textures{};
-    std::string sce_bg_preview_key{};  // tex_key of the full-size BG currently shown in preview popup
+    std::string sce_preview_key{};              // tex_key of the asset currently shown in the preview popup
+    std::vector<std::string> sce_preview_nav_keys{};  // ordered keys for same-type same-series nav
     void sce_textures_free_all()
     {
         for (auto &[k, t] : sce_textures)

@@ -2077,37 +2077,6 @@ void Steam_Overlay::render_main_window()
                     ImVec2(min_w, io.DisplaySize.y * 0.50f),
                     ImVec2(8192.0f, 8192.0f));
                 ImGui::SetNextWindowBgAlpha(1.0f);
-                // Build ordered list of full wallpaper keys for all BG items (for prev/next nav)
-                std::vector<std::string> sce_bg_nav_keys;
-                {
-                    for (const auto &ns : user_stats->sce_game_data.series) {
-                        char snstr[8]{};
-                        snprintf(snstr, sizeof(snstr), "%02d", ns.series_number);
-                        std::string nser_dir = std::string("Series ") + snstr;
-                        if (!ns.series_name.empty()) nser_dir += " - " + sanitize(ns.series_name);
-                        std::map<int, std::vector<const Steam_User_Stats::SceItem *>> nby_type;
-                        for (const auto &item : ns.items) nby_type[(int)item.type].push_back(&item);
-                        for (int t : {6, 7, 8}) {
-                            auto it = nby_type.find(t);
-                            if (it == nby_type.end()) continue;
-                            int nslot = 0;
-                            for (const auto *item : it->second) {
-                                ++nslot;
-                                if (item->wallpaper_url.empty()) continue;
-                                std::string ext = url_ext(item->wallpaper_url);
-                                std::string lbl = sanitize(item->name);
-                                if (lbl.size() > 48) lbl.resize(48);
-                                char pfx[8]{}; snprintf(pfx, sizeof(pfx), "%02d_", nslot);
-                                std::string fname = std::string(pfx) + "wallpaper_" + lbl + ext;
-                                std::string fld = std::string(Steam_User_Stats::sce_assets_folder)
-                                    + PATH_SEPARATOR + nser_dir
-                                    + PATH_SEPARATOR + type_subfolder(t);
-                                sce_bg_nav_keys.push_back(fld + PATH_SEPARATOR + fname);
-                            }
-                        }
-                    }
-                }
-
                 bool browser_open = show_sce_browser;
                 if (ImGui::Begin("SCE Assets##sce_browser", &browser_open)) {
                     ImGui::TextDisabled("Assets folder: GSE Saves/%u/%s",
@@ -2242,8 +2211,8 @@ void Steam_Overlay::render_main_window()
                                         dl->AddImage(tex.resource->GetResourceId(),
                                             ImVec2(p0.x + ox, p0.y + oy),
                                             ImVec2(p0.x + ox + dw, p0.y + oy + dh));
-                                        // Hover highlight for clickable backgrounds
-                                        if (is_bg && ImGui::IsItemHovered())
+                                        // Hover highlight for all clickable images
+                                        if (ImGui::IsItemHovered())
                                             dl->AddRect(p0, p1, IM_COL32(200, 200, 255, 180), 0.f, 0, 2.f);
                                     } else if (!is_static) {
                                         // Animated/video: show extension badge centred
@@ -2255,11 +2224,36 @@ void Steam_Overlay::render_main_window()
                                             IM_COL32(160, 160, 160, 255), badge);
                                     }
 
-                                    // On click: open full-size wallpaper preview window
-                                    if (is_bg && clicked && !item->wallpaper_url.empty()) {
-                                        std::string full_ext = url_ext(item->wallpaper_url);
-                                        std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
-                                        sce_bg_preview_key = folder + PATH_SEPARATOR + full_filename;
+                                    // On click: open full-size preview for any asset type
+                                    bool can_preview = is_bg ? !item->wallpaper_url.empty() : is_static;
+                                    if (clicked && can_preview) {
+                                        if (is_bg) {
+                                            std::string full_ext = url_ext(item->wallpaper_url);
+                                            std::string full_filename = std::string(prefix) + "wallpaper_" + item_label + full_ext;
+                                            sce_preview_key = folder + PATH_SEPARATOR + full_filename;
+                                        } else {
+                                            sce_preview_key = tex_key; // icon_ file is the preview
+                                        }
+                                        // Build nav keys: all items of same type in same series
+                                        sce_preview_nav_keys.clear();
+                                        for (int ni = 0; ni < (int)items_vec.size(); ++ni) {
+                                            const auto *nitem = items_vec[ni];
+                                            int nslot2 = ni + 1;
+                                            char npfx[8]{}; snprintf(npfx, sizeof(npfx), "%02d_", nslot2);
+                                            std::string nlbl = sanitize(nitem->name);
+                                            if (nlbl.size() > 48) nlbl.resize(48);
+                                            std::string npreview_file;
+                                            if (is_bg) {
+                                                if (nitem->wallpaper_url.empty()) continue;
+                                                std::string next = url_ext(nitem->wallpaper_url);
+                                                npreview_file = std::string(npfx) + "wallpaper_" + nlbl + next;
+                                            } else {
+                                                const std::string &nsrc = !nitem->icon_url.empty() ? nitem->icon_url : nitem->static_img_url;
+                                                std::string next = url_ext(nsrc);
+                                                npreview_file = std::string(npfx) + "icon_" + nlbl + next;
+                                            }
+                                            sce_preview_nav_keys.push_back(folder + PATH_SEPARATOR + npreview_file);
+                                        }
                                     }
 
                                     // Name (wrapped to card width)
@@ -2291,21 +2285,21 @@ void Steam_Overlay::render_main_window()
                 }
                 ImGui::End();
 
-                // Full-size background preview — standalone window
-                if (!sce_bg_preview_key.empty()) {
+                // Full-size asset preview — standalone window
+                if (!sce_preview_key.empty()) {
                     // Dim everything behind the preview window
                     ImGui::GetBackgroundDrawList()->AddRectFilled(
                         ImVec2(0, 0), io.DisplaySize,
                         IM_COL32(0, 0, 0, 180));
 
-                    auto &ftex = sce_textures[sce_bg_preview_key];
+                    auto &ftex = sce_textures[sce_preview_key];
                     if (!ftex.load_attempted) {
                         // User explicitly opened this — bypass the per-frame cap
                         ftex.load_attempted = true;
-                        size_t sep = sce_bg_preview_key.rfind(PATH_SEPARATOR[0]);
+                        size_t sep = sce_preview_key.rfind(PATH_SEPARATOR[0]);
                         if (sep != std::string::npos) {
-                            std::string f_folder = sce_bg_preview_key.substr(0, sep);
-                            std::string f_file   = sce_bg_preview_key.substr(sep + 1);
+                            std::string f_folder = sce_preview_key.substr(0, sep);
+                            std::string f_file   = sce_preview_key.substr(sep + 1);
                             int pw = 0, ph = 0;
                             ftex.pixels = local_storage->load_image_from_folder(f_folder, f_file, pw, ph);
                             if (!ftex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
@@ -2330,7 +2324,7 @@ void Steam_Overlay::render_main_window()
                     ImGui::SetNextWindowSize(ImVec2(pw, ph), ImGuiCond_Always);
                     ImGui::SetNextWindowBgAlpha(0.97f);
                     bool preview_open = true;
-                    if (ImGui::Begin("##sce_bg_preview", &preview_open,
+                    if (ImGui::Begin("##sce_preview", &preview_open,
                             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
                         constexpr float BTN_H = 28.f;
@@ -2354,15 +2348,15 @@ void Steam_Overlay::render_main_window()
                         }
                         // --- Navigation buttons ---
                         int nav_cur = -1;
-                        for (int ni = 0; ni < (int)sce_bg_nav_keys.size(); ++ni)
-                            if (sce_bg_nav_keys[ni] == sce_bg_preview_key) { nav_cur = ni; break; }
+                        for (int ni = 0; ni < (int)sce_preview_nav_keys.size(); ++ni)
+                            if (sce_preview_nav_keys[ni] == sce_preview_key) { nav_cur = ni; break; }
 
                         auto nav_to = [&](int ni) {
-                            sce_bg_preview_key = sce_bg_nav_keys[ni];
+                            sce_preview_key = sce_preview_nav_keys[ni];
                         };
 
                         bool can_prev = nav_cur > 0;
-                        bool can_next = nav_cur >= 0 && nav_cur < (int)sce_bg_nav_keys.size() - 1;
+                        bool can_next = nav_cur >= 0 && nav_cur < (int)sce_preview_nav_keys.size() - 1;
 
                         // Arrow / A-D key navigation (NoNav is set but IsKeyPressed still works)
                         if (can_prev && (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)  || ImGui::IsKeyPressed(ImGuiKey_A))) nav_to(nav_cur - 1);
@@ -2382,7 +2376,7 @@ void Steam_Overlay::render_main_window()
                         if (nav_cur >= 0) {
                             char cnt[32]{};
                             snprintf(cnt, sizeof(cnt), "%d / %d",
-                                nav_cur + 1, (int)sce_bg_nav_keys.size());
+                                nav_cur + 1, (int)sce_preview_nav_keys.size());
                             ImVec2 tsz = ImGui::CalcTextSize(cnt);
                             ImGui::SetCursorScreenPos(ImVec2(
                                 cpos.x + (csz.x - tsz.x) * 0.5f,
@@ -2403,13 +2397,14 @@ void Steam_Overlay::render_main_window()
                     }
                     ImGui::End();
                     if (!preview_open)
-                        sce_bg_preview_key.clear();
+                        sce_preview_key.clear();
                 }
 
                 // Free textures when the window is closed
                 if (!browser_open) {
                     show_sce_browser = false;
-                    sce_bg_preview_key.clear();
+                    sce_preview_key.clear();
+                    sce_preview_nav_keys.clear();
                     sce_textures_free_all();
                 }
             }
