@@ -47,29 +47,117 @@
 //    0 = FP16/scRGB (R16G16B16A16_FLOAT) -> sRGB decode IS needed
 //    1 = any other format (8-bit SDR, HDR10, unknown) -> no decode needed
 static int         s_swapchain_is_linear = -1;
-static const char* s_swapchain_fmt_str   = "Detecting...";
+static const char* s_swapchain_fmt_str   = "Detecting..."; // DXGI format name
+static const char* s_swapchain_type_str  = "Detecting..."; // HDR/SDR type  |  gamma  |  colour gamut
 
 // Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
 static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
 {
     s_swapchain_is_linear = -1;
     s_swapchain_fmt_str   = "Detecting...";
+    s_swapchain_type_str  = "Detecting...";
     r->SetScreenshotCallback([](InGameOverlay::ScreenshotCallbackParameter_t const* sc, void* user) {
         using F = InGameOverlay::ScreenshotDataFormat_t;
-        // Identify the format for display and decide if decode is needed.
         if (!sc || sc->Format == F::Unknown) {
-            s_swapchain_fmt_str   = "Unknown";
-            s_swapchain_is_linear = 1; // safe: no decode
+            s_swapchain_fmt_str  = "Unknown";
+            s_swapchain_type_str = "Unknown";
+            s_swapchain_is_linear = 1;
         } else {
             switch (sc->Format) {
-                case F::R16G16B16A16_FLOAT: s_swapchain_fmt_str = "FP16 / scRGB";   s_swapchain_is_linear = 0; break;
-                case F::R16G16B16A16_UNORM: s_swapchain_fmt_str = "R16 UNORM";       s_swapchain_is_linear = 1; break;
-                case F::R10G10B10A2:        s_swapchain_fmt_str = "HDR10 (R10B10G10A2)"; s_swapchain_is_linear = 1; break;
-                case F::R32G32B32A32_FLOAT: s_swapchain_fmt_str = "FP32 linear";     s_swapchain_is_linear = 1; break;
-                case F::R8G8B8A8:           s_swapchain_fmt_str = "R8G8B8A8 SDR";    s_swapchain_is_linear = 1; break;
-                case F::B8G8R8A8:           s_swapchain_fmt_str = "B8G8R8A8 SDR";    s_swapchain_is_linear = 1; break;
-                case F::B8G8R8X8:           s_swapchain_fmt_str = "B8G8R8X8 SDR";    s_swapchain_is_linear = 1; break;
-                default:                    s_swapchain_fmt_str = "Other SDR";        s_swapchain_is_linear = 1; break;
+                // ---- HDR / float formats -------------------------------------------
+                case F::R16G16B16A16_FLOAT:
+                    s_swapchain_fmt_str  = "R16G16B16A16_FLOAT";
+                    s_swapchain_type_str = "HDR  |  scRGB / Linear  |  BT.709+";
+                    s_swapchain_is_linear = 0; // FP16: sRGB decode needed
+                    break;
+                case F::R16G16B16A16_UNORM:
+                    s_swapchain_fmt_str  = "R16G16B16A16_UNORM";
+                    s_swapchain_type_str = "HDR  |  Linear UNORM  |  BT.2020";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::R32G32B32A32_FLOAT:
+                    s_swapchain_fmt_str  = "R32G32B32A32_FLOAT";
+                    s_swapchain_type_str = "HDR  |  Linear FP32  |  wide gamut";
+                    s_swapchain_is_linear = 1;
+                    break;
+                // ---- 10-bit HDR10 formats ------------------------------------------
+                case F::R10G10B10A2:
+                    s_swapchain_fmt_str  = "R10G10B10A2_UNORM";
+                    s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::A2R10G10B10:
+                    s_swapchain_fmt_str  = "A2R10G10B10_UNORM";
+                    s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::A2B10G10R10:
+                    s_swapchain_fmt_str  = "A2B10G10R10_UNORM";
+                    s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                    s_swapchain_is_linear = 1;
+                    break;
+                // ---- 8-bit SDR formats ---------------------------------------------
+                case F::R8G8B8A8:
+                    s_swapchain_fmt_str  = "R8G8B8A8_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::B8G8R8A8:
+                    s_swapchain_fmt_str  = "B8G8R8A8_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::B8G8R8X8:
+                    s_swapchain_fmt_str  = "B8G8R8X8_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709  (no alpha)";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::R8G8B8:
+                    s_swapchain_fmt_str  = "R8G8B8";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709  (24-bit packed)";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::X8R8G8B8:
+                    s_swapchain_fmt_str  = "X8R8G8B8";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::A8R8G8B8:
+                    s_swapchain_fmt_str  = "A8R8G8B8";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
+                    s_swapchain_is_linear = 1;
+                    break;
+                // ---- 16-bit SDR formats (legacy/DX9) -------------------------------
+                case F::R5G6B5:
+                    s_swapchain_fmt_str  = "R5G6B5_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  16-bit RGB565";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::B5G6R5:
+                    s_swapchain_fmt_str  = "B5G6R5_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  16-bit BGR565";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::X1R5G5B5:
+                    s_swapchain_fmt_str  = "X1R5G5B5_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  16-bit 1555";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::A1R5G5B5:
+                    s_swapchain_fmt_str  = "A1R5G5B5_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  16-bit 1555";
+                    s_swapchain_is_linear = 1;
+                    break;
+                case F::B5G5R5A1:
+                    s_swapchain_fmt_str  = "B5G5R5A1_UNORM";
+                    s_swapchain_type_str = "SDR  |  sRGB  |  16-bit 5551";
+                    s_swapchain_is_linear = 1;
+                    break;
+                default:
+                    s_swapchain_fmt_str  = "Unknown format";
+                    s_swapchain_type_str = "Unknown";
+                    s_swapchain_is_linear = 1;
+                    break;
             }
         }
         auto* r2 = static_cast<InGameOverlay::RendererHook_t*>(user);
@@ -1423,34 +1511,80 @@ void Steam_Overlay::post_achievement_notification(Overlay_Achievement &ach, bool
     );
 }
 
-// Query per-display HDR state from the OS (for the UI info row, NOT used for decode decisions).
-// Returns 1=HDR, 0=SDR, -1=unknown/unsupported.
-static int detect_display_hdr_state()
+// Per-display HDR + colour-space info queried from the OS for the overlay info panel.
+struct DisplayHdrDetail_t {
+    bool hdr_supported   = false;
+    bool hdr_enabled     = false;
+    bool wide_color      = false;   // WCG enforced (HDR10 WCG without full tone-mapping)
+    bool force_disabled  = false;   // HDR suppressed by Windows for compatibility
+    int  bpc             = 0;       // bits per colour channel; 0 = unknown
+    int  sdr_white_nits  = -1;      // SDR white point in nits; -1 = unavailable
+    char encoding[16]    = {};      // "RGB", "YCbCr444", "YCbCr422", "YCbCr420"
+    char name[128]       = {};      // friendly monitor name (UTF-8)
+};
+
+static std::vector<DisplayHdrDetail_t> query_display_hdr_details()
 {
+    std::vector<DisplayHdrDetail_t> result;
 #ifdef __WINDOWS__
     UINT32 pathCount = 0, modeCount = 0;
     if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
-        return -1;
+        return result;
     std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
     std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
     if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
-        return -1;
+        return result;
     for (UINT32 i = 0; i < pathCount; ++i) {
-        DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO req{};
-        req.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
-        req.header.size      = sizeof(req);
-        req.header.adapterId = paths[i].targetInfo.adapterId;
-        req.header.id        = paths[i].targetInfo.id;
-        if (DisplayConfigGetDeviceInfo(&req.header) == ERROR_SUCCESS) {
-            if (req.advancedColorEnabled && req.advancedColorSupported)
-                return 1;
+        DisplayHdrDetail_t d{};
+
+        // Advanced colour / HDR state
+        DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO aci{};
+        aci.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+        aci.header.size      = sizeof(aci);
+        aci.header.adapterId = paths[i].targetInfo.adapterId;
+        aci.header.id        = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&aci.header) == ERROR_SUCCESS) {
+            d.hdr_supported  = aci.advancedColorSupported     != 0;
+            d.hdr_enabled    = aci.advancedColorEnabled       != 0;
+            d.wide_color     = aci.wideColorEnforced          != 0;
+            d.force_disabled = aci.advancedColorForceDisabled != 0;
+            d.bpc            = static_cast<int>(aci.bitsPerColorChannel);
+            switch (aci.colorEncoding) {
+                case DISPLAYCONFIG_COLOR_ENCODING_RGB:      strncpy(d.encoding, "RGB",      sizeof(d.encoding)-1); break;
+                case DISPLAYCONFIG_COLOR_ENCODING_YCBCR444: strncpy(d.encoding, "YCbCr444", sizeof(d.encoding)-1); break;
+                case DISPLAYCONFIG_COLOR_ENCODING_YCBCR422: strncpy(d.encoding, "YCbCr422", sizeof(d.encoding)-1); break;
+                case DISPLAYCONFIG_COLOR_ENCODING_YCBCR420: strncpy(d.encoding, "YCbCr420", sizeof(d.encoding)-1); break;
+                default:                                     strncpy(d.encoding, "?",        sizeof(d.encoding)-1); break;
+            }
         }
+
+        // SDR white level (nits) — Windows 10 1809+
+        // DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL = 11
+        // Value: nits = SDRWhiteLevel * 80 / 1000  (1000 -> 80 nits standard, 2500 -> 200 nits)
+        struct SdrWlReq { DISPLAYCONFIG_DEVICE_INFO_HEADER header; UINT32 SDRWhiteLevel; };
+        SdrWlReq wl{};
+        wl.header.type      = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(11);
+        wl.header.size      = sizeof(wl);
+        wl.header.adapterId = paths[i].targetInfo.adapterId;
+        wl.header.id        = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&wl.header) == ERROR_SUCCESS)
+            d.sdr_white_nits = static_cast<int>(wl.SDRWhiteLevel * 80 / 1000);
+
+        // Friendly monitor name
+        DISPLAYCONFIG_TARGET_DEVICE_NAME tdn{};
+        tdn.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+        tdn.header.size      = sizeof(tdn);
+        tdn.header.adapterId = paths[i].targetInfo.adapterId;
+        tdn.header.id        = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&tdn.header) == ERROR_SUCCESS && tdn.monitorFriendlyDeviceName[0])
+            WideCharToMultiByte(CP_UTF8, 0, tdn.monitorFriendlyDeviceName, -1, d.name, sizeof(d.name)-1, nullptr, nullptr);
+        if (!d.name[0])
+            strncpy(d.name, "Unknown Display", sizeof(d.name)-1);
+
+        result.push_back(d);
     }
-    return 0;
-#else
-    // TODO: Linux: read /sys/class/drm/card*/*/hdr_output_metadata or DRM HDR property
-    return -1; // not yet implemented
 #endif
+    return result;
 }
 
 // sRGB->linear decode before GPU upload.
@@ -1808,57 +1942,108 @@ void Steam_Overlay::render_main_window()
             allow_renderer_frame_processing(stats.show_playtime);
         }
 
-        // --- Renderer / HDR status info row ----------------------------
+        // --- Rendering info panel -------------------------------------------
         ImGui::Spacing();
+        ImGui::Separator();
         {
             using RHT = InGameOverlay::RendererHookType_t;
-            const char* renderer_lib = _renderer ? _renderer->GetLibraryName() : "None";
 
-            // Game swapchain color-space (derived from the screenshot-callback format)
-            const char* game_fmt;
-            if (!_renderer) {
-                game_fmt = "N/A";
+            // -- API / renderer lib --
+            const char* api_name = "Unknown";
+            if (_renderer) {
+                switch (_renderer->GetRendererHookType()) {
+                    case RHT::DirectX9:  api_name = "DirectX 9";  break;
+                    case RHT::DirectX10: api_name = "DirectX 10"; break;
+                    case RHT::DirectX11: api_name = "DirectX 11"; break;
+                    case RHT::DirectX12: api_name = "DirectX 12"; break;
+                    case RHT::OpenGL:    api_name = "OpenGL";     break;
+                    case RHT::Vulkan:    api_name = "Vulkan";     break;
+                    case RHT::Metal:     api_name = "Metal";      break;
+                    default: break;
+                }
+            }
+            ImGui::TextDisabled("API        : %s  (%s)",
+                api_name, _renderer ? _renderer->GetLibraryName() : "None");
+
+            // -- Game swapchain --
+            bool hdr_api = false;
+            if (_renderer) {
+                auto rt = _renderer->GetRendererHookType();
+                hdr_api = (rt == RHT::DirectX10 || rt == RHT::DirectX11 ||
+                           rt == RHT::DirectX12 || rt == RHT::Vulkan || rt == RHT::Metal);
+            }
+            if (hdr_api) {
+                ImGui::TextDisabled("Swapchain  : %s", s_swapchain_fmt_str);
+                ImGui::TextDisabled("           : %s", s_swapchain_type_str);
             } else {
-                auto rtype = _renderer->GetRendererHookType();
-                bool hdr_api = (rtype == RHT::DirectX10 || rtype == RHT::DirectX11 ||
-                                rtype == RHT::DirectX12 || rtype == RHT::Vulkan || rtype == RHT::Metal);
-                if (!hdr_api) {
-                    game_fmt = "SDR (DX9/OpenGL)";
-                } else {
-                    game_fmt = s_swapchain_fmt_str; // e.g. "FP16 / scRGB", "HDR10 (R10B10G10A2)", "R8G8B8A8 SDR"
+                ImGui::TextDisabled("Swapchain  : N/A  (DX9/OpenGL — linear framebuffer, no HDR path)");
+            }
+
+            // -- sRGB correction --
+            using SD = Overlay_Appearance::SrgbDecode;
+            const char* corr_str;
+            const char* corr_reason;
+            if (settings->overlay_appearance.image_gamma == SD::On) {
+                corr_str    = "ON  (forced)";
+                corr_reason = "Image_Gamma=on in config";
+            } else if (settings->overlay_appearance.image_gamma == SD::Off) {
+                corr_str    = "OFF (forced)";
+                corr_reason = "Image_Gamma=off in config";
+            } else if (!hdr_api) {
+                corr_str    = "OFF";
+                corr_reason = "DX9/OpenGL — linear, no sRGB encoding";
+            } else if (s_swapchain_is_linear == 0) {
+                corr_str    = "ON ";
+                corr_reason = "FP16/scRGB detected — pre-decoding sRGB -> linear";
+            } else if (s_swapchain_is_linear == 1) {
+                corr_str    = "OFF";
+                corr_reason = "non-FP16 swap chain — UNORM bytes pass through unchanged";
+            } else {
+                corr_str    = "OFF";
+                corr_reason = "awaiting swap chain format detection";
+            }
+            ImGui::TextDisabled("sRGB corr. : %s  — %s", corr_str, corr_reason);
+
+            // -- Per-display info (queried once per launch) --
+            static bool displays_queried = false;
+            static std::vector<DisplayHdrDetail_t> displays;
+            if (!displays_queried) {
+                displays         = query_display_hdr_details();
+                displays_queried = true;
+            }
+            if (displays.empty()) {
+                ImGui::TextDisabled("Display    : N/A");
+            } else {
+                for (int di = 0; di < (int)displays.size() && di < 4; ++di) {
+                    const auto& d = displays[di];
+                    const char* hdr_st;
+                    if      (!d.hdr_supported)  hdr_st = "SDR only";
+                    else if (d.force_disabled)  hdr_st = "HDR suppressed";
+                    else if (d.wide_color && !d.hdr_enabled) hdr_st = "WCG (no HDR)";
+                    else if (d.hdr_enabled)     hdr_st = "HDR ON";
+                    else                        hdr_st = "HDR OFF (supported)";
+                    char bpc_buf[8] = "?";
+                    if (d.bpc > 0) snprintf(bpc_buf, sizeof(bpc_buf), "%d", d.bpc);
+                    char white_buf[24] = "?";
+                    if (d.sdr_white_nits >= 0)
+                        snprintf(white_buf, sizeof(white_buf), "%d nits", d.sdr_white_nits);
+                    if (di == 0)
+                        ImGui::TextDisabled("Display %d  : %s  |  %s  |  %sbpc  |  %s  |  SDR white: %s",
+                            di+1, d.name, hdr_st, bpc_buf, d.encoding, white_buf);
+                    else
+                        ImGui::TextDisabled("Display %d  : %s  |  %s  |  %sbpc  |  %s  |  SDR white: %s",
+                            di+1, d.name, hdr_st, bpc_buf, d.encoding, white_buf);
                 }
             }
 
-            // Display HDR state — queried once per launch; user can refresh via button.
-            static int display_hdr_state = -2; // -2=not yet queried, -1=unsupported, 0=SDR, 1=HDR
-            if (display_hdr_state == -2)
-                display_hdr_state = detect_display_hdr_state();
-
-            const char* display_hdr_str;
-            if      (display_hdr_state == 1)  display_hdr_str = "HDR";
-            else if (display_hdr_state == 0)  display_hdr_str = "SDR";
-            else                              display_hdr_str = "N/A";
-
-            // sRGB decode indicator (only shown for DX10+ renderers where detection ran)
-            const char* decode_indicator = "";
-            if (_renderer) {
-                using RHT2 = InGameOverlay::RendererHookType_t;
-                auto rt2 = _renderer->GetRendererHookType();
-                bool hdr_api2 = (rt2 == RHT2::DirectX10 || rt2 == RHT2::DirectX11 ||
-                                 rt2 == RHT2::DirectX12 || rt2 == RHT2::Vulkan || rt2 == RHT2::Metal);
-                if (hdr_api2 && s_swapchain_is_linear == 0)
-                    decode_indicator = " [sRGB decode ON]";
-            }
-            ImGui::TextDisabled("Renderer: %s  |  Game: %s%s  |  Display: %s",
-                renderer_lib, game_fmt, decode_indicator, display_hdr_str);
-            ImGui::SameLine();
             if (ImGui::SmallButton("Refresh##hdr_info")) {
-                display_hdr_state = detect_display_hdr_state();
+                displays_queried = false;
                 if (_renderer)
                     arm_swapchain_format_detect(_renderer);
             }
         }
-        // ---------------------------------------------------------------
+        ImGui::Separator();
+        // -------------------------------------------------------------------
 
         ImGui::Spacing();
         ImGui::Spacing();
