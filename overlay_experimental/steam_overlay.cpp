@@ -2018,9 +2018,11 @@ void Steam_Overlay::render_main_window()
                         "cards", "foil_cards", "booster_packs",
                         "badges", "foil_badges", "emoticons",
                         "backgrounds", "animated_backgrounds", "animated_mini_backgrounds",
-                        "profiles", "avatar_frames", "animated_avatars"
+                        "profiles", "avatar_frames", "animated_avatars",
+                        "animated_stickers",
+                        "startup_movies"
                     };
-                    return (tidx >= 0 && tidx < 12) ? dirs[tidx] : "misc";
+                    return (tidx >= 0 && tidx < 14) ? dirs[tidx] : "misc";
                 };
 
                 // Same sanitize as the downloader
@@ -2046,7 +2048,7 @@ void Steam_Overlay::render_main_window()
                 // Per-type card dimensions: {card_width, image_height}
                 // Mirrors SCE website proportions: portrait for cards, landscape for BGs, etc.
                 struct CardDims { float cw, ih; };
-                static constexpr CardDims kDims[12] = {
+                static constexpr CardDims kDims[14] = {
                     {120.f, 169.f},  // 0  cards                 (portrait 0.71)
                     {120.f, 169.f},  // 1  foil_cards
                     {120.f, 120.f},  // 2  booster_packs          (square)
@@ -2059,6 +2061,8 @@ void Steam_Overlay::render_main_window()
                     {120.f, 120.f},  // 9  profiles
                     {120.f, 120.f},  // 10 avatar_frames
                     {120.f, 120.f},  // 11 animated_avatars
+                    {128.f, 128.f},  // 12 animated_stickers
+                    {160.f,  90.f},  // 13 startup_movies         (16:9 landscape)
                 };
 
                 // Rarity colours matching SCE site: common=grey, uncommon=green, rare=red
@@ -2088,14 +2092,12 @@ void Steam_Overlay::render_main_window()
                     // Tab grouping: multiple asset types share a tab
                     struct SceTabGroup { const char *label; int types[4]; int ntype; };
                     static constexpr SceTabGroup kTabs[] = {
-                        { "Trading Cards",    { 0,  1, -1, -1}, 2 },
-                        { "Backgrounds",      { 6,  7,  8, -1}, 3 },
-                        { "Badges",           { 3,  4, -1, -1}, 2 },
-                        { "Emoticons",        { 5, -1, -1, -1}, 1 },
-                        { "Booster Packs",    { 2, -1, -1, -1}, 1 },
-                        { "Profiles",         { 9, -1, -1, -1}, 1 },
-                        { "Avatar Frames",    {10, -1, -1, -1}, 1 },
-                        { "Animated Avatars", {11, -1, -1, -1}, 1 },
+                        { "Cards",       { 0,  1,  2, -1}, 3 },  // Trading Cards + Foil Cards + Booster Packs
+                        { "Badges",      { 3,  4, -1, -1}, 2 },  // Badges + Foil Badges
+                        { "Backgrounds", { 6,  7,  8, -1}, 3 },  // Backgrounds + Animated + Animated Mini
+                        { "Chat",        { 5, 12, -1, -1}, 2 },  // Emoticons + Animated Stickers
+                        { "Profiles",    {11, 10,  9, -1}, 3 },  // Animated Avatars + Avatar Frames + Profiles
+                        { "Steam",       {13, -1, -1, -1}, 1 },  // Startup Movies (keyboard themes not on SCE)
                     };
 
                     for (const auto &series : user_stats->sce_game_data.series) {

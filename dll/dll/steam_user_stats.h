@@ -217,7 +217,9 @@ public:
         Badge, FoilBadge,
         Emoticon,
         Background, AnimatedBackground, AnimatedMiniBackground,
-        Profile, AvatarFrame, AnimatedAvatar
+        Profile, AvatarFrame, AnimatedAvatar,
+        AnimatedSticker,
+        StartupMovie
     };
     struct SceItem {
         std::string name{};
@@ -254,14 +256,16 @@ public:
     SceGameData sce_game_data{};
     static SceGameData ParseSteamCardExchangeHtml(const std::string &html, uint32 app_id);
 
-    // Per-item-type download progress (index = (int)SceItemType, 12 types)
-    static constexpr int SCE_NUM_TYPES = 12;
+    // Per-item-type download progress (index = (int)SceItemType, 14 types)
+    static constexpr int SCE_NUM_TYPES = 14;
     static constexpr const char* SCE_TYPE_LABELS[SCE_NUM_TYPES] = {
         "Cards", "Foil Cards", "Booster Packs",
         "Badges", "Foil Badges",
         "Emoticons",
         "Backgrounds", "Animated Backgrounds", "Animated Mini Backgrounds",
-        "Profiles", "Avatar Frames", "Animated Avatars"
+        "Profiles", "Avatar Frames", "Animated Avatars",
+        "Animated Stickers",
+        "Startup Movies"
     };
     struct SceTypeProgress {
         std::atomic<uint32_t> total{0};

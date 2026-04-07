@@ -1321,6 +1321,8 @@ void Steam_User_Stats::RequestSceAssetDownload()
                 case SceItemType::Profile:                return "profiles";
                 case SceItemType::AvatarFrame:            return "avatar_frames";
                 case SceItemType::AnimatedAvatar:         return "animated_avatars";
+                case SceItemType::AnimatedSticker:        return "animated_stickers";
+                case SceItemType::StartupMovie:           return "startup_movies";
                 default:                                  return "misc";
             }
         };
@@ -1710,6 +1712,8 @@ Steam_User_Stats::SceGameData Steam_User_Stats::ParseSteamCardExchangeHtml(const
                 else if (sec_type == "profiles")                 itype = SceItemType::Profile;
                 else if (sec_type == "avatarframes")             itype = SceItemType::AvatarFrame;
                 else if (sec_type == "avataranimated")           itype = SceItemType::AnimatedAvatar;
+                else if (sec_type == "animatedstickers")         itype = SceItemType::AnimatedSticker;
+                else if (sec_type == "startupmovies")            itype = SceItemType::StartupMovie;
                 else                                             known = false;
 
                 if (known) {
@@ -1992,7 +1996,7 @@ Steam_User_Stats::SceGameData Steam_User_Stats::ParseSteamCardExchangeHtml(const
                             }
                             item.rarity = tag_text(html.find("text-rarity-", ip), ie);
 
-                        } else { // AnimatedAvatar
+                        } else if (itype == SceItemType::AnimatedAvatar) {
                             // data-gallery-desc="Series N - Animated Avatar M of T - NAME"
                             size_t dgp = html.find("data-gallery-desc", ip);
                             if (dgp != std::string::npos && dgp < ie) {
@@ -2030,6 +2034,66 @@ Steam_User_Stats::SceGameData Steam_User_Stats::ParseSteamCardExchangeHtml(const
                                         size_t img_e = html.find('>', img_p);
                                         size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
                                         item.icon_url = attr_val(img_p, lim, "src");  // gif shown on hover
+                                    }
+                                }
+                            }
+                            item.rarity = tag_text(html.find("text-rarity-", ip), ie);
+                        } else if (itype == SceItemType::AnimatedSticker) {
+                            // data-gallery-desc="Series N - Animated Sticker M of T - NAME"
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Animated Sticker %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                            }
+                            // gallery-src link = animated PNG
+                            size_t gsc = html.find("gallery-src\"", ip);
+                            if (gsc != std::string::npos && gsc < ie)
+                                item.wallpaper_url = href_before(gsc, ip);
+                            // static img from hover-toggle-primary → stored in icon_url for thumbnail display
+                            {
+                                size_t htp = html.find("hover-toggle-primary", ip);
+                                if (htp != std::string::npos && htp < ie) {
+                                    size_t img_p = html.find("<img", htp);
+                                    if (img_p != std::string::npos && img_p < ie) {
+                                        size_t img_e = html.find('>', img_p);
+                                        size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                        item.icon_url = attr_val(img_p, lim, "src");
+                                    }
+                                }
+                            }
+                            item.rarity = tag_text(html.find("text-rarity-", ip), ie);
+                        } else if (itype == SceItemType::StartupMovie) {
+                            // data-gallery-desc="Series N - Startup Movie M of T - NAME" (inside hover-toggle-secondary)
+                            size_t dgp = html.find("data-gallery-desc", ip);
+                            if (dgp != std::string::npos && dgp < ie) {
+                                std::string desc = attr_val(dgp, ie, "data-gallery-desc");
+                                size_t dash = desc.rfind(" - ");
+                                if (dash != std::string::npos) item.name = desc.substr(dash + 3);
+                                int sn = 0, slot = 0, tot = 0;
+                                if (sscanf(desc.c_str(), "Series %d - Startup Movie %d of %d", &sn, &slot, &tot) == 3) {
+                                    item.slot  = slot;
+                                    item.total = tot;
+                                }
+                            }
+                            // gallery-video-src link = .webm
+                            size_t gvs = html.find("gallery-video-src\"", ip);
+                            if (gvs != std::string::npos && gvs < ie)
+                                item.video_webm_url = href_before(gvs, ip);
+                            // static thumbnail img from hover-toggle-primary → icon_url (thumbnail for browser)
+                            {
+                                size_t htp = html.find("hover-toggle-primary", ip);
+                                if (htp != std::string::npos && htp < ie) {
+                                    size_t img_p = html.find("<img", htp);
+                                    if (img_p != std::string::npos && img_p < ie) {
+                                        size_t img_e = html.find('>', img_p);
+                                        size_t lim   = img_e != std::string::npos ? img_e + 1 : ie;
+                                        item.icon_url = attr_val(img_p, lim, "src");
                                     }
                                 }
                             }
