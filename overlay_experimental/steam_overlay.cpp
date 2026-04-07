@@ -2049,20 +2049,20 @@ void Steam_Overlay::render_main_window()
                 // Mirrors SCE website proportions: portrait for cards, landscape for BGs, etc.
                 struct CardDims { float cw, ih; };
                 static constexpr CardDims kDims[14] = {
-                    {120.f, 169.f},  // 0  cards                 (portrait 0.71)
-                    {120.f, 169.f},  // 1  foil_cards
-                    {120.f, 120.f},  // 2  booster_packs          (square)
-                    { 80.f,  80.f},  // 3  badges
-                    { 80.f,  80.f},  // 4  foil_badges
-                    { 64.f,  64.f},  // 5  emoticons              (small square)
-                    {160.f,  90.f},  // 6  backgrounds            (16:9)
-                    {160.f,  90.f},  // 7  animated_backgrounds
-                    {160.f,  90.f},  // 8  animated_mini_backgrounds
-                    {120.f, 120.f},  // 9  profiles
-                    {120.f, 120.f},  // 10 avatar_frames
-                    {120.f, 120.f},  // 11 animated_avatars
-                    {128.f, 128.f},  // 12 animated_stickers
-                    {160.f,  90.f},  // 13 startup_movies         (16:9 landscape)
+                    {160.f, 200.f},  // 0  cards                 (portrait ~0.80)
+                    {160.f, 200.f},  // 1  foil_cards
+                    {160.f, 160.f},  // 2  booster_packs          (square)
+                    {160.f, 160.f},  // 3  badges
+                    {160.f, 160.f},  // 4  foil_badges
+                    {160.f, 160.f},  // 5  emoticons
+                    {220.f, 124.f},  // 6  backgrounds            (16:9)
+                    {220.f, 124.f},  // 7  animated_backgrounds
+                    {220.f, 124.f},  // 8  animated_mini_backgrounds
+                    {160.f, 160.f},  // 9  profiles
+                    {160.f, 160.f},  // 10 avatar_frames
+                    {160.f, 160.f},  // 11 animated_avatars
+                    {160.f, 160.f},  // 12 animated_stickers
+                    {220.f, 124.f},  // 13 startup_movies         (16:9 landscape)
                 };
 
                 // Rarity colours matching SCE site: common=grey, uncommon=green, rare=red
@@ -2074,7 +2074,7 @@ void Steam_Overlay::render_main_window()
 
                 constexpr int MAX_TEX_PER_FRAME = 4;
                 int tex_loaded_this_frame = 0;
-                constexpr float CARD_GAP = 8.0f;
+                constexpr float CARD_GAP = 12.0f;
 
                 const float min_w = io.DisplaySize.x * 0.60f;
                 ImGui::SetNextWindowSizeConstraints(
@@ -2152,8 +2152,8 @@ void Steam_Overlay::render_main_window()
                                 float card_w = kDims[tidx].cw;
                                 float img_h  = kDims[tidx].ih;
 
-                                // Sub-header when tab contains multiple types
-                                if (tg.ntype > 1) {
+                                // Sub-header per type
+                                {
                                     if (!first_type) ImGui::Spacing();
                                     ImGui::TextDisabled("%s  (%zu)",
                                         Steam_User_Stats::SCE_TYPE_LABELS[tidx], items_vec.size());
@@ -2218,8 +2218,10 @@ void Steam_Overlay::render_main_window()
                                         // --- Card ---
                                         ImGui::BeginGroup();
 
-                                        // Slot number above image
-                                        if (item->slot > 0)
+                                        // Slot / total line above image
+                                        if (item->slot > 0 && item->total > 0)
+                                            ImGui::TextDisabled("#%d of %d", item->slot, item->total);
+                                        else if (item->slot > 0)
                                             ImGui::TextDisabled("#%d", item->slot);
                                         else
                                             ImGui::TextDisabled(" ");
@@ -2315,6 +2317,24 @@ void Steam_Overlay::render_main_window()
                                             ImGui::TextDisabled("%s", item->price_text.c_str());
                                         else
                                             ImGui::TextDisabled(" ");
+
+                                        // Badge level / XP (types 3 + 4)
+                                        if ((tidx == 3 || tidx == 4) && (item->badge_level > 0 || item->badge_xp > 0)) {
+                                            if (item->badge_level > 0 && item->badge_xp > 0)
+                                                ImGui::TextDisabled("Lv.%d  %d XP", item->badge_level, item->badge_xp);
+                                            else if (item->badge_level > 0)
+                                                ImGui::TextDisabled("Lv.%d", item->badge_level);
+                                            else
+                                                ImGui::TextDisabled("%d XP", item->badge_xp);
+                                        }
+
+                                        // Emoticon shortcode (type 5)
+                                        if (tidx == 5 && !item->emoticon_name.empty())
+                                            ImGui::TextDisabled(":%s:", item->emoticon_name.c_str());
+
+                                        // Steam Points cost (profiles, avatar frames, animated avatars, stickers)
+                                        if (!item->points_price.empty())
+                                            ImGui::TextDisabled("Pts: %s", item->points_price.c_str());
 
                                         ImGui::EndGroup();
                                     }
