@@ -32,9 +32,52 @@
 
 #define URL_WINDOW_NAME "URL Window"
 
-// Swapchain linear-framebuffer state for sRGB decode: -1=unknown, 0=sRGB/SDR, 1=FP16/HDR (linear).
-// Set by the one-shot screenshot callback in OverlayHookReady/Reset; read by srgb_decode_pixels_if_needed.
-static int s_swapchain_is_linear = -1;
+// Swapchain format detection for sRGB decode decision.
+// KEY INSIGHT: ingame_overlay always forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV,
+// so there is NO hardware sRGB encoding at the overlay render-pass level.
+// sRGB-encoded PNG bytes write directly to the back buffer as raw UNORM values.
+//   8-bit SDR swap chain  : hardware presents the UNORM bytes; display interprets correctly.
+//   FP16/scRGB swap chain : sRGB bytes end up stored as linear-space floats in the FP16 buffer
+//                           and appear over-bright/over-saturated without pre-decode.
+//   HDR10 R10G10B10A2     : PQ-encoded; sRGB decode would make colours wrong.
+// Therefore decode is ONLY correct for FP16/scRGB (R16G16B16A16_FLOAT).
+//
+// s_swapchain_is_linear values:
+//   -1 = not yet detected
+//    0 = FP16/scRGB (R16G16B16A16_FLOAT) -> sRGB decode IS needed
+//    1 = any other format (8-bit SDR, HDR10, unknown) -> no decode needed
+static int         s_swapchain_is_linear = -1;
+static const char* s_swapchain_fmt_str   = "Detecting...";
+
+// Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
+static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
+{
+    s_swapchain_is_linear = -1;
+    s_swapchain_fmt_str   = "Detecting...";
+    r->SetScreenshotCallback([](InGameOverlay::ScreenshotCallbackParameter_t const* sc, void* user) {
+        using F = InGameOverlay::ScreenshotDataFormat_t;
+        // Identify the format for display and decide if decode is needed.
+        if (!sc || sc->Format == F::Unknown) {
+            s_swapchain_fmt_str   = "Unknown";
+            s_swapchain_is_linear = 1; // safe: no decode
+        } else {
+            switch (sc->Format) {
+                case F::R16G16B16A16_FLOAT: s_swapchain_fmt_str = "FP16 / scRGB";   s_swapchain_is_linear = 0; break;
+                case F::R16G16B16A16_UNORM: s_swapchain_fmt_str = "R16 UNORM";       s_swapchain_is_linear = 1; break;
+                case F::R10G10B10A2:        s_swapchain_fmt_str = "HDR10 (R10B10G10A2)"; s_swapchain_is_linear = 1; break;
+                case F::R32G32B32A32_FLOAT: s_swapchain_fmt_str = "FP32 linear";     s_swapchain_is_linear = 1; break;
+                case F::R8G8B8A8:           s_swapchain_fmt_str = "R8G8B8A8 SDR";    s_swapchain_is_linear = 1; break;
+                case F::B8G8R8A8:           s_swapchain_fmt_str = "B8G8R8A8 SDR";    s_swapchain_is_linear = 1; break;
+                case F::B8G8R8X8:           s_swapchain_fmt_str = "B8G8R8X8 SDR";    s_swapchain_is_linear = 1; break;
+                default:                    s_swapchain_fmt_str = "Other SDR";        s_swapchain_is_linear = 1; break;
+            }
+        }
+        auto* r2 = static_cast<InGameOverlay::RendererHook_t*>(user);
+        r2->SetScreenshotCallback(nullptr, nullptr);
+        r2->TakeScreenshot(InGameOverlay::ScreenshotType_t::None);
+    }, r);
+    r->TakeScreenshot(InGameOverlay::ScreenshotType_t::BeforeOverlay);
+}
 
 static constexpr int max_window_id = 10000;
 static constexpr int base_notif_window_id  = 0 * max_window_id;
@@ -281,18 +324,10 @@ bool Steam_Overlay::renderer_hook_proc()
             bool renderer_needs_decode = (rtype == RHT::DirectX10 || rtype == RHT::DirectX11 ||
                                           rtype == RHT::DirectX12 || rtype == RHT::Vulkan || rtype == RHT::Metal);
             if (renderer_needs_decode) {
-                // Reset cached state and take a one-shot screenshot to detect the actual
-                // back-buffer format. BeforeOverlay fires synchronously before OverlayProc
-                // in the same frame, so s_swapchain_is_linear is set before AttachResource.
-                s_swapchain_is_linear = -1;
-                _renderer->SetScreenshotCallback([](InGameOverlay::ScreenshotCallbackParameter_t const* sc, void* user) {
-                    using F = InGameOverlay::ScreenshotDataFormat_t;
-                    s_swapchain_is_linear = (sc && sc->Format == F::R16G16B16A16_FLOAT) ? 1 : 0;
-                    auto* r = static_cast<InGameOverlay::RendererHook_t*>(user);
-                    r->SetScreenshotCallback(nullptr, nullptr);
-                    r->TakeScreenshot(InGameOverlay::ScreenshotType_t::None);
-                }, _renderer);
-                _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::BeforeOverlay);
+                // One-shot screenshot to detect the actual back-buffer format.
+                // BeforeOverlay fires before OverlayProc in the same frame,
+                // so s_swapchain_is_linear is set before any AttachResource call.
+                arm_swapchain_format_detect(_renderer);
             }
         }
     };
@@ -1419,17 +1454,23 @@ static int detect_display_hdr_state()
 }
 
 // sRGB->linear decode before GPU upload.
-// ingame_overlay always uploads textures as DXGI_FORMAT_R8G8B8A8_UNORM (no hardware sRGB decode),
-// so on renderers that write to an sRGB framebuffer (DX10/11/12, Vulkan, Metal) the PNG bytes
-// would be gamma-encoded a second time -> over-bright, over-saturated result.
-// We pre-decode manually so the framebuffer encode is the only pass.
-// DX9/OpenGL games typically use a linear framebuffer -> leave bytes as-is.
-// In HDR/scRGB mode the game's swapchain is FP16 (linear) -> skip decode.
+// ingame_overlay forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV so there is NO
+// hardware sRGB encoding at the overlay render pass.  sRGB-encoded PNG bytes write
+// as-is into the back buffer regardless of the swap-chain format.
+//
+// When to decode:
+//   FP16/scRGB swap chain (R16G16B16A16_FLOAT):
+//     sRGB bytes are stored as linear-space floats in the FP16 buffer and appear
+//     over-bright.  Pre-decoding to linear corrects this.
+//   8-bit SDR (UNORM / UNORM_SRGB):
+//     UNORM bytes pass through unchanged; hardware presents them correctly.  NO decode.
+//   HDR10 (R10G10B10A2, PQ gamma):
+//     sRGB decode would produce wrong PQ colours.  NO decode.
+//   DX9 / OpenGL: linear framebuffer, no sRGB path.  NO decode.
 //
 // Controlled by Overlay_Appearance::image_gamma (auto/on/off).
-// "auto": decode for DX10/11/12/Vk/Metal when the game's swapchain is NOT FP16/HDR.
-//         A one-shot screenshot on OverlayHookReady/Reset detects the actual back-buffer
-//         format; it fires synchronously before OverlayProc so AttachResource sees the result.
+// "auto": decode ONLY when the game's swap chain is confirmed FP16/scRGB
+//         (s_swapchain_is_linear == 0, set by the one-shot BeforeOverlay screenshot).
 // "on":   always decode.
 // "off":  never decode.
 
@@ -1456,9 +1497,9 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
             default:
                 break; // DX9, OpenGL: linear framebuffer -> no decode needed
         }
-        // If the game's swapchain is FP16 (HDR/scRGB) the framebuffer is linear -> skip decode.
-        // s_swapchain_is_linear is set by the one-shot screenshot callback before OverlayProc.
-        if (should_decode && s_swapchain_is_linear == 1)
+        // Only decode when explicitly confirmed FP16/scRGB (s_swapchain_is_linear == 0).
+        // When unknown (-1) or confirmed non-FP16 (1): skip decode.
+        if (should_decode && s_swapchain_is_linear != 0)
             should_decode = false;
     }
     // SD::Off, or auto decided no -> nothing to do
@@ -1782,13 +1823,9 @@ void Steam_Overlay::render_main_window()
                 bool hdr_api = (rtype == RHT::DirectX10 || rtype == RHT::DirectX11 ||
                                 rtype == RHT::DirectX12 || rtype == RHT::Vulkan || rtype == RHT::Metal);
                 if (!hdr_api) {
-                    game_fmt = "SDR (linear)";
-                } else if (s_swapchain_is_linear == 1) {
-                    game_fmt = "HDR (FP16)";
-                } else if (s_swapchain_is_linear == 0) {
-                    game_fmt = "SDR (sRGB)";
+                    game_fmt = "SDR (DX9/OpenGL)";
                 } else {
-                    game_fmt = "Detecting...";
+                    game_fmt = s_swapchain_fmt_str; // e.g. "FP16 / scRGB", "HDR10 (R10B10G10A2)", "R8G8B8A8 SDR"
                 }
             }
 
@@ -1802,14 +1839,23 @@ void Steam_Overlay::render_main_window()
             else if (display_hdr_state == 0)  display_hdr_str = "SDR";
             else                              display_hdr_str = "N/A";
 
-            ImGui::TextDisabled("Renderer: %s  |  Game: %s  |  Display: %s",
-                renderer_lib, game_fmt, display_hdr_str);
+            // sRGB decode indicator (only shown for DX10+ renderers where detection ran)
+            const char* decode_indicator = "";
+            if (_renderer) {
+                using RHT2 = InGameOverlay::RendererHookType_t;
+                auto rt2 = _renderer->GetRendererHookType();
+                bool hdr_api2 = (rt2 == RHT2::DirectX10 || rt2 == RHT2::DirectX11 ||
+                                 rt2 == RHT2::DirectX12 || rt2 == RHT2::Vulkan || rt2 == RHT2::Metal);
+                if (hdr_api2 && s_swapchain_is_linear == 0)
+                    decode_indicator = " [sRGB decode ON]";
+            }
+            ImGui::TextDisabled("Renderer: %s  |  Game: %s%s  |  Display: %s",
+                renderer_lib, game_fmt, decode_indicator, display_hdr_str);
             ImGui::SameLine();
             if (ImGui::SmallButton("Refresh##hdr_info")) {
                 display_hdr_state = detect_display_hdr_state();
-                s_swapchain_is_linear = -1; // re-arm the screenshot callback on next Ready
                 if (_renderer)
-                    _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::BeforeOverlay);
+                    arm_swapchain_format_detect(_renderer);
             }
         }
         // ---------------------------------------------------------------

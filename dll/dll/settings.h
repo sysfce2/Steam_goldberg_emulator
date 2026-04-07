@@ -187,8 +187,10 @@ struct Overlay_Appearance {
     NotificationPosition chat_msg_pos = NotificationPosition::top_center; // chat message from a friend
 
     // sRGB->linear decode before GPU upload.
-    // auto = decode for DX10/11/12/Vulkan/Metal if monitor HDR is off (SDR swapchain assumed),
-    //        skip for DX9/GL and when the display is in HDR mode (linear framebuffer).
+    // ingame_overlay forces UNORM on its own RTV so there is no hardware sRGB encoding at the
+    // overlay render pass.  Decode is only needed for FP16/scRGB swap chains where sRGB bytes
+    // end up stored as linear-space floats and appear over-bright on the HDR display.
+    // auto = decode only when swap chain is confirmed R16G16B16A16_FLOAT.
     // on   = always decode.
     // off  = never decode (original behaviour).
     enum class SrgbDecode { Auto, On, Off };
