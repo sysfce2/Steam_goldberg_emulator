@@ -186,6 +186,14 @@ struct Overlay_Appearance {
     NotificationPosition invite_pos = default_pos; // lobby/game invitation
     NotificationPosition chat_msg_pos = NotificationPosition::top_center; // chat message from a friend
 
+    // sRGB->linear decode before GPU upload.
+    // auto = decode for DX10/11/12/Vulkan/Metal if monitor HDR is off (SDR swapchain assumed),
+    //        skip for DX9/GL and when the display is in HDR mode (linear framebuffer).
+    // on   = always decode.
+    // off  = never decode (original behaviour).
+    enum class SrgbDecode { Auto, On, Off };
+    SrgbDecode image_gamma = SrgbDecode::Auto;
+
     static NotificationPosition translate_notification_position(const std::string &str);
 };
 

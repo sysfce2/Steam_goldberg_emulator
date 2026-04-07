@@ -435,6 +435,15 @@ static void load_overlay_appearance(class Settings *settings_client, class Setti
                 settings_client->overlay_appearance.stats_text_a = val;
                 settings_server->overlay_appearance.stats_text_a = val;
             // FPS text color END <<<
+            // >>> Image gamma correction
+            } else if (name.compare("Image_Gamma") == 0) {
+                using SrgbDecode = Overlay_Appearance::SrgbDecode;
+                SrgbDecode mode = SrgbDecode::Auto;
+                if (value == "on")   mode = SrgbDecode::On;
+                else if (value == "off") mode = SrgbDecode::Off;
+                settings_client->overlay_appearance.image_gamma = mode;
+                settings_server->overlay_appearance.image_gamma = mode;
+            // Image gamma correction END <<<
             // >>> FPS position
             } else if (name.compare("Stats_Pos_x") == 0) {
                 auto pos = std::stof(value);

@@ -32,6 +32,10 @@
 
 #define URL_WINDOW_NAME "URL Window"
 
+// Swapchain linear-framebuffer state for sRGB decode: -1=unknown, 0=sRGB/SDR, 1=FP16/HDR (linear).
+// Set by the one-shot screenshot callback in OverlayHookReady/Reset; read by srgb_decode_pixels_if_needed.
+static int s_swapchain_is_linear = -1;
+
 static constexpr int max_window_id = 10000;
 static constexpr int base_notif_window_id  = 0 * max_window_id;
 static constexpr int base_friend_window_id = 1 * max_window_id;
@@ -269,7 +273,28 @@ bool Steam_Overlay::renderer_hook_proc()
     _renderer->OverlayProc = [this]() { overlay_render_proc(); };
     _renderer->OverlayHookReady = [this](InGameOverlay::OverlayHookState state) {
         PRINT_DEBUG("hook state changed to <%i>", (int)state);
-        overlay_state_hook(state == InGameOverlay::OverlayHookState::Ready || state == InGameOverlay::OverlayHookState::Reset);
+        bool is_ready = (state == InGameOverlay::OverlayHookState::Ready || state == InGameOverlay::OverlayHookState::Reset);
+        overlay_state_hook(is_ready);
+        if (is_ready && settings->overlay_appearance.image_gamma == Overlay_Appearance::SrgbDecode::Auto) {
+            using RHT = InGameOverlay::RendererHookType_t;
+            auto rtype = _renderer->GetRendererHookType();
+            bool renderer_needs_decode = (rtype == RHT::DirectX10 || rtype == RHT::DirectX11 ||
+                                          rtype == RHT::DirectX12 || rtype == RHT::Vulkan || rtype == RHT::Metal);
+            if (renderer_needs_decode) {
+                // Reset cached state and take a one-shot screenshot to detect the actual
+                // back-buffer format. BeforeOverlay fires synchronously before OverlayProc
+                // in the same frame, so s_swapchain_is_linear is set before AttachResource.
+                s_swapchain_is_linear = -1;
+                _renderer->SetScreenshotCallback([](InGameOverlay::ScreenshotCallbackParameter_t const* sc, void* user) {
+                    using F = InGameOverlay::ScreenshotDataFormat_t;
+                    s_swapchain_is_linear = (sc && sc->Format == F::R16G16B16A16_FLOAT) ? 1 : 0;
+                    auto* r = static_cast<InGameOverlay::RendererHook_t*>(user);
+                    r->SetScreenshotCallback(nullptr, nullptr);
+                    r->TakeScreenshot(InGameOverlay::ScreenshotType_t::None);
+                }, _renderer);
+                _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::BeforeOverlay);
+            }
+        }
     };
 
     bool started = _renderer->StartHook(overlay_toggle_callback, toggle_keys.data(), (int)toggle_keys.size(), &fonts_atlas);
@@ -1363,6 +1388,101 @@ void Steam_Overlay::post_achievement_notification(Overlay_Achievement &ach, bool
     );
 }
 
+// Query per-display HDR state from the OS (for the UI info row, NOT used for decode decisions).
+// Returns 1=HDR, 0=SDR, -1=unknown/unsupported.
+static int detect_display_hdr_state()
+{
+#ifdef __WINDOWS__
+    UINT32 pathCount = 0, modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
+        return -1;
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
+        return -1;
+    for (UINT32 i = 0; i < pathCount; ++i) {
+        DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO req{};
+        req.header.type      = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+        req.header.size      = sizeof(req);
+        req.header.adapterId = paths[i].targetInfo.adapterId;
+        req.header.id        = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&req.header) == ERROR_SUCCESS) {
+            if (req.advancedColorEnabled && req.advancedColorSupported)
+                return 1;
+        }
+    }
+    return 0;
+#else
+    // TODO: Linux: read /sys/class/drm/card*/*/hdr_output_metadata or DRM HDR property
+    return -1; // not yet implemented
+#endif
+}
+
+// sRGB->linear decode before GPU upload.
+// ingame_overlay always uploads textures as DXGI_FORMAT_R8G8B8A8_UNORM (no hardware sRGB decode),
+// so on renderers that write to an sRGB framebuffer (DX10/11/12, Vulkan, Metal) the PNG bytes
+// would be gamma-encoded a second time -> over-bright, over-saturated result.
+// We pre-decode manually so the framebuffer encode is the only pass.
+// DX9/OpenGL games typically use a linear framebuffer -> leave bytes as-is.
+// In HDR/scRGB mode the game's swapchain is FP16 (linear) -> skip decode.
+//
+// Controlled by Overlay_Appearance::image_gamma (auto/on/off).
+// "auto": decode for DX10/11/12/Vk/Metal when the game's swapchain is NOT FP16/HDR.
+//         A one-shot screenshot on OverlayHookReady/Reset detects the actual back-buffer
+//         format; it fires synchronously before OverlayProc so AttachResource sees the result.
+// "on":   always decode.
+// "off":  never decode.
+
+static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer,
+                                         const Overlay_Appearance::SrgbDecode mode,
+                                         uint8_t *rgba, size_t npixels)
+{
+    using RHT = InGameOverlay::RendererHookType_t;
+    using SD  = Overlay_Appearance::SrgbDecode;
+
+    bool should_decode = false;
+    if (mode == SD::On) {
+        should_decode = true;
+    } else if (mode == SD::Auto && renderer) {
+        // Only decode for modern APIs that have sRGB-encoded framebuffers
+        switch (renderer->GetRendererHookType()) {
+            case RHT::DirectX10:
+            case RHT::DirectX11:
+            case RHT::DirectX12:
+            case RHT::Vulkan:
+            case RHT::Metal:
+                should_decode = true;
+                break;
+            default:
+                break; // DX9, OpenGL: linear framebuffer -> no decode needed
+        }
+        // If the game's swapchain is FP16 (HDR/scRGB) the framebuffer is linear -> skip decode.
+        // s_swapchain_is_linear is set by the one-shot screenshot callback before OverlayProc.
+        if (should_decode && s_swapchain_is_linear == 1)
+            should_decode = false;
+    }
+    // SD::Off, or auto decided no -> nothing to do
+    if (!should_decode) return;
+
+    // One-time LUT: sRGB uint8 -> linear uint8
+    static uint8_t lut[256];
+    static bool lut_ready = false;
+    if (!lut_ready) {
+        for (int i = 0; i < 256; ++i) {
+            float s = i / 255.0f;
+            float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
+            lut[i] = (uint8_t)(l * 255.0f + 0.5f);
+        }
+        lut_ready = true;
+    }
+    // Apply to R, G, B channels; leave A linear (correct for RGBA PNG)
+    for (size_t i = 0; i < npixels; ++i, rgba += 4) {
+        rgba[0] = lut[rgba[0]];
+        rgba[1] = lut[rgba[1]];
+        rgba[2] = lut[rgba[2]];
+    }
+}
+
 bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, bool upload_new_icon_to_gpu)
 {
     if (!_renderer) return false;
@@ -1382,7 +1502,11 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
     auto image_info = settings->get_image(icon_handle);
     if (image_info) {
         int icon_size = static_cast<int>(settings->overlay_appearance.icon_size);
-        icon_rsrc->AttachResource((void*)image_info->data.c_str(), icon_size, icon_size);
+        // Work on a mutable copy so we don't corrupt the cached image data
+        std::string icon_data = image_info->data;
+        srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+            (uint8_t*)icon_data.data(), (size_t)icon_size * icon_size);
+        icon_rsrc->AttachResource((void*)icon_data.c_str(), icon_size, icon_size);
         
         PRINT_DEBUG("'%s' (result=%i)", ach.name.c_str(), (int)icon_rsrc->GetResourceId() != 0);
     }
@@ -1642,6 +1766,53 @@ void Steam_Overlay::render_main_window()
         if (ImGui::Checkbox(translationPlaytimeCheckbox[current_language], &stats.show_playtime)) {
             allow_renderer_frame_processing(stats.show_playtime);
         }
+
+        // --- Renderer / HDR status info row ----------------------------
+        ImGui::Spacing();
+        {
+            using RHT = InGameOverlay::RendererHookType_t;
+            const char* renderer_lib = _renderer ? _renderer->GetLibraryName() : "None";
+
+            // Game swapchain color-space (derived from the screenshot-callback format)
+            const char* game_fmt;
+            if (!_renderer) {
+                game_fmt = "N/A";
+            } else {
+                auto rtype = _renderer->GetRendererHookType();
+                bool hdr_api = (rtype == RHT::DirectX10 || rtype == RHT::DirectX11 ||
+                                rtype == RHT::DirectX12 || rtype == RHT::Vulkan || rtype == RHT::Metal);
+                if (!hdr_api) {
+                    game_fmt = "SDR (linear)";
+                } else if (s_swapchain_is_linear == 1) {
+                    game_fmt = "HDR (FP16)";
+                } else if (s_swapchain_is_linear == 0) {
+                    game_fmt = "SDR (sRGB)";
+                } else {
+                    game_fmt = "Detecting...";
+                }
+            }
+
+            // Display HDR state — queried once per launch; user can refresh via button.
+            static int display_hdr_state = -2; // -2=not yet queried, -1=unsupported, 0=SDR, 1=HDR
+            if (display_hdr_state == -2)
+                display_hdr_state = detect_display_hdr_state();
+
+            const char* display_hdr_str;
+            if      (display_hdr_state == 1)  display_hdr_str = "HDR";
+            else if (display_hdr_state == 0)  display_hdr_str = "SDR";
+            else                              display_hdr_str = "N/A";
+
+            ImGui::TextDisabled("Renderer: %s  |  Game: %s  |  Display: %s",
+                renderer_lib, game_fmt, display_hdr_str);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Refresh##hdr_info")) {
+                display_hdr_state = detect_display_hdr_state();
+                s_swapchain_is_linear = -1; // re-arm the screenshot callback on next Ready
+                if (_renderer)
+                    _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::BeforeOverlay);
+            }
+        }
+        // ---------------------------------------------------------------
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -2208,6 +2379,8 @@ void Steam_Overlay::render_main_window()
                                             int pw = 0, ph = 0;
                                             tex.pixels = local_storage->load_image_from_folder(folder, filename, pw, ph);
                                             if (!tex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
+                                                srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+                                                    (uint8_t*)tex.pixels.data(), (size_t)pw * ph);
                                                 tex.resource = _renderer->CreateResource();
                                                 tex.w = pw; tex.h = ph;
                                                 tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
@@ -2369,6 +2542,8 @@ void Steam_Overlay::render_main_window()
                             int pw = 0, ph = 0;
                             ftex.pixels = local_storage->load_image_from_folder(f_folder, f_file, pw, ph);
                             if (!ftex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
+                                srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+                                    (uint8_t*)ftex.pixels.data(), (size_t)pw * ph);
                                 ftex.resource = _renderer->CreateResource();
                                 ftex.w = pw; ftex.h = ph;
                                 ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);

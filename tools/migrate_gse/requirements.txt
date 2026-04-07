@@ -1,3 +1,0 @@
-pyinstaller
-configparser
-configobj

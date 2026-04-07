@@ -922,13 +922,13 @@ std::string Local_Storage::load_image_resized(std::string const& image_path, std
         PRINT_DEBUG("stbi_load('%s') -> %s", image_path.c_str(), (img ? "loaded" : stbi_failure_reason()));
         if (img) {
             std::vector<char> out_resized(resized_img_size);
-            stbir_resize_uint8_linear(img, width, height, 0, (unsigned char*)&out_resized[0], resolution, resolution, 0, STBIR_RGBA);
+            stbir_resize_uint8_srgb(img, width, height, 0, (unsigned char*)&out_resized[0], resolution, resolution, 0, STBIR_RGBA);
             resized_image = std::string((char*)&out_resized[0], out_resized.size());
             stbi_image_free(img);
         }
     } else if (image_data.size()) {
         std::vector<char> out_resized(resized_img_size);
-        stbir_resize_uint8_linear((unsigned char*)image_data.c_str(), 184, 184, 0, (unsigned char*)&out_resized[0], resolution, resolution, 0, STBIR_RGBA);
+        stbir_resize_uint8_srgb((unsigned char*)image_data.c_str(), 184, 184, 0, (unsigned char*)&out_resized[0], resolution, resolution, 0, STBIR_RGBA);
         resized_image = std::string((char*)&out_resized[0], out_resized.size());
     }
 
