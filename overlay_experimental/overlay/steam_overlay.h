@@ -360,7 +360,7 @@ public:
     int  Bridge_GetNotifPosition() const;
     BridgeStatsSnapshot Bridge_GetStatsState() const;
     int  Bridge_GetAchievementCount() const;
-    int  Bridge_GetAchievements(struct GSE_Achievement *out, int max_count) const;
+    int  Bridge_GetAchievements(struct GSE_Achievement *out, int max_count);
     int  Bridge_GetNotifications(struct GSE_Notification *out, int max_count);
     void Bridge_ExpireNotification(int id);
     int  Bridge_GetDisplayInfo(struct GSE_DisplayInfo *out, int max_count) const;

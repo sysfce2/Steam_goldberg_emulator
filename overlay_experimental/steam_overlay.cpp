@@ -978,6 +978,12 @@ void Steam_Overlay::show_test_achievement()
         try_load_ach_icon(rand_ach, achieved, settings->paginated_achievements_icons == 0);
         ach.icon = rand_ach.icon;
         ach.icon_gray = rand_ach.icon_gray;
+        // Copy decoded pixel data so the bridge addon can access the icon
+        ach.icon_handle = rand_ach.icon_handle;
+        ach.icon_gray_handle = rand_ach.icon_gray_handle;
+        ach.icon_decoded_data = rand_ach.icon_decoded_data;
+        ach.icon_gray_decoded_data = rand_ach.icon_gray_decoded_data;
+        ach.name = rand_ach.name;
     }
 
     // randomly add progress
@@ -3819,13 +3825,13 @@ static void bridge_safe_copy(char *dst, size_t dst_sz, const std::string &src)
     dst[dst_sz - 1] = '\0';
 }
 
-int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count) const
+int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count)
 {
-    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
 
-    int count = std::min(max_count, static_cast<int>(achievements.size()));
+    int count = (std::min)(max_count, static_cast<int>(achievements.size()));
     for (int i = 0; i < count; ++i) {
-        const auto &a = achievements[i];
+        auto &a = achievements[i];
         auto &o = out[i];
         memset(&o, 0, sizeof(o));
 
@@ -3841,6 +3847,28 @@ int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count) c
         // Global percentage
         auto it = ach_global_percentages.find(a.name);
         o.global_percent = (it != ach_global_percentages.end()) ? it->second : -1.0f;
+
+        // Decode icon pixel data on demand for the bridge.
+        // When the ReShade addon is connected, overlay_render_proc() returns early
+        // and never calls try_load_ach_icon(), so icon_decoded_data stays empty.
+        // We decode from the settings image cache here (CPU-only, no GPU upload).
+        auto bridge_ensure_icon = [&](bool achieved) {
+            auto &decoded = achieved ? a.icon_decoded_data : a.icon_gray_decoded_data;
+            if (!decoded.empty()) return; // already decoded
+
+            int &handle = achieved ? a.icon_handle : a.icon_gray_handle;
+            if (Settings::UNLOADED_IMAGE_HANDLE == handle) {
+                handle = get_steam_client()->steam_user_stats->get_achievement_icon_handle(a.name, achieved);
+            }
+            auto *img = settings->get_image(handle);
+            if (!img) return;
+            int iw = static_cast<int>(img->width);
+            int ih = static_cast<int>(img->height);
+            if (iw <= 0 || ih <= 0 || img->data.size() < (size_t)iw * ih * 4) return;
+            decoded = img->data;
+        };
+        bridge_ensure_icon(true);
+        bridge_ensure_icon(false);
 
         // Icon pixel data — point directly into decoded data buffers.
         // These are valid until the next call (the emu won't modify them while
@@ -3885,11 +3913,34 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
 
         // Achievement data if present
         if (n.ach.has_value()) {
-            const auto &a = n.ach.value();
+            auto &a = n.ach.value();
             bridge_safe_copy(o.ach_title, sizeof(o.ach_title), a.title);
             o.ach_progress = a.progress;
             o.ach_max_progress = a.max_progress;
             o.ach_achieved = a.achieved ? 1 : 0;
+
+            // On-demand icon decode for the bridge (same pattern as Bridge_GetAchievements)
+            if (a.icon_decoded_data.empty() && a.icon_handle != Settings::UNLOADED_IMAGE_HANDLE) {
+                auto *img = settings->get_image(a.icon_handle);
+                if (img && img->width > 0 && img->height > 0 &&
+                    img->data.size() >= (size_t)img->width * img->height * 4)
+                    a.icon_decoded_data = img->data;
+            }
+            if (a.icon_decoded_data.empty() && !a.name.empty()) {
+                // Try to find the source achievement and decode from its handle
+                for (auto &src : achievements) {
+                    if (src.name == a.name) {
+                        int &h = a.achieved ? src.icon_handle : src.icon_gray_handle;
+                        if (Settings::UNLOADED_IMAGE_HANDLE == h)
+                            h = get_steam_client()->steam_user_stats->get_achievement_icon_handle(src.name, a.achieved);
+                        auto *img = settings->get_image(h);
+                        if (img && img->width > 0 && img->height > 0 &&
+                            img->data.size() >= (size_t)img->width * img->height * 4)
+                            a.icon_decoded_data = img->data;
+                        break;
+                    }
+                }
+            }
 
             if (!a.icon_decoded_data.empty()) {
                 o.ach_icon_pixels = reinterpret_cast<const uint8_t*>(a.icon_decoded_data.data());
@@ -3919,7 +3970,7 @@ int Steam_Overlay::Bridge_GetDisplayInfo(GSE_DisplayInfo *out, int max_count) co
 {
     // Call the static display query function (thread-safe, reads from Windows API)
     auto displays = query_display_hdr_details();
-    int count = std::min(max_count, static_cast<int>(displays.size()));
+    int count = (std::min)(max_count, static_cast<int>(displays.size()));
 
     for (int i = 0; i < count; ++i) {
         const auto &d = displays[i];

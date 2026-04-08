@@ -64,6 +64,7 @@ struct IconTexture {
 struct __declspec(uuid("a1b2c3d4-1234-5678-abcd-ef0123456789")) addon_device_data
 {
     std::unordered_map<std::string, IconTexture> icon_cache; // key = ach name + "_achieved"/"_locked"
+    std::vector<IconTexture> pending_destroy;                // deferred GPU resource destruction
 };
 
 /* ── Forward declarations ──────────────────────────────────────────────── */
@@ -379,11 +380,13 @@ static void free_sce_textures()
     auto *data = s_current_device->get_private_data<addon_device_data>();
     if (!data) return;
 
-    // Remove entries that start with the SCE storage path prefix
+    // Move SCE entries to pending_destroy so they are freed at the start of the next frame,
+    // after the GPU has finished using them.  Destroying mid-frame causes DXGI device hung.
     for (auto it = data->icon_cache.begin(); it != data->icon_cache.end(); ) {
         if (it->first.size() > 4 && (it->first.find("sce_assets") != std::string::npos ||
             it->first.find("Series ") != std::string::npos)) {
-            free_icon(s_current_device, it->second);
+            if (it->second.valid)
+                data->pending_destroy.push_back(it->second);
             it = data->icon_cache.erase(it);
         } else {
             ++it;
@@ -764,6 +767,16 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Store device pointer for icon upload during this frame
     s_current_device = runtime->get_device();
     s_sce_tex_per_frame = 0;  // reset per-frame load cap
+
+    // Flush deferred GPU resource destruction (queued by free_sce_textures last frame)
+    {
+        auto *data = s_current_device->get_private_data<addon_device_data>();
+        if (data && !data->pending_destroy.empty()) {
+            for (auto &icon : data->pending_destroy)
+                free_icon(s_current_device, icon);
+            data->pending_destroy.clear();
+        }
+    }
 
     update_fps();
 
