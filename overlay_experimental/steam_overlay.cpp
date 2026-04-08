@@ -63,6 +63,7 @@ static const char* s_swapchain_type_str  = "Detecting..."; // HDR/SDR type  |  g
 //   e.g. 200 nits SDR white -> scale = 2.5 (overlay and ImGui colours boosted proportionally)
 static float       s_sdr_white_scale     = 1.0f;
 static bool        s_sdr_scale_queried   = false; // true once display info has been queried
+static bool        s_pending_sdr_refresh = false; // set on Reset/Removing; drained in overlay_render_proc
 
 // Forward declaration — defined after query_display_hdr_details() below.
 struct DisplayHdrDetail_t;
@@ -425,12 +426,16 @@ bool Steam_Overlay::renderer_hook_proc()
         bool is_ready = (state == InGameOverlay::OverlayHookState::Ready || state == InGameOverlay::OverlayHookState::Reset);
         overlay_state_hook(is_ready);
 
-        if (state == InGameOverlay::OverlayHookState::Reset) {
-            // Swapchain was recreated — resolution change, HDR on/off, alt-tab, device lost, etc.
-            // Refresh display info immediately so the SDR white scale reflects the new mode.
-            refresh_sdr_white_scale();
+        bool clean_up = (state == InGameOverlay::OverlayHookState::Reset ||
+                         state == InGameOverlay::OverlayHookState::Removing);
+        if (clean_up) {
+            // Defer the display-info query to the next rendered frame so we don't
+            // block the render thread (which is inside ResizeBuffers/device-release)
+            // with synchronous Windows display-config API calls.
+            s_sdr_scale_queried   = false;
+            s_pending_sdr_refresh = true;
 
-            // Achievement icon GPU resources are now invalid (resource IDs zeroed by the library).
+            // Achievement icon GPU resources are now invalid.
             // The decoded-pixel caches hold pixels processed with the OLD LUT.  Clear them so
             // try_load_ach_icon() re-decodes from raw source data with the updated LUT on next use.
             for (auto &ach : achievements) {
@@ -450,6 +455,11 @@ bool Steam_Overlay::renderer_hook_proc()
             bool renderer_needs_decode = (rtype == RHT::DirectX10 || rtype == RHT::DirectX11 ||
                                           rtype == RHT::DirectX12 || rtype == RHT::Vulkan || rtype == RHT::Metal);
             if (renderer_needs_decode) {
+                // Cancel any in-flight screenshot first, then re-arm.
+                // The Reset fires BEFORE ingame_overlay destroys its render targets;
+                // cancelling avoids a stale BeforeOverlay screenshot request crossing the resize.
+                _renderer->SetScreenshotCallback(nullptr, nullptr);
+                _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::None);
                 // One-shot screenshot to detect the actual back-buffer format.
                 // BeforeOverlay fires before OverlayProc in the same frame,
                 // so s_swapchain_is_linear is set before any AttachResource call.
@@ -1856,6 +1866,14 @@ void Steam_Overlay::overlay_render_proc()
     std::lock_guard lock(overlay_mutex);
 
     if (!Ready()) return;
+
+    // Drain the deferred display-info refresh (set on Reset/Removing).
+    // Done here — on the render thread but outside the hooked resize path — so
+    // QueryDisplayConfig does not block ResizeBuffers / device-release calls.
+    if (s_pending_sdr_refresh) {
+        s_pending_sdr_refresh = false;
+        refresh_sdr_white_scale();
+    }
 
     // Lazy-init SDR white scale from display info on the first frame.
     // Placed here because refresh_sdr_white_scale() is defined after the hook-ready
@@ -3363,6 +3381,29 @@ void Steam_Overlay::ShowOverlay(bool state)
         refresh_sdr_white_scale();
         if (_renderer)
             arm_swapchain_format_detect(_renderer);
+    }
+
+    // On close: free GPU-side resources so the D3D heap descriptors and VRAM are
+    // reclaimed while the game is running without the overlay.
+    // CPU-side pixel data (icon_decoded_data) is also cleared so it doesn't sit in
+    // RAM until the next open; it will be re-decoded from the settings image cache on demand.
+    // The RendererResource_t objects themselves (icon / icon_gray) are kept alive because
+    // they own no GPU memory when unloaded — the library releases the underlying texture
+    // automatically when the last weak_ptr expires.
+    if (!state) {
+        show_sce_browser = false;
+        sce_textures_free_all();
+        for (auto &ach : achievements) {
+            ach.icon_decoded_data.clear();
+            ach.icon_decoded_data.shrink_to_fit();
+            ach.icon_gray_decoded_data.clear();
+            ach.icon_gray_decoded_data.shrink_to_fit();
+            // Detach the pixel buffer from the resource so the GPU texture is released.
+            // The resource object stays alive; next GetResourceId() will re-upload.
+            if (ach.icon)      ach.icon->ClearAttachedResource();
+            if (ach.icon_gray) ach.icon_gray->ClearAttachedResource();
+        }
+        last_loaded_ach_icon = 0;
     }
 
     PRINT_DEBUG("%i", (int)state);
