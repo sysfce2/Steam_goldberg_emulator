@@ -10,6 +10,11 @@
 
 #ifdef EMU_OVERLAY
 
+// winsock2.h MUST come before anything that might pull in winsock.h
+// (dll.h → windows.h → winsock.h) to avoid type-redefinition errors.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include "overlay_bridge.h"
 #include "dll/dll.h"                    // get_steam_client()
 #include "dll/dll/steam_client.h"       // Steam_Client → steam_overlay
