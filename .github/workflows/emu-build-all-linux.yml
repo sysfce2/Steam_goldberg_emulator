@@ -89,12 +89,16 @@ jobs:
         run: sudo chmod -R 777 "${{ github.workspace }}"
 
       # generate project files
+      - name: "Set build date"
+        shell: "bash"
+        run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
+
       - name: "Generate project files"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --os=linux gmake2
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake2
 
       # mandatory Linux packages
       - name: "Install required packages"

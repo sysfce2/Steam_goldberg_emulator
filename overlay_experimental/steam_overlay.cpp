@@ -32,6 +32,14 @@
 
 #define URL_WINDOW_NAME "URL Window"
 
+// Fallback in case the build system did not inject EMU_BUILD_STRING / EMU_BUILD_DATE_STRING.
+#ifndef EMU_BUILD_STRING
+  #define EMU_BUILD_STRING "unknown"
+#endif
+#ifndef EMU_BUILD_DATE_STRING
+  #define EMU_BUILD_DATE_STRING "unknown"
+#endif
+
 // Swapchain format detection for sRGB decode decision.
 // KEY INSIGHT: ingame_overlay always forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV,
 // so there is NO hardware sRGB encoding at the overlay render-pass level.
@@ -2118,6 +2126,9 @@ void Steam_Overlay::render_main_window()
             }
             ImGui::TextDisabled("API        : %s  (%s)",
                 api_name, _renderer ? _renderer->GetLibraryName() : "None");
+
+            ImGui::TextDisabled("Emu build  : " EMU_BUILD_STRING);
+            ImGui::TextDisabled("Build date : " EMU_BUILD_DATE_STRING);
 
             // -- Game swapchain --
             bool hdr_api = false;

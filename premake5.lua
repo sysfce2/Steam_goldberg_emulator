@@ -100,6 +100,13 @@ newoption {
     default = os.date("%Y_%m_%d-%H_%M_%S"),
 }
 newoption {
+    category = 'build',
+    trigger = "emubuilddate",
+    description = "Set the EMU_BUILD_DATE_STRING",
+    value = "your_date",
+    default = os.date("%Y_%m_%d"),
+}
+newoption {
     category = "build",
     trigger = "deps-dir",
     description = "Base directory where dependencies were built (if overridden it MUST be absolute)",
@@ -210,7 +217,7 @@ end
 -- common defines
 ---------
 local common_emu_defines = { -- added to all filters, later defines will be appended
-    "UTF_CPP_CPLUSPLUS=201703L", "CURL_STATICLIB", "CONTROLLER_SUPPORT", "EMU_BUILD_STRING=" .. _OPTIONS["emubuild"],
+    "UTF_CPP_CPLUSPLUS=201703L", "CURL_STATICLIB", "CONTROLLER_SUPPORT", "EMU_BUILD_STRING=" .. _OPTIONS["emubuild"], "EMU_BUILD_DATE_STRING=" .. _OPTIONS["emubuilddate"],
 }
 
 -- include dirs
