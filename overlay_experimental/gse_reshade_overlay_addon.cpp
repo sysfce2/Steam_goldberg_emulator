@@ -787,6 +787,9 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Toggle main overlay with our own hotkey (Shift+Tab)
     if (runtime->is_key_down(VK_SHIFT) && runtime->is_key_pressed(VK_TAB)) {
         s_show_main_overlay = !s_show_main_overlay;
+        // Sync overlay state with the emu DLL so callbacks fire
+        if (s_bridge.ShowOverlay)
+            s_bridge.ShowOverlay(s_show_main_overlay ? 1 : 0);
     }
 
     // Main overlay window

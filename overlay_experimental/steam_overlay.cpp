@@ -627,11 +627,13 @@ void Steam_Overlay::load_achievements_data()
             ach.max_progress = (uint32)pnMaxProgress;
         }
 
-        if (ach.icon == nullptr) {
-            ach.icon = _renderer->CreateResource();
-        }
-        if (ach.icon_gray == nullptr) {
-            ach.icon_gray = _renderer->CreateResource();
+        if (_renderer) {
+            if (ach.icon == nullptr) {
+                ach.icon = _renderer->CreateResource();
+            }
+            if (ach.icon_gray == nullptr) {
+                ach.icon_gray = _renderer->CreateResource();
+            }
         }
 
         achievements.emplace_back(ach);
@@ -4076,6 +4078,14 @@ void Steam_Overlay::Bridge_MarkConnected()
         std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
         late_init_imgui.store(true, std::memory_order_relaxed);
         is_ready = true;
+
+        // In bridge-only mode renderer_hook_proc never runs, so achievements
+        // and audio were never loaded. Do it now (skips GPU resource creation
+        // since _renderer is null).
+        if (!_renderer && achievements.empty()) {
+            load_achievements_data();
+            load_audio();
+        }
     }
 }
 
