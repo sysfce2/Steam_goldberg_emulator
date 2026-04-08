@@ -49,6 +49,12 @@
 static int         s_swapchain_is_linear = -1;
 static const char* s_swapchain_fmt_str   = "Detecting..."; // DXGI format name
 static const char* s_swapchain_type_str  = "Detecting..."; // HDR/SDR type  |  gamma  |  colour gamut
+// SDR white level scale for HDR colour correction.
+//   s_sdr_white_scale = sdr_white_nits / 80.0f
+//   1.0f = standard 80-nit SDR white (default / fallback)
+//   e.g. 200 nits SDR white -> scale = 2.5 (overlay and ImGui colours boosted proportionally)
+static float       s_sdr_white_scale     = 1.0f;
+static bool        s_sdr_scale_queried   = false; // true once display info has been queried
 
 // Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
 static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
@@ -406,6 +412,26 @@ bool Steam_Overlay::renderer_hook_proc()
         PRINT_DEBUG("hook state changed to <%i>", (int)state);
         bool is_ready = (state == InGameOverlay::OverlayHookState::Ready || state == InGameOverlay::OverlayHookState::Reset);
         overlay_state_hook(is_ready);
+
+        if (state == InGameOverlay::OverlayHookState::Reset) {
+            // Swapchain was recreated — resolution change, HDR on/off, alt-tab, device lost, etc.
+            // Refresh display info immediately so the SDR white scale reflects the new mode.
+            refresh_sdr_white_scale();
+
+            // Achievement icon GPU resources are now invalid (resource IDs zeroed by the library).
+            // The decoded-pixel caches hold pixels processed with the OLD LUT.  Clear them so
+            // try_load_ach_icon() re-decodes from raw source data with the updated LUT on next use.
+            for (auto &ach : achievements) {
+                ach.icon_decoded_data.clear();
+                ach.icon_gray_decoded_data.clear();
+            }
+            // Reset the paginated-upload cursor so re-uploads start from the first achievement.
+            last_loaded_ach_icon = 0;
+
+            // SCE asset textures: free the whole cache so they are re-loaded and re-decoded lazily.
+            sce_textures_free_all();
+        }
+
         if (is_ready && settings->overlay_appearance.image_gamma == Overlay_Appearance::SrgbDecode::Auto) {
             using RHT = InGameOverlay::RendererHookType_t;
             auto rtype = _renderer->GetRendererHookType();
@@ -1587,26 +1613,52 @@ static std::vector<DisplayHdrDetail_t> query_display_hdr_details()
     return result;
 }
 
+// Query display HDR info, update s_sdr_white_scale, and mark the scale as queried.
+// Returns the display list so the settings panel can display it without double-querying.
+// Scale selection: prefers the first HDR-enabled display; falls back to the first display
+// with any valid sdr_white_nits value; otherwise keeps the current scale.
+static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale()
+{
+    auto displays = query_display_hdr_details();
+    s_sdr_scale_queried = true;
+    int best_nits = -1;
+    // First pass: HDR-active display
+    for (const auto& d : displays)
+        if (d.hdr_enabled && d.sdr_white_nits > 0) { best_nits = d.sdr_white_nits; break; }
+    // Second pass: any display with a valid reading
+    if (best_nits < 0)
+        for (const auto& d : displays)
+            if (d.sdr_white_nits > 0) { best_nits = d.sdr_white_nits; break; }
+    if (best_nits > 0)
+        s_sdr_white_scale = best_nits / 80.0f;
+    else
+        s_sdr_white_scale = 1.0f; // fallback: standard 80 nits
+    return displays;
+}
+
 // sRGB->linear decode before GPU upload.
 // ingame_overlay forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV so there is NO
 // hardware sRGB encoding at the overlay render pass.  sRGB-encoded PNG bytes write
 // as-is into the back buffer regardless of the swap-chain format.
 //
-// When to decode:
-//   FP16/scRGB swap chain (R16G16B16A16_FLOAT):
-//     sRGB bytes are stored as linear-space floats in the FP16 buffer and appear
-//     over-bright.  Pre-decoding to linear corrects this.
-//   8-bit SDR (UNORM / UNORM_SRGB):
-//     UNORM bytes pass through unchanged; hardware presents them correctly.  NO decode.
+// When to decode / adjust:
+//   FP16/scRGB swap chain (R16G16B16A16_FLOAT)  — HDR path:
+//     sRGB bytes are stored as linear-space floats and appear over-dark/over-saturated
+//     without pre-decoding.  We decode sRGB->linear and then apply a pow(0.75) brightness
+//     lift so shadow/midtone values are raised and the harsh contrast of the raw gamma-2.4
+//     curve is reduced.
+//   8-bit SDR (UNORM / UNORM_SRGB)  — SDR path:
+//     UNORM bytes pass through to the display correctly, but a gentle 1.15× contrast boost
+//     (applied in the sRGB domain around mid-grey) is added when running on a modern API
+//     with a confirmed SDR swap chain.
 //   HDR10 (R10G10B10A2, PQ gamma):
-//     sRGB decode would produce wrong PQ colours.  NO decode.
-//   DX9 / OpenGL: linear framebuffer, no sRGB path.  NO decode.
+//     sRGB decode would produce wrong PQ colours.  NO decode, NO contrast.
+//   DX9 / OpenGL: linear framebuffer, no sRGB path.  NO adjustment.
 //
 // Controlled by Overlay_Appearance::image_gamma (auto/on/off).
-// "auto": decode ONLY when the game's swap chain is confirmed FP16/scRGB
-//         (s_swapchain_is_linear == 0, set by the one-shot BeforeOverlay screenshot).
-// "on":   always decode.
-// "off":  never decode.
+// "auto": HDR decode + lift ONLY when confirmed FP16/scRGB; SDR contrast on confirmed SDR.
+// "on":   always apply HDR decode + lift.
+// "off":  never adjust.
 
 static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer,
                                          const Overlay_Appearance::SrgbDecode mode,
@@ -1636,26 +1688,93 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
         if (should_decode && s_swapchain_is_linear != 0)
             should_decode = false;
     }
-    // SD::Off, or auto decided no -> nothing to do
-    if (!should_decode) return;
 
-    // One-time LUT: sRGB uint8 -> linear uint8
-    static uint8_t lut[256];
-    static bool lut_ready = false;
-    if (!lut_ready) {
-        for (int i = 0; i < 256; ++i) {
-            float s = i / 255.0f;
-            float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
-            lut[i] = (uint8_t)(l * 255.0f + 0.5f);
+    // SDR contrast boost: on modern APIs when swap chain is confirmed SDR and mode != Off.
+    bool should_sdr_contrast = false;
+    if (!should_decode && mode != SD::Off && renderer) {
+        bool modern_api = false;
+        switch (renderer->GetRendererHookType()) {
+            case RHT::DirectX10:
+            case RHT::DirectX11:
+            case RHT::DirectX12:
+            case RHT::Vulkan:
+            case RHT::Metal:
+                modern_api = true;
+                break;
+            default:
+                break;
         }
-        lut_ready = true;
+        if (modern_api && s_swapchain_is_linear == 1)
+            should_sdr_contrast = true;
     }
-    // Apply to R, G, B channels; leave A linear (correct for RGBA PNG)
-    for (size_t i = 0; i < npixels; ++i, rgba += 4) {
-        rgba[0] = lut[rgba[0]];
-        rgba[1] = lut[rgba[1]];
-        rgba[2] = lut[rgba[2]];
+
+    if (!should_decode && !should_sdr_contrast) return;
+
+    if (should_decode) {
+        // HDR / FP16-scRGB path: sRGB->linear decode scaled by s_sdr_white_scale.
+        // s_sdr_white_scale = sdr_white_nits / 80.0f (queried from the OS display API).
+        // scRGB convention: 1.0 = 80 nits.  If Windows SDR white is 200 nits, the OS
+        // scales SDR content by 2.5x when compositing.  We apply the same factor so our
+        // overlay sits at the same perceived brightness as the game's own SDR UI.
+        // Values beyond (1.0 / scale) saturate at uint8 255 (= 1.0 in the UNORM RTV),
+        // which is an acceptable trade-off for near-white highlights.
+        static uint8_t hdr_lut[256];
+        static float   hdr_lut_built_for = -1.0f;
+        if (hdr_lut_built_for != s_sdr_white_scale) {
+            hdr_lut_built_for = s_sdr_white_scale;
+            for (int i = 0; i < 256; ++i) {
+                float s = i / 255.0f;
+                float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
+                l *= s_sdr_white_scale; // lift to match display SDR white brightness
+                hdr_lut[i] = (uint8_t)(fminf(l * 255.0f + 0.5f, 255.0f));
+            }
+        }
+        // Apply to R, G, B channels; leave A linear (correct for RGBA PNG)
+        for (size_t i = 0; i < npixels; ++i, rgba += 4) {
+            rgba[0] = hdr_lut[rgba[0]];
+            rgba[1] = hdr_lut[rgba[1]];
+            rgba[2] = hdr_lut[rgba[2]];
+        }
+    } else {
+        // SDR path: mild contrast boost (~1.15x) in the sRGB domain around mid-grey.
+        static uint8_t sdr_lut[256];
+        static bool sdr_lut_ready = false;
+        if (!sdr_lut_ready) {
+            constexpr float kContrast = 1.15f;
+            for (int i = 0; i < 256; ++i) {
+                float s = i / 255.0f;
+                float l = (s - 0.5f) * kContrast + 0.5f;
+                l = (l < 0.f ? 0.f : (l > 1.f ? 1.f : l));
+                sdr_lut[i] = (uint8_t)(l * 255.0f + 0.5f);
+            }
+            sdr_lut_ready = true;
+        }
+        // Apply to R, G, B channels; leave A unchanged
+        for (size_t i = 0; i < npixels; ++i, rgba += 4) {
+            rgba[0] = sdr_lut[rgba[0]];
+            rgba[1] = sdr_lut[rgba[1]];
+            rgba[2] = sdr_lut[rgba[2]];
+        }
     }
+}
+
+// Decode an sRGB float channel to linear and scale by s_sdr_white_scale.
+// Used to adjust ImGui style colors for FP16/scRGB (HDR) swap chains.
+// Float ImGui values are not clamped, so values above 1.0 are valid in the FP16
+// framebuffer and will appear brighter than SDR reference white — correct for HDR.
+static float srgb_ch_decode_scale(float c)
+{
+    float l = (c <= 0.04045f) ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+    return l * s_sdr_white_scale;
+}
+static ImVec4 adjust_imgui_color_for_hdr(ImVec4 c)
+{
+    // Only transform when confirmed FP16/scRGB; alpha is preserved as-is.
+    if (s_swapchain_is_linear != 0) return c;
+    return ImVec4(srgb_ch_decode_scale(c.x),
+                  srgb_ch_decode_scale(c.y),
+                  srgb_ch_decode_scale(c.z),
+                  c.w);
 }
 
 bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, bool upload_new_icon_to_gpu)
@@ -1676,14 +1795,17 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
     }
     auto image_info = settings->get_image(icon_handle);
     if (image_info) {
-        int icon_size = static_cast<int>(settings->overlay_appearance.icon_size);
-        // Work on a mutable copy so we don't corrupt the cached image data
-        std::string icon_data = image_info->data;
+        const int iw = static_cast<int>(image_info->width);
+        const int ih = static_cast<int>(image_info->height);
+        if (iw <= 0 || ih <= 0 || image_info->data.size() < (size_t)iw * ih * 4) return false;
+        // Store in the struct — AttachResource holds a raw pointer, so the buffer must outlive the resource
+        auto& icon_decoded_data = achieved ? ach.icon_decoded_data : ach.icon_gray_decoded_data;
+        icon_decoded_data = image_info->data;
         srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
-            (uint8_t*)icon_data.data(), (size_t)icon_size * icon_size);
-        icon_rsrc->AttachResource((void*)icon_data.c_str(), icon_size, icon_size);
+            (uint8_t*)icon_decoded_data.data(), (size_t)iw * ih);
+        icon_rsrc->AttachResource((void*)icon_decoded_data.data(), (uint32_t)iw, (uint32_t)ih);
         
-        PRINT_DEBUG("'%s' (result=%i)", ach.name.c_str(), (int)icon_rsrc->GetResourceId() != 0);
+        PRINT_DEBUG("'%s' (%dx%d, result=%i)", ach.name.c_str(), iw, ih, (int)icon_rsrc->GetResourceId() != 0);
     }
 
     return icon_rsrc->GetResourceId() != 0;
@@ -1695,6 +1817,30 @@ void Steam_Overlay::overlay_render_proc()
     std::lock_guard lock(overlay_mutex);
 
     if (!Ready()) return;
+
+    // Lazy-init SDR white scale from display info on the first frame.
+    // Placed here because refresh_sdr_white_scale() is defined after the hook-ready
+    // callback where arm_swapchain_format_detect is called.
+    if (!s_sdr_scale_queried)
+        refresh_sdr_white_scale();
+
+    // HDR style color normalisation.
+    // ingame_overlay forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV, so ImGui vertex
+    // colours (authored as sRGB 0-1 floats) are stored as raw UNORM floats when the
+    // overlay is composited into an FP16/scRGB swap chain.  That makes every UI element
+    // appear too dark and over-saturated in HDR.  We apply sRGB->linear + brightness
+    // lift to all style colours for the duration of this frame and restore afterwards.
+    ImVec4 saved_imgui_colors[ImGuiCol_COUNT];
+    bool imgui_colors_patched = false;
+    if (s_swapchain_is_linear == 0) {
+        ImVec4 *cols = ImGui::GetStyle().Colors;
+        memcpy(saved_imgui_colors, cols, sizeof(saved_imgui_colors));
+        for (int i = 0; i < ImGuiCol_COUNT; ++i) {
+            if (cols[i].w <= 0.f) continue; // skip fully transparent
+            cols[i] = adjust_imgui_color_for_hdr(cols[i]);
+        }
+        imgui_colors_patched = true;
+    }
 
     if (show_overlay) {
         render_main_window();
@@ -1709,6 +1855,10 @@ void Steam_Overlay::overlay_render_proc()
         stats.render_stats(current_language);
     }
 
+    if (imgui_colors_patched) {
+        memcpy(ImGui::GetStyle().Colors, saved_imgui_colors, sizeof(saved_imgui_colors));
+    }
+
     load_next_ach_icon();
 }
 
@@ -1719,12 +1869,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.background_g >= 0) &&
         (settings->overlay_appearance.background_b >= 0) &&
         (settings->overlay_appearance.background_a >= 0)) {
-        ImVec4 colorSet = ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
             settings->overlay_appearance.background_r,
             settings->overlay_appearance.background_g,
             settings->overlay_appearance.background_b,
             settings->overlay_appearance.background_a
-        );
+        ));
         ImGui::PushStyleColor(ImGuiCol_WindowBg, colorSet);
         style_color_stack += 1;
     }
@@ -1733,12 +1883,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_g >= 0) &&
         (settings->overlay_appearance.element_b >= 0) &&
         (settings->overlay_appearance.element_a >= 0)) {
-        ImVec4 colorSet = ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
             settings->overlay_appearance.element_r,
             settings->overlay_appearance.element_g,
             settings->overlay_appearance.element_b,
             settings->overlay_appearance.element_a
-        );
+        ));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, colorSet);
         ImGui::PushStyleColor(ImGuiCol_Button, colorSet);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, colorSet);
@@ -1750,12 +1900,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_hovered_g >= 0) &&
         (settings->overlay_appearance.element_hovered_b >= 0) &&
         (settings->overlay_appearance.element_hovered_a >= 0)) {
-        ImVec4 colorSet = ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
             settings->overlay_appearance.element_hovered_r,
             settings->overlay_appearance.element_hovered_g,
             settings->overlay_appearance.element_hovered_b,
             settings->overlay_appearance.element_hovered_a
-        );
+        ));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colorSet);
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, colorSet);
         ImGui::PushStyleColor(ImGuiCol_ResizeGripHovered, colorSet);
@@ -1767,12 +1917,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_active_g >= 0) &&
         (settings->overlay_appearance.element_active_b >= 0) &&
         (settings->overlay_appearance.element_active_a >= 0)) {
-        ImVec4 colorSet = ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
             settings->overlay_appearance.element_active_r,
             settings->overlay_appearance.element_active_g,
             settings->overlay_appearance.element_active_b,
             settings->overlay_appearance.element_active_a
-        );
+        ));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, colorSet);
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, colorSet);
         ImGui::PushStyleColor(ImGuiCol_ResizeGripActive, colorSet);
@@ -2004,11 +2154,11 @@ void Steam_Overlay::render_main_window()
             }
             ImGui::TextDisabled("sRGB corr. : %s  — %s", corr_str, corr_reason);
 
-            // -- Per-display info (queried once per launch) --
+            // -- Per-display info (queried once per launch; also updates s_sdr_white_scale) --
             static bool displays_queried = false;
             static std::vector<DisplayHdrDetail_t> displays;
             if (!displays_queried) {
-                displays         = query_display_hdr_details();
+                displays         = refresh_sdr_white_scale();
                 displays_queried = true;
             }
             if (displays.empty()) {
@@ -2037,10 +2187,14 @@ void Steam_Overlay::render_main_window()
             }
 
             if (ImGui::SmallButton("Refresh##hdr_info")) {
-                displays_queried = false;
+                displays = refresh_sdr_white_scale();
+                displays_queried = true;
                 if (_renderer)
                     arm_swapchain_format_detect(_renderer);
             }
+            if (s_swapchain_is_linear == 0)
+                ImGui::TextDisabled("HDR scale  : %.2fx  (SDR white = %d nits)",
+                    s_sdr_white_scale, (int)(s_sdr_white_scale * 80.f + 0.5f));
         }
         ImGui::Separator();
         // -------------------------------------------------------------------
@@ -3161,7 +3315,16 @@ void Steam_Overlay::ShowOverlay(bool state)
 
     show_overlay = state;
     overlay_state_changed = true;
-    
+
+    // Refresh display HDR/SDR info and swapchain detection every time the overlay opens.
+    // This picks up any SDR white level changes the user may have made in Windows settings
+    // (HDR brightness slider) as well as HDR on/off toggles, without requiring a restart.
+    if (state) {
+        refresh_sdr_white_scale();
+        if (_renderer)
+            arm_swapchain_format_detect(_renderer);
+    }
+
     PRINT_DEBUG("%i", (int)state);
     
     Steam_Overlay::allow_renderer_frame_processing(state);

@@ -76,6 +76,8 @@ struct Overlay_Achievement
     InGameOverlay::RendererResource_t* icon_gray{};
     int icon_handle = Settings::UNLOADED_IMAGE_HANDLE;
     int icon_gray_handle = Settings::UNLOADED_IMAGE_HANDLE;
+    std::string icon_decoded_data{};
+    std::string icon_gray_decoded_data{};
 };
 
 struct Notification
