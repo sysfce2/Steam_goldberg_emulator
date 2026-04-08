@@ -17,7 +17,7 @@
 
 #include "overlay_bridge.h"
 #include "dll/dll.h"                    // get_steam_client()
-#include "dll/dll/steam_client.h"       // Steam_Client → steam_overlay
+#include "dll/steam_client.h"           // Steam_Client → steam_overlay
 #include "overlay/steam_overlay.h"
 
 #include <cstring>
