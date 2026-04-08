@@ -217,7 +217,9 @@ end
 -- common defines
 ---------
 local common_emu_defines = { -- added to all filters, later defines will be appended
-    "UTF_CPP_CPLUSPLUS=201703L", "CURL_STATICLIB", "CONTROLLER_SUPPORT", "EMU_BUILD_STRING=" .. _OPTIONS["emubuild"], "EMU_BUILD_DATE_STRING=" .. _OPTIONS["emubuilddate"],
+    "UTF_CPP_CPLUSPLUS=201703L", "CURL_STATICLIB", "CONTROLLER_SUPPORT",
+    'EMU_BUILD_STRING="' .. _OPTIONS["emubuild"] .. '"',
+    'EMU_BUILD_DATE_STRING="' .. _OPTIONS["emubuilddate"] .. '"',
 }
 
 -- include dirs
