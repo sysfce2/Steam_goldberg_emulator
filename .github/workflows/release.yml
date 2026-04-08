@@ -34,12 +34,13 @@ jobs:
 
       # we need branch because it has package scripts
       - name: "Checkout branch"
-        shell: "cmd"
-        working-directory: "${{ github.workspace }}"
-        run: |
-          git clone https://github.com/${{ github.repository }}.git .
-          git checkout ${{ github.sha }}
-          git submodule update --init --recursive
+        uses: actions/checkout@v6
+
+      - name: "Clone third-party deps (deps/win)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/deps/win"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
 
       # download artifacts
       - name: "Download emu build artifacts (Win)"
@@ -107,12 +108,13 @@ jobs:
     steps:
       # we need branch because it has package scripts
       - name: "Checkout branch"
-        shell: "bash"
-        working-directory: "${{ github.workspace }}"
-        run: |
-          git clone https://github.com/${{ github.repository }}.git .
-          git checkout ${{ github.sha }}
-          git submodule update --init --recursive
+        uses: actions/checkout@v6
+
+      - name: "Clone third-party deps (deps/linux)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/deps/linux"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/linux"
 
       # download artifacts
       - name: "Download emu build artifacts (linux)"

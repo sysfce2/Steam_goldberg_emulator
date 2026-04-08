@@ -74,13 +74,13 @@ jobs:
         uses: microsoft/setup-msbuild@v3
 
       # clone branch
-      - name: "Checkout with submodules"
-        shell: "cmd"
-        working-directory: "${{ github.workspace }}"
-        run: |
-          git clone https://github.com/${{ github.repository }}.git .
-          git checkout ${{ github.sha }}
-          git submodule update --init --recursive
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+
+
+
+
+
 
       # deps
       - name: "Restore deps"
@@ -89,6 +89,19 @@ jobs:
         with:
           key: "${{ env.DEPS_CACHE_KEY }}-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+
+      # extra helpers/tools, these are not built inside the deps build dir
+      - name: "Clone third-party build helpers (common/win)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/common/win"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/win"
+
+      - name: "Clone third-party deps (build/win)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/build/win"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/build/win"
 
       # generate project files
       - name: "Generate project files"
