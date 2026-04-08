@@ -1790,7 +1790,10 @@ static void render_achievement_list()
                 dl->AddText(f, sz, pos, col, text);
             };
 
-            ImVec2 sym_sz = fnt->CalcTextSizeA(sym_font_sz, FLT_MAX, 0.0f, sym);
+            // Estimate symbol size using current font metrics scaled to sym_font_sz
+            ImVec2 cur_sz = ImGui::CalcTextSize(sym);
+            float scale = sym_font_sz / ImGui::GetFontSize();
+            ImVec2 sym_sz = { cur_sz.x * scale, cur_sz.y * scale };
             ImVec2 sym_pos = { sbar_pos.x + 4.0f, sbar_pos.y + (bar_h - sym_sz.y) * 0.5f };
             draw_shadowed_ex(fnt, sym_font_sz, sym_pos, sym_col, sym);
 
