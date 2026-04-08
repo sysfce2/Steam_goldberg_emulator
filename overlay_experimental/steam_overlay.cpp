@@ -4032,7 +4032,12 @@ void Steam_Overlay::Bridge_RequestSaveSettings()
 
 void Steam_Overlay::Bridge_MarkConnected()
 {
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     bridge_connected.store(true, std::memory_order_relaxed);
+    // The addon has its own ImGui context, so we don't need the native one.
+    // Set late_init_imgui and is_ready so Ready() returns true and bridge calls work.
+    late_init_imgui.store(true, std::memory_order_relaxed);
+    is_ready = true;
 }
 
 bool Steam_Overlay::Bridge_IsConnected() const
