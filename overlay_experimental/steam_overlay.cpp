@@ -56,6 +56,10 @@ static const char* s_swapchain_type_str  = "Detecting..."; // HDR/SDR type  |  g
 static float       s_sdr_white_scale     = 1.0f;
 static bool        s_sdr_scale_queried   = false; // true once display info has been queried
 
+// Forward declaration — defined after query_display_hdr_details() below.
+struct DisplayHdrDetail_t;
+static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale();
+
 // Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
 static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
 {
