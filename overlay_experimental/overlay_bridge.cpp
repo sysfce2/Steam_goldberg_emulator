@@ -8,12 +8,14 @@
  * the public accessor methods added for this purpose.
  */
 
-#ifdef EMU_OVERLAY
+#if defined(EMU_OVERLAY) && defined(_WIN32)
 
+#ifdef _WIN32
 // winsock2.h MUST come before anything that might pull in winsock.h
 // (dll.h → windows.h → winsock.h) to avoid type-redefinition errors.
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#endif
 
 #include "overlay_bridge.h"
 #include "dll/dll.h"                    // get_steam_client()
