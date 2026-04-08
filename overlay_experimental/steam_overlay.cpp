@@ -308,8 +308,10 @@ Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, S
     stats(Steam_Overlay_Stats(settings))
 {
     // don't even bother initializing the overlay
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
+    // Only create renderer worker threads when the native overlay is enabled
+    if (!settings->disable_overlay) {
     renderer_hook_init_thread = common_helpers::KillableWorker(
         [this](void *){ return renderer_hook_proc(); },
         std::chrono::milliseconds(0),
@@ -328,6 +330,7 @@ Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, S
         std::chrono::milliseconds(0),
         [this] { return !setup_overlay_called; }
     );
+    } // !disable_overlay
 
     parse_key_combo();
     strncpy(username_text, settings->get_local_name(), sizeof(username_text));
@@ -360,7 +363,7 @@ Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, S
 
 Steam_Overlay::~Steam_Overlay()
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     UnSetupOverlay();
 
@@ -765,6 +768,9 @@ void Steam_Overlay::allow_renderer_frame_processing(bool state, bool cleaning_up
     // this is very important internally it calls the necessary fuctions
     // to properly update ImGui window size on the next overlay_render_proc() call
 
+    // In bridge-only mode _renderer is null — nothing to do.
+    if (!_renderer) return;
+
     if (state) {
         auto new_val = ++renderer_frame_processing_requests;
         if (new_val == 1) { // only take an action on first request
@@ -784,6 +790,9 @@ void Steam_Overlay::allow_renderer_frame_processing(bool state, bool cleaning_up
 }
 
 void Steam_Overlay::obscure_game_input(bool state) {
+    // In bridge-only mode _renderer is null and ImGui context is not ours.
+    if (!_renderer) return;
+
     if (state) {
         auto new_val = ++obscure_cursor_requests;
         if (new_val == 1) { // only take an action on first request
@@ -920,6 +929,7 @@ bool Steam_Overlay::submit_notification(
 
     Notification notif{};
     notif.start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+    notif.steady_start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
     notif.id = id;
     notif.type = (uint8)type;
     notif.message = msg;
@@ -1869,9 +1879,11 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
 // Try to make this function as short as possible or it might affect game's fps.
 void Steam_Overlay::overlay_render_proc()
 {
-    // When the ReShade addon is connected, it handles all rendering.
+    // When the ReShade addon is actively connected, it handles all rendering.
     // We still keep data structures alive so the bridge can read them.
-    if (bridge_connected.load(std::memory_order_relaxed)) return;
+    // If the addon stops calling (unloaded/disabled), the heartbeat goes stale
+    // and the native overlay automatically resumes after the timeout.
+    if (Bridge_IsConnected()) return;
 
     std::lock_guard lock(overlay_mutex);
 
@@ -3237,13 +3249,17 @@ void Steam_Overlay::load_next_ach_icon()
 
 void Steam_Overlay::SetupOverlay()
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
 
     bool not_called_yet = false;
     if (setup_overlay_called.compare_exchange_weak(not_called_yet, true)) {
+        // In bridge-only mode (overlay disabled but bridge enabled), skip the
+        // native renderer detector — the ReShade addon handles all rendering.
+        if (settings->disable_overlay) return;
+
         if (settings->overlay_hook_delay_sec > 0) {
             PRINT_DEBUG("waiting %i seconds", settings->overlay_hook_delay_sec);
             renderer_detector_delay_thread.start();
@@ -3259,7 +3275,7 @@ void Steam_Overlay::SetupOverlay()
 
 void Steam_Overlay::UnSetupOverlay()
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -3307,18 +3323,21 @@ void Steam_Overlay::UnSetupOverlay()
 
 bool Steam_Overlay::Ready() const
 {
+    // Bridge-only mode: Ready if bridge is connected (it sets is_ready + late_init_imgui)
+    if (settings->disable_overlay && settings->enable_overlay_bridge)
+        return is_ready && late_init_imgui;
     return !settings->disable_overlay && is_ready && late_init_imgui;
 }
 
 bool Steam_Overlay::NeedPresent() const
 {
     PRINT_DEBUG_ENTRY();
-    return !settings->disable_overlay;
+    return !settings->disable_overlay || settings->enable_overlay_bridge;
 }
 
 void Steam_Overlay::SetNotificationPosition(ENotificationPosition eNotificationPosition)
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG("TODO %i", (int)eNotificationPosition);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -3328,7 +3347,7 @@ void Steam_Overlay::SetNotificationPosition(ENotificationPosition eNotificationP
 
 void Steam_Overlay::SetNotificationInset(int nHorizontalInset, int nVerticalInset)
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG("TODO x=%i y=%i", nHorizontalInset, nVerticalInset);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -3463,7 +3482,7 @@ void Steam_Overlay::SetRichInvite(Friend friendId, const char* connect_str)
 
 void Steam_Overlay::FriendConnect(Friend _friend)
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG("%" PRIu64 "", _friend.id());
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -3487,7 +3506,7 @@ void Steam_Overlay::FriendConnect(Friend _friend)
 
 void Steam_Overlay::FriendDisconnect(Friend _friend)
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG("%" PRIu64 "", _friend.id());
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -3504,7 +3523,7 @@ void Steam_Overlay::FriendDisconnect(Friend _friend)
 // show a notification when the user unlocks an achievement
 void Steam_Overlay::AddAchievementNotification(const std::string &ach_name, nlohmann::json const &ach, bool for_progress)
 {
-    if (settings->disable_overlay) return;
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
 
     PRINT_DEBUG("'%s' %i", ach_name.c_str(), (int)for_progress);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -3904,7 +3923,7 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
 
         o.id = n.id;
         o.type = n.type;
-        o.start_time_ms = n.start_time.count();
+        o.start_time_ms = n.steady_start_time.count();
 
         auto duration = get_notification_duration(static_cast<notification_type>(n.type));
         o.duration_ms = duration.count();
@@ -3951,6 +3970,14 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
 
         ++written;
     }
+
+    // In bridge mode, build_notifications() never runs, so expired notifications
+    // would pile up forever. Clean them up here.
+    notifications.erase(
+        std::remove_if(notifications.begin(), notifications.end(),
+            [](const Notification &item) { return item.expired; }),
+        notifications.end());
+
     return written;
 }
 
@@ -4030,19 +4057,33 @@ void Steam_Overlay::Bridge_RequestSaveSettings()
     save_settings = true;
 }
 
+// If the addon hasn't called GetState() in this long, consider it disconnected
+// and let the native overlay resume rendering (when enabled).
+static constexpr int64_t BRIDGE_HEARTBEAT_TIMEOUT_MS = 5000;
+
+static int64_t bridge_now_ms()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 void Steam_Overlay::Bridge_MarkConnected()
 {
-    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
-    bridge_connected.store(true, std::memory_order_relaxed);
-    // The addon has its own ImGui context, so we don't need the native one.
-    // Set late_init_imgui and is_ready so Ready() returns true and bridge calls work.
-    late_init_imgui.store(true, std::memory_order_relaxed);
-    is_ready = true;
+    auto prev = bridge_last_heartbeat_ms.exchange(bridge_now_ms(), std::memory_order_relaxed);
+    if (prev == 0) {
+        // First connection — set is_ready and late_init_imgui so Ready() returns true.
+        // Needed for bridge-only mode where native hooks don't set these.
+        std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+        late_init_imgui.store(true, std::memory_order_relaxed);
+        is_ready = true;
+    }
 }
 
 bool Steam_Overlay::Bridge_IsConnected() const
 {
-    return bridge_connected.load(std::memory_order_relaxed);
+    auto last = bridge_last_heartbeat_ms.load(std::memory_order_relaxed);
+    if (last == 0) return false;
+    return (bridge_now_ms() - last) < BRIDGE_HEARTBEAT_TIMEOUT_MS;
 }
 
 void Steam_Overlay::Bridge_TestAchievement()

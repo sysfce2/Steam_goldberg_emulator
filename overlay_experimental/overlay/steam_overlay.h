@@ -9,6 +9,7 @@
 
 #include <future>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include "InGameOverlay/RendererHook.h"
 #include "InGameOverlay/ImGui/imgui.h"
@@ -88,7 +89,8 @@ struct Notification
     int id{};
     uint8 type{};
     bool expired = false;
-    std::chrono::milliseconds start_time{};
+    std::chrono::milliseconds start_time{};        // system_clock (used by native overlay)
+    std::chrono::milliseconds steady_start_time{};  // steady_clock (used by bridge/addon)
     std::string message{};
     std::pair<const Friend, friend_window_state>* frd{};
     std::optional<Overlay_Achievement> ach{};
@@ -225,7 +227,7 @@ class Steam_Overlay
 
     std::recursive_mutex overlay_mutex{};
     std::atomic<bool> setup_overlay_called = false;
-    std::atomic<bool> bridge_connected = false; // set when ReShade addon calls bridge
+    std::atomic<int64_t> bridge_last_heartbeat_ms{0}; // steady_clock ms, 0 = never connected
 
     std::map<std::string, std::vector<char>> wav_files{
         { "overlay_achievement_notification.wav", std::vector<char>{} },

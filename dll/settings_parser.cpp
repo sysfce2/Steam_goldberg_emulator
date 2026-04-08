@@ -1556,6 +1556,9 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
     settings_client->disable_overlay = !ini.GetBoolValue("overlay::general", "enable_experimental_overlay", !settings_client->disable_overlay);
     settings_server->disable_overlay = !ini.GetBoolValue("overlay::general", "enable_experimental_overlay", !settings_server->disable_overlay);
 
+    settings_client->enable_overlay_bridge = ini.GetBoolValue("overlay::general", "enable_experimental_bridge", settings_client->enable_overlay_bridge);
+    settings_server->enable_overlay_bridge = ini.GetBoolValue("overlay::general", "enable_experimental_bridge", settings_server->enable_overlay_bridge);
+
     {
         auto val = ini.GetLongValue("overlay::general", "hook_delay_sec", -1);
         if (val >= 0) {
