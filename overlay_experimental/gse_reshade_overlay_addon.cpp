@@ -792,6 +792,11 @@ static void on_reshade_overlay(effect_runtime *runtime)
             s_bridge.ShowOverlay(s_show_main_overlay ? 1 : 0);
     }
 
+    // Show a software cursor when the GSE overlay is open.
+    // ReShade only renders its own cursor when its settings panel is visible,
+    // but our overlay needs one too.
+    ImGui::GetIO().MouseDrawCursor = s_show_main_overlay;
+
     // Main overlay window
     if (s_show_main_overlay) {
         render_main_overlay(runtime);

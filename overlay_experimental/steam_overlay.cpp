@@ -3706,12 +3706,14 @@ void Steam_Overlay::steam_run_callback()
     if (overlay_state_changed) {
         overlay_state_changed = false;
 
-        GameOverlayActivated_t data{};
-        data.m_bActive = show_overlay;
-        data.m_bUserInitiated = true;
-        data.m_dwOverlayPID = 123;
-        data.m_nAppID = settings->get_local_game_id().AppID();
-        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+        if (!settings->disable_overlay_activated_callback) {
+            GameOverlayActivated_t data{};
+            data.m_bActive = show_overlay;
+            data.m_bUserInitiated = true;
+            data.m_dwOverlayPID = 123;
+            data.m_nAppID = settings->get_local_game_id().AppID();
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+        }
     }
 
     Steam_Friends* steamFriends = get_steam_client()->steam_friends;
