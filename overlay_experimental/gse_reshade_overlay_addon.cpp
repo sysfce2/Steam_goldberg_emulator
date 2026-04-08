@@ -797,6 +797,12 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // but our overlay needs one too.
     ImGui::GetIO().MouseDrawCursor = s_show_main_overlay;
 
+    // While the overlay is open, block game input so the mouse and keyboard
+    // are routed to ImGui instead of the game.  This also makes ReShade
+    // show/update the cursor position even when the game hasn't created one.
+    if (s_show_main_overlay)
+        runtime->block_input_next_frame();
+
     // Main overlay window
     if (s_show_main_overlay) {
         render_main_overlay(runtime);
