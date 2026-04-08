@@ -1558,6 +1558,9 @@ struct DisplayHdrDetail_t {
     int  bpc             = 0;       // bits per colour channel; 0 = unknown
     int  sdr_white_nits  = -1;      // SDR white point in nits; -1 = unavailable
     char encoding[16]    = {};      // "RGB", "YCbCr444", "YCbCr422", "YCbCr420"
+    char gamut[24]       = {};      // inferred: "BT.2020", "P3/BT.2020 WCG", "sRGB/BT.709"
+    char transfer[16]    = {};      // inferred: "PQ/ST.2084", "sRGB-ext", "gamma 2.2"
+    char range[8]        = {};      // inferred: "Full", "Limited", "?"
     char name[128]       = {};      // friendly monitor name (UTF-8)
 };
 
@@ -1618,6 +1621,30 @@ static std::vector<DisplayHdrDetail_t> query_display_hdr_details()
             WideCharToMultiByte(CP_UTF8, 0, tdn.monitorFriendlyDeviceName, -1, d.name, sizeof(d.name)-1, nullptr, nullptr);
         if (!d.name[0])
             strncpy(d.name, "Unknown Display", sizeof(d.name)-1);
+
+        // Inferred transfer function / gamma
+        if (d.hdr_enabled)
+            strncpy(d.transfer, "PQ/ST.2084", sizeof(d.transfer)-1);
+        else if (d.wide_color)
+            strncpy(d.transfer, "sRGB-ext", sizeof(d.transfer)-1);
+        else
+            strncpy(d.transfer, "gamma 2.2", sizeof(d.transfer)-1);
+
+        // Inferred color gamut
+        if (d.hdr_enabled)
+            strncpy(d.gamut, "BT.2020", sizeof(d.gamut)-1);
+        else if (d.wide_color)
+            strncpy(d.gamut, "P3/BT.2020 WCG", sizeof(d.gamut)-1);
+        else
+            strncpy(d.gamut, "sRGB/BT.709", sizeof(d.gamut)-1);
+
+        // Inferred color range (RGB on PC = full; YCbCr = limited)
+        if (d.encoding[0] == 'R')
+            strncpy(d.range, "Full", sizeof(d.range)-1);
+        else if (d.encoding[0] == 'Y')
+            strncpy(d.range, "Limited", sizeof(d.range)-1);
+        else
+            strncpy(d.range, "?", sizeof(d.range)-1);
 
         result.push_back(d);
     }
@@ -2192,12 +2219,10 @@ void Steam_Overlay::render_main_window()
                     char white_buf[24] = "?";
                     if (d.sdr_white_nits >= 0)
                         snprintf(white_buf, sizeof(white_buf), "%d nits", d.sdr_white_nits);
-                    if (di == 0)
-                        ImGui::TextDisabled("Display %d  : %s  |  %s  |  %sbpc  |  %s  |  SDR white: %s",
-                            di+1, d.name, hdr_st, bpc_buf, d.encoding, white_buf);
-                    else
-                        ImGui::TextDisabled("Display %d  : %s  |  %s  |  %sbpc  |  %s  |  SDR white: %s",
-                            di+1, d.name, hdr_st, bpc_buf, d.encoding, white_buf);
+                    ImGui::TextDisabled("Display %d  : %s  |  %s  |  %sbpc  |  SDR white: %s",
+                        di+1, d.name, hdr_st, bpc_buf, white_buf);
+                    ImGui::TextDisabled("           : gamut: %s  |  TF: %s  |  range: %s  |  enc: %s",
+                        d.gamut, d.transfer, d.range, d.encoding);
                 }
             }
 
