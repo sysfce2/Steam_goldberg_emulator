@@ -328,7 +328,7 @@ __declspec(dllexport) int GSE_OverlayBridge_GetSceSeries(GSE_SceSeries *out, int
     auto *us = client->steam_user_stats;
     if (!us->sce_data_populated) return 0;
 
-    int count = std::min(max_count, (int)us->sce_game_data.series.size());
+    int count = (std::min)(max_count, (int)us->sce_game_data.series.size());
     for (int i = 0; i < count; ++i) {
         auto &s = us->sce_game_data.series[i];
         memset(&out[i], 0, sizeof(out[i]));
@@ -354,7 +354,7 @@ __declspec(dllexport) int GSE_OverlayBridge_GetSceItems(int series_number, GSE_S
     }
     if (!series) return 0;
 
-    int count = std::min(max_count, (int)series->items.size());
+    int count = (std::min)(max_count, (int)series->items.size());
     for (int i = 0; i < count; ++i) {
         auto &item = series->items[i];
         memset(&out[i], 0, sizeof(out[i]));
