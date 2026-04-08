@@ -901,6 +901,7 @@ project "api_experimental"
     }
     removefiles {
         'libs/detours/uimports.cc',
+        'overlay_experimental/gse_reshade_overlay_addon.cpp', -- built separately as a ReShade addon
     }
     -- deps
     filter { 'options:incdeps', "platforms:x32", }
@@ -1035,6 +1036,7 @@ project "steamclient_experimental"
     removefiles {
         'libs/detours/uimports.cc',
         'dll/flat.cpp',
+        'overlay_experimental/gse_reshade_overlay_addon.cpp', -- built separately as a ReShade addon
     }
     -- deps
     filter { 'options:incdeps', "platforms:x32", }
@@ -1295,6 +1297,64 @@ project "lib_game_overlay_renderer"
             "resources/win/game_overlay_renderer/64/resources.rc"
         }
 -- End lib_game_overlay_renderer
+
+
+
+-- Project reshade_addon_overlay (Windows-only ReShade addon DLL)
+---------
+if os.target() == "windows" then
+project "reshade_addon_overlay"
+    kind "SharedLib"
+    location "%{wks.location}/%{prj.name}"
+    targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/reshade_addon/%{cfg.platform}"))
+
+    -- target name & extension
+    ---------
+    filter { "platforms:x32", }
+        targetname "gse_overlay"
+        targetextension ".addon"
+    filter { "platforms:x64", }
+        targetname "gse_overlay"
+        targetextension ".addon64"
+
+    -- defines
+    ---------
+    filter {} -- reset
+    defines {
+        "ImTextureID=ImU64",
+        "WIN32_LEAN_AND_MEAN",
+        "NOMINMAX",
+        "_CRT_SECURE_NO_WARNINGS",
+    }
+
+    -- include dirs (only ReShade + ImGui headers, no emu internals)
+    ---------
+    filter {} -- reset
+    includedirs {
+        "libs/reshade",
+        "libs/reshade/imgui",
+        "overlay_experimental",
+    }
+
+    -- source files
+    ---------
+    filter {} -- reset
+    files {
+        "overlay_experimental/gse_reshade_overlay_addon.cpp",
+        "overlay_experimental/overlay_bridge.h",
+    }
+
+    -- no libs to link — reshade.hpp is header-only, ImGui is provided by ReShade at runtime
+
+    -- build options
+    ---------
+    filter { "action:vs*", }
+        buildoptions { "/std:c++17" }
+    filter { "action:not vs*", }
+        buildoptions { "-std=c++17" }
+
+end -- windows only
+-- End reshade_addon_overlay
 
 
 

@@ -225,6 +225,7 @@ class Steam_Overlay
 
     std::recursive_mutex overlay_mutex{};
     std::atomic<bool> setup_overlay_called = false;
+    std::atomic<bool> bridge_connected = false; // set when ReShade addon calls bridge
 
     std::map<std::string, std::vector<char>> wav_files{
         { "overlay_achievement_notification.wav", std::vector<char>{} },
@@ -341,6 +342,34 @@ public:
 
     // Called by Steam_User_Stats when SCE asset downloads finish
     void NotifySceAssetsReady(uint32_t downloaded, uint32_t skipped, uint32_t total);
+
+    // ── Bridge accessor methods (called by overlay_bridge.cpp exports) ──
+    struct BridgeStatsSnapshot {
+        bool  show_fps{};
+        bool  show_frametime{};
+        bool  show_playtime{};
+        float fps{};
+        float frametime_ms{};
+        float playtime_hr{};
+        float playtime_min{};
+        float playtime_sec{};
+    };
+
+    bool Bridge_GetWarnLocalSave() const;
+    bool Bridge_GetWarnBadAppId() const;
+    int  Bridge_GetNotifPosition() const;
+    BridgeStatsSnapshot Bridge_GetStatsState() const;
+    int  Bridge_GetAchievementCount() const;
+    int  Bridge_GetAchievements(struct GSE_Achievement *out, int max_count) const;
+    int  Bridge_GetNotifications(struct GSE_Notification *out, int max_count);
+    void Bridge_ExpireNotification(int id);
+    int  Bridge_GetDisplayInfo(struct GSE_DisplayInfo *out, int max_count) const;
+    float Bridge_GetSDRWhiteScale() const;
+    int  Bridge_GetFriendCount() const;
+    int  Bridge_GetFriends(struct GSE_Friend *out, int max_count) const;
+    void Bridge_RequestSaveSettings();
+    void Bridge_MarkConnected();
+    bool Bridge_IsConnected() const;
 };
 
 #else // EMU_OVERLAY

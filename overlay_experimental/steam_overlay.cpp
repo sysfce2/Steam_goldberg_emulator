@@ -1863,6 +1863,10 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
 // Try to make this function as short as possible or it might affect game's fps.
 void Steam_Overlay::overlay_render_proc()
 {
+    // When the ReShade addon is connected, it handles all rendering.
+    // We still keep data structures alive so the bridge can read them.
+    if (bridge_connected.load(std::memory_order_relaxed)) return;
+
     std::lock_guard lock(overlay_mutex);
 
     if (!Ready()) return;
@@ -3755,5 +3759,234 @@ void Steam_Overlay::networking_msg_received(Common_Message *msg)
     }
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+ *  Bridge accessor methods — called by overlay_bridge.cpp (C ABI exports).
+ *  These run on whatever thread the addon calls from (ReShade render thread).
+ *  We lock overlay_mutex for thread safety.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#include "overlay_bridge.h"
+
+bool Steam_Overlay::Bridge_GetWarnLocalSave() const
+{
+    return warn_local_save;
+}
+
+bool Steam_Overlay::Bridge_GetWarnBadAppId() const
+{
+    return warn_bad_appid;
+}
+
+int Steam_Overlay::Bridge_GetNotifPosition() const
+{
+    // Map ENotificationPosition to GSE_NotifPosition
+    switch (notif_position) {
+    case k_EPositionTopLeft:     return GSE_NOTIF_POS_TOP_LEFT;
+    case k_EPositionTopRight:    return GSE_NOTIF_POS_TOP_RIGHT;
+    case k_EPositionBottomLeft:  return GSE_NOTIF_POS_BOT_LEFT;
+    case k_EPositionBottomRight: return GSE_NOTIF_POS_BOT_RIGHT;
+    default:                     return GSE_NOTIF_POS_BOT_LEFT;
+    }
+}
+
+Steam_Overlay::BridgeStatsSnapshot Steam_Overlay::Bridge_GetStatsState() const
+{
+    BridgeStatsSnapshot s{};
+    s.show_fps       = stats.show_fps;
+    s.show_frametime = stats.show_frametime;
+    s.show_playtime  = stats.show_playtime;
+    // Stats values are updated on the render thread; we read them directly.
+    // The addon will compute its own FPS/frametime since it has its own frame loop.
+    s.fps = 0;
+    s.frametime_ms = 0;
+    s.playtime_hr = 0;
+    s.playtime_min = 0;
+    s.playtime_sec = 0;
+    return s;
+}
+
+int Steam_Overlay::Bridge_GetAchievementCount() const
+{
+    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+    return static_cast<int>(achievements.size());
+}
+
+static void bridge_safe_copy(char *dst, size_t dst_sz, const std::string &src)
+{
+    if (!dst || !dst_sz) return;
+    strncpy(dst, src.c_str(), dst_sz - 1);
+    dst[dst_sz - 1] = '\0';
+}
+
+int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count) const
+{
+    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+
+    int count = std::min(max_count, static_cast<int>(achievements.size()));
+    for (int i = 0; i < count; ++i) {
+        const auto &a = achievements[i];
+        auto &o = out[i];
+        memset(&o, 0, sizeof(o));
+
+        bridge_safe_copy(o.name, sizeof(o.name), a.name);
+        bridge_safe_copy(o.title, sizeof(o.title), a.title);
+        bridge_safe_copy(o.description, sizeof(o.description), a.description);
+        o.progress = a.progress;
+        o.max_progress = a.max_progress;
+        o.unlock_time = a.unlock_time;
+        o.hidden = a.hidden ? 1 : 0;
+        o.achieved = a.achieved ? 1 : 0;
+
+        // Global percentage
+        auto it = ach_global_percentages.find(a.name);
+        o.global_percent = (it != ach_global_percentages.end()) ? it->second : -1.0f;
+
+        // Icon pixel data — point directly into decoded data buffers.
+        // These are valid until the next call (the emu won't modify them while
+        // the bridge is being called, because the render thread is us).
+        if (!a.icon_decoded_data.empty()) {
+            o.icon_pixels = reinterpret_cast<const uint8_t*>(a.icon_decoded_data.data());
+            o.icon_w = 64;  // achievement icons are always 64x64
+            o.icon_h = 64;
+        }
+        if (!a.icon_gray_decoded_data.empty()) {
+            o.icon_gray_pixels = reinterpret_cast<const uint8_t*>(a.icon_gray_decoded_data.data());
+            o.icon_gray_w = 64;
+            o.icon_gray_h = 64;
+        }
+    }
+    return count;
+}
+
+int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+
+    int written = 0;
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch());
+
+    for (auto &n : notifications) {
+        if (n.expired) continue;
+        if (written >= max_count) break;
+
+        auto &o = out[written];
+        memset(&o, 0, sizeof(o));
+
+        o.id = n.id;
+        o.type = n.type;
+        o.start_time_ms = n.start_time.count();
+
+        auto duration = get_notification_duration(static_cast<notification_type>(n.type));
+        o.duration_ms = duration.count();
+
+        bridge_safe_copy(o.message, sizeof(o.message), n.message);
+
+        // Achievement data if present
+        if (n.ach.has_value()) {
+            const auto &a = n.ach.value();
+            bridge_safe_copy(o.ach_title, sizeof(o.ach_title), a.title);
+            o.ach_progress = a.progress;
+            o.ach_max_progress = a.max_progress;
+            o.ach_achieved = a.achieved ? 1 : 0;
+
+            if (!a.icon_decoded_data.empty()) {
+                o.ach_icon_pixels = reinterpret_cast<const uint8_t*>(a.icon_decoded_data.data());
+                o.ach_icon_w = 64;
+                o.ach_icon_h = 64;
+            }
+        }
+
+        ++written;
+    }
+    return written;
+}
+
+void Steam_Overlay::Bridge_ExpireNotification(int id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    for (auto &n : notifications) {
+        if (n.id == id && !n.expired) {
+            n.expired = true;
+            allow_renderer_frame_processing(false);
+            break;
+        }
+    }
+}
+
+int Steam_Overlay::Bridge_GetDisplayInfo(GSE_DisplayInfo *out, int max_count) const
+{
+    // Call the static display query function (thread-safe, reads from Windows API)
+    auto displays = query_display_hdr_details();
+    int count = std::min(max_count, static_cast<int>(displays.size()));
+
+    for (int i = 0; i < count; ++i) {
+        const auto &d = displays[i];
+        auto &o = out[i];
+        memset(&o, 0, sizeof(o));
+
+        bridge_safe_copy(o.name, sizeof(o.name), d.name);
+        bridge_safe_copy(o.encoding, sizeof(o.encoding), d.encoding);
+        bridge_safe_copy(o.gamut, sizeof(o.gamut), d.gamut);
+        bridge_safe_copy(o.transfer, sizeof(o.transfer), d.transfer);
+        bridge_safe_copy(o.range, sizeof(o.range), d.range);
+        o.hdr_supported = d.hdr_supported ? 1 : 0;
+        o.hdr_enabled = d.hdr_enabled ? 1 : 0;
+        o.wide_color = d.wide_color ? 1 : 0;
+        o.force_disabled = d.force_disabled ? 1 : 0;
+        o.bpc = d.bpc;
+        o.sdr_white_nits = d.sdr_white_nits;
+    }
+    return count;
+}
+
+float Steam_Overlay::Bridge_GetSDRWhiteScale() const
+{
+    return s_sdr_white_scale;
+}
+
+int Steam_Overlay::Bridge_GetFriendCount() const
+{
+    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+    return static_cast<int>(friends.size());
+}
+
+int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
+{
+    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+
+    int written = 0;
+    for (const auto &[frd, state] : friends) {
+        if (written >= max_count) break;
+
+        auto &o = out[written];
+        memset(&o, 0, sizeof(o));
+
+        o.steam_id = frd.id();
+        bridge_safe_copy(o.name, sizeof(o.name), frd.name());
+        o.is_online = (state.window_state & window_state_show) ? 1 : 0; // approximate
+        o.is_joinable = state.joinable ? 1 : 0;
+        o.window_state = state.window_state;
+
+        ++written;
+    }
+    return written;
+}
+
+void Steam_Overlay::Bridge_RequestSaveSettings()
+{
+    save_settings = true;
+}
+
+void Steam_Overlay::Bridge_MarkConnected()
+{
+    bridge_connected.store(true, std::memory_order_relaxed);
+}
+
+bool Steam_Overlay::Bridge_IsConnected() const
+{
+    return bridge_connected.load(std::memory_order_relaxed);
+}
 
 #endif
