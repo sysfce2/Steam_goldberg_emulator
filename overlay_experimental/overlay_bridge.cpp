@@ -65,6 +65,7 @@ __declspec(dllexport) int GSE_OverlayBridge_GetState(GSE_OverlayState *out)
 
     out->abi_version = GSE_BRIDGE_ABI_VERSION;
     out->app_id = settings ? settings->get_local_game_id().AppID() : 0;
+    out->steam_id = settings ? settings->get_local_steam_id().ConvertToUint64() : 0;
     out->is_ready = overlay->Ready() ? 1 : 0;
     out->show_overlay = overlay->ShowOverlay() ? 1 : 0;
     out->warn_local_save = overlay->Bridge_GetWarnLocalSave() ? 1 : 0;
@@ -202,6 +203,9 @@ __declspec(dllexport) int GSE_OverlayBridge_GetOption(int option_id)
     case GSE_OPT_DISABLE_BAD_APPID_WARNING:    return s->disable_overlay_warning_bad_appid;
     case GSE_OPT_DISABLE_LOCAL_SAVE_WARNING:   return s->disable_overlay_warning_local_save;
     case GSE_OPT_NOTIF_POSITION:               return overlay ? overlay->Bridge_GetNotifPosition() : 0;
+    case GSE_OPT_SHOW_FPS:                     return s->overlay_always_show_fps;
+    case GSE_OPT_SHOW_FRAMETIME:               return s->overlay_always_show_frametime;
+    case GSE_OPT_SHOW_PLAYTIME:                return s->overlay_always_show_playtime;
     default: return 0;
     }
 }
@@ -212,6 +216,7 @@ __declspec(dllexport) void GSE_OverlayBridge_SetOption(int option_id, int value)
     if (!client) return;
 
     auto *s = client->settings_client;
+    auto *overlay = client->steam_overlay;
     if (!s) return;
 
     switch (option_id) {
@@ -224,6 +229,12 @@ __declspec(dllexport) void GSE_OverlayBridge_SetOption(int option_id, int value)
     case GSE_OPT_DISABLE_ALL_WARNINGS:         s->disable_overlay_warning_any = !!value; break;
     case GSE_OPT_DISABLE_BAD_APPID_WARNING:    s->disable_overlay_warning_bad_appid = !!value; break;
     case GSE_OPT_DISABLE_LOCAL_SAVE_WARNING:   s->disable_overlay_warning_local_save = !!value; break;
+    case GSE_OPT_SHOW_FPS:                     s->overlay_always_show_fps = !!value;
+                                               if (overlay) overlay->Bridge_SetShowFps(!!value); break;
+    case GSE_OPT_SHOW_FRAMETIME:               s->overlay_always_show_frametime = !!value;
+                                               if (overlay) overlay->Bridge_SetShowFrametime(!!value); break;
+    case GSE_OPT_SHOW_PLAYTIME:                s->overlay_always_show_playtime = !!value;
+                                               if (overlay) overlay->Bridge_SetShowPlaytime(!!value); break;
     default: break;
     }
 
@@ -231,6 +242,154 @@ __declspec(dllexport) void GSE_OverlayBridge_SetOption(int option_id, int value)
     if (client->steam_overlay) {
         client->steam_overlay->Bridge_RequestSaveSettings();
     }
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_TestAchievement(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_TestAchievement();
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_ResetAchievements(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_ResetAchievements();
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_SimulateAchievements(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_SimulateAchievements();
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_InviteAllFriends(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_InviteAllFriends();
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_FriendAction(uint64_t steam_id, int action)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_FriendAction(steam_id, action);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetSceStatus(GSE_SceStatus *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+
+    auto *client = get_steam_client();
+    if (!client || !client->steam_user_stats) return 0;
+
+    auto *us = client->steam_user_stats;
+    out->data_available = (us->sce_data_populated && !us->sce_game_data.series.empty()) ? 1 : 0;
+    out->downloading = us->sce_assets_downloading.load() ? 1 : 0;
+    out->grand_downloaded = us->sce_assets_downloaded.load();
+    out->grand_skipped = us->sce_assets_skipped.load();
+    out->grand_total = us->sce_assets_total.load();
+
+    for (int i = 0; i < GSE_SCE_NUM_TYPES && i < 14; ++i) {
+        out->types[i].total = us->sce_type_progress[i].total.load();
+        out->types[i].current = us->sce_type_progress[i].current.load();
+        out->types[i].downloaded = us->sce_type_progress[i].downloaded.load();
+        out->type_labels[i] = us->SCE_TYPE_LABELS[i];
+    }
+
+    return 1;
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_RequestSceDownload(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_user_stats) return;
+    client->steam_user_stats->RequestSceAssetDownload();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetSceSeriesCount(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_user_stats) return 0;
+    auto *us = client->steam_user_stats;
+    if (!us->sce_data_populated) return 0;
+    return (int)us->sce_game_data.series.size();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetSceSeries(GSE_SceSeries *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_user_stats) return 0;
+    auto *us = client->steam_user_stats;
+    if (!us->sce_data_populated) return 0;
+
+    int count = std::min(max_count, (int)us->sce_game_data.series.size());
+    for (int i = 0; i < count; ++i) {
+        auto &s = us->sce_game_data.series[i];
+        memset(&out[i], 0, sizeof(out[i]));
+        out[i].series_number = s.series_number;
+        safe_copy(out[i].series_name, sizeof(out[i].series_name), s.series_name.c_str());
+        out[i].item_count = (int32_t)s.items.size();
+    }
+    return count;
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetSceItems(int series_number, GSE_SceItem *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_user_stats) return 0;
+    auto *us = client->steam_user_stats;
+    if (!us->sce_data_populated) return 0;
+
+    // Find the series
+    const decltype(us->sce_game_data.series)::value_type *series = nullptr;
+    for (auto &s : us->sce_game_data.series) {
+        if (s.series_number == series_number) { series = &s; break; }
+    }
+    if (!series) return 0;
+
+    int count = std::min(max_count, (int)series->items.size());
+    for (int i = 0; i < count; ++i) {
+        auto &item = series->items[i];
+        memset(&out[i], 0, sizeof(out[i]));
+        safe_copy(out[i].name, sizeof(out[i].name), item.name.c_str());
+        out[i].type = (int32_t)item.type;
+        out[i].series = item.series;
+        out[i].slot = item.slot;
+        out[i].total = item.total;
+        safe_copy(out[i].icon_url, sizeof(out[i].icon_url), item.icon_url.c_str());
+        safe_copy(out[i].wallpaper_url, sizeof(out[i].wallpaper_url), item.wallpaper_url.c_str());
+        safe_copy(out[i].animated_url, sizeof(out[i].animated_url), item.animated_url.c_str());
+        safe_copy(out[i].static_img_url, sizeof(out[i].static_img_url), item.static_img_url.c_str());
+        safe_copy(out[i].video_mp4_url, sizeof(out[i].video_mp4_url), item.video_mp4_url.c_str());
+        safe_copy(out[i].video_webm_url, sizeof(out[i].video_webm_url), item.video_webm_url.c_str());
+        safe_copy(out[i].market_hash_name, sizeof(out[i].market_hash_name), item.market_hash_name.c_str());
+        safe_copy(out[i].price_text, sizeof(out[i].price_text), item.price_text.c_str());
+        safe_copy(out[i].rarity, sizeof(out[i].rarity), item.rarity.c_str());
+        safe_copy(out[i].emoticon_name, sizeof(out[i].emoticon_name), item.emoticon_name.c_str());
+        safe_copy(out[i].points_price, sizeof(out[i].points_price), item.points_price.c_str());
+        out[i].badge_level = item.badge_level;
+        out[i].badge_xp = item.badge_xp;
+    }
+    return count;
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetSceStoragePath(char *out, int out_size)
+{
+    if (!out || out_size <= 0) return 0;
+    auto *client = get_steam_client();
+    if (!client || !client->local_storage) return 0;
+    // get_path returns save_directory + appid + folder and creates it
+    std::string path = client->local_storage->get_path(
+        std::string(PATH_SEPARATOR) + Steam_User_Stats::sce_assets_folder + PATH_SEPARATOR);
+    safe_copy(out, out_size, path.c_str());
+    return (int)path.size();
 }
 
 } // extern "C"

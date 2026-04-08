@@ -51,6 +51,8 @@ jobs:
             # tools
             "tool_lobby_connect",
             "tool_generate_interfaces",
+            # reshade addon overlay
+            "reshade_addon_overlay",
           ]
         arch: ["x64", "Win32"]
         cfg: ["debug", "release"]

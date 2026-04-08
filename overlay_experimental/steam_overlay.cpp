@@ -3989,4 +3989,124 @@ bool Steam_Overlay::Bridge_IsConnected() const
     return bridge_connected.load(std::memory_order_relaxed);
 }
 
+void Steam_Overlay::Bridge_TestAchievement()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+    show_test_achievement();
+}
+
+void Steam_Overlay::Bridge_ResetAchievements()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+    if (achievements_snapshot.empty()) return;
+    for (auto &ax : achievements) {
+        for (const auto &snap : achievements_snapshot) {
+            if (snap.name == ax.name) {
+                ax.achieved    = snap.achieved;
+                ax.progress    = snap.progress;
+                ax.unlock_time = snap.unlock_time;
+                break;
+            }
+        }
+    }
+    ach_global_percentages = ach_global_percentages_snapshot;
+}
+
+void Steam_Overlay::Bridge_SimulateAchievements()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<uint32_t> percent_dist(0, 100);
+    std::uniform_real_distribution<float> global_dist(0.5f, 99.9f);
+    std::uniform_int_distribution<uint32_t> time_dist(0, 5u * 24u * 3600u);
+    const uint32_t now_ts = (uint32_t)std::time(nullptr);
+
+    for (auto &ax : achievements) {
+        if (ax.hidden) continue;
+        uint32_t roll = percent_dist(rng);
+        if (ax.max_progress > 0) {
+            if (roll < 40) {
+                ax.achieved = true;
+                ax.progress = ax.max_progress;
+                ax.unlock_time = now_ts - time_dist(rng);
+            } else if (roll < 80) {
+                ax.achieved = false;
+                std::uniform_int_distribution<uint32_t> prog_dist(1, ax.max_progress > 1 ? ax.max_progress - 1 : 1);
+                ax.progress = prog_dist(rng);
+                ax.unlock_time = 0;
+            } else {
+                ax.achieved = false;
+                ax.progress = 0;
+                ax.unlock_time = 0;
+            }
+        } else {
+            if (roll < 50) {
+                ax.achieved = true;
+                ax.unlock_time = now_ts - time_dist(rng);
+            } else {
+                ax.achieved = false;
+                ax.unlock_time = 0;
+            }
+        }
+        if (ach_global_percentages.find(ax.name) == ach_global_percentages.end())
+            ach_global_percentages[ax.name] = global_dist(rng);
+    }
+}
+
+void Steam_Overlay::Bridge_InviteAllFriends()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready() || !i_have_lobby) return;
+    invite_all_friends_clicked = true;
+}
+
+void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+
+    for (auto &[frd, state] : friends) {
+        if (frd.id() == steam_id) {
+            switch (action) {
+            case 1: // invite
+                if (i_have_lobby) {
+                    state.window_state |= window_state_invite;
+                    has_friend_action.push(frd);
+                }
+                break;
+            case 2: // join
+                if (state.joinable) {
+                    state.window_state |= window_state_join;
+                    has_friend_action.push(frd);
+                }
+                break;
+            default: break;
+            }
+            break;
+        }
+    }
+}
+
+void Steam_Overlay::Bridge_SetShowFps(bool v)
+{
+    stats.show_fps = v;
+    allow_renderer_frame_processing(v);
+}
+
+void Steam_Overlay::Bridge_SetShowFrametime(bool v)
+{
+    stats.show_frametime = v;
+    allow_renderer_frame_processing(v);
+}
+
+void Steam_Overlay::Bridge_SetShowPlaytime(bool v)
+{
+    stats.show_playtime = v;
+    allow_renderer_frame_processing(v);
+}
+
 #endif

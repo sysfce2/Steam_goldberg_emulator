@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 7
+#define GSE_BRIDGE_ABI_VERSION 9
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -76,6 +76,7 @@ typedef struct GSE_OverlayState {
     char     language[64];
     char     build_string[128];
     char     build_date[64];
+    uint64_t steam_id;              /* local player SteamID64 (added in ABI v8) */
 } GSE_OverlayState;
 
 typedef struct GSE_Achievement {
@@ -134,6 +135,54 @@ typedef struct GSE_DisplayInfo {
     int32_t  sdr_white_nits;
 } GSE_DisplayInfo;
 
+/* SCE (Steam Card Exchange) download progress */
+#define GSE_SCE_NUM_TYPES 14
+
+typedef struct GSE_SceStatus {
+    uint8_t  data_available;        /* 1 if SCE catalog data is populated */
+    uint8_t  downloading;           /* 1 if download is in progress */
+    uint8_t  _pad[2];
+    uint32_t grand_downloaded;
+    uint32_t grand_skipped;
+    uint32_t grand_total;
+    /* Per-type progress (14 types: cards, foil cards, etc.) */
+    struct {
+        uint32_t total;
+        uint32_t current;
+        uint32_t downloaded;
+    } types[GSE_SCE_NUM_TYPES];
+    /* Type labels */
+    const char *type_labels[GSE_SCE_NUM_TYPES];
+} GSE_SceStatus;
+
+/* SCE catalog data — series and items for the browser */
+typedef struct GSE_SceSeries {
+    int32_t  series_number;
+    char     series_name[256];
+    int32_t  item_count;
+} GSE_SceSeries;
+
+typedef struct GSE_SceItem {
+    char     name[256];
+    int32_t  type;                      /* SceItemType enum: 0=TradingCard..13=StartupMovie */
+    int32_t  series;                    /* series number */
+    int32_t  slot;                      /* 1-based position (0=N/A) */
+    int32_t  total;                     /* total items in set (0=N/A) */
+    char     icon_url[512];             /* thumbnail URL */
+    char     wallpaper_url[512];        /* full-res background URL */
+    char     animated_url[512];         /* animated preview URL */
+    char     static_img_url[512];       /* static thumbnail URL */
+    char     video_mp4_url[512];
+    char     video_webm_url[512];
+    char     market_hash_name[256];
+    char     price_text[64];
+    char     rarity[32];
+    char     emoticon_name[64];
+    char     points_price[32];
+    int32_t  badge_level;
+    int32_t  badge_xp;
+} GSE_SceItem;
+
 typedef struct GSE_Friend {
     uint64_t steam_id;
     char     name[128];
@@ -170,6 +219,26 @@ typedef int       (*pfn_GSE_OverlayBridge_GetFriends)(GSE_Friend *out, int max_c
 typedef int       (*pfn_GSE_OverlayBridge_GetOption)(int option_id);
 typedef void      (*pfn_GSE_OverlayBridge_SetOption)(int option_id, int value);
 
+/* Actions (trigger emu-side behaviour) */
+typedef void      (*pfn_GSE_OverlayBridge_TestAchievement)(void);
+typedef void      (*pfn_GSE_OverlayBridge_ResetAchievements)(void);
+typedef void      (*pfn_GSE_OverlayBridge_SimulateAchievements)(void);
+typedef void      (*pfn_GSE_OverlayBridge_InviteAllFriends)(void);
+typedef void      (*pfn_GSE_OverlayBridge_FriendAction)(uint64_t steam_id, int action);
+
+/* SCE (Steam Card Exchange) */
+typedef int       (*pfn_GSE_OverlayBridge_GetSceStatus)(GSE_SceStatus *out);
+typedef void      (*pfn_GSE_OverlayBridge_RequestSceDownload)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetSceSeriesCount)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetSceSeries)(GSE_SceSeries *out, int max_count);
+typedef int       (*pfn_GSE_OverlayBridge_GetSceItems)(int series_number, GSE_SceItem *out, int max_count);
+typedef int       (*pfn_GSE_OverlayBridge_GetSceStoragePath)(char *out, int out_size);
+
+/* Friend action IDs */
+#define GSE_FRIEND_ACTION_INVITE   1
+#define GSE_FRIEND_ACTION_JOIN     2
+#define GSE_FRIEND_ACTION_COPY_ID  3
+
 /* Option IDs for Get/SetOption */
 #define GSE_OPT_FRIEND_NOTIF_ENABLE          1  /* bool */
 #define GSE_OPT_ACH_NOTIF_ENABLE             2  /* bool */
@@ -183,6 +252,9 @@ typedef void      (*pfn_GSE_OverlayBridge_SetOption)(int option_id, int value);
 #define GSE_OPT_DISABLE_BAD_APPID_WARNING   10  /* bool */
 #define GSE_OPT_DISABLE_LOCAL_SAVE_WARNING  11  /* bool */
 #define GSE_OPT_NOTIF_POSITION              12  /* GSE_NotifPosition */
+#define GSE_OPT_SHOW_FPS                    13  /* bool */
+#define GSE_OPT_SHOW_FRAMETIME              14  /* bool */
+#define GSE_OPT_SHOW_PLAYTIME               15  /* bool */
 
 /* ── Convenience: load all bridge functions from a module ─────────────── */
 
@@ -200,6 +272,17 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetFriends          GetFriends;
     pfn_GSE_OverlayBridge_GetOption           GetOption;
     pfn_GSE_OverlayBridge_SetOption           SetOption;
+    pfn_GSE_OverlayBridge_TestAchievement     TestAchievement;
+    pfn_GSE_OverlayBridge_ResetAchievements   ResetAchievements;
+    pfn_GSE_OverlayBridge_SimulateAchievements SimulateAchievements;
+    pfn_GSE_OverlayBridge_InviteAllFriends    InviteAllFriends;
+    pfn_GSE_OverlayBridge_FriendAction        FriendAction;
+    pfn_GSE_OverlayBridge_GetSceStatus        GetSceStatus;
+    pfn_GSE_OverlayBridge_RequestSceDownload  RequestSceDownload;
+    pfn_GSE_OverlayBridge_GetSceSeriesCount   GetSceSeriesCount;
+    pfn_GSE_OverlayBridge_GetSceSeries        GetSceSeries;
+    pfn_GSE_OverlayBridge_GetSceItems         GetSceItems;
+    pfn_GSE_OverlayBridge_GetSceStoragePath   GetSceStoragePath;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -221,6 +304,17 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetFriends);
     LOAD(GetOption);
     LOAD(SetOption);
+    LOAD(TestAchievement);
+    LOAD(ResetAchievements);
+    LOAD(SimulateAchievements);
+    LOAD(InviteAllFriends);
+    LOAD(FriendAction);
+    LOAD(GetSceStatus);
+    LOAD(RequestSceDownload);
+    LOAD(GetSceSeriesCount);
+    LOAD(GetSceSeries);
+    LOAD(GetSceItems);
+    LOAD(GetSceStoragePath);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

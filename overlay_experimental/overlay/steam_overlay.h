@@ -370,6 +370,14 @@ public:
     void Bridge_RequestSaveSettings();
     void Bridge_MarkConnected();
     bool Bridge_IsConnected() const;
+    void Bridge_TestAchievement();
+    void Bridge_ResetAchievements();
+    void Bridge_SimulateAchievements();
+    void Bridge_InviteAllFriends();
+    void Bridge_FriendAction(uint64_t steam_id, int action);
+    void Bridge_SetShowFps(bool v);
+    void Bridge_SetShowFrametime(bool v);
+    void Bridge_SetShowPlaytime(bool v);
 };
 
 #else // EMU_OVERLAY
