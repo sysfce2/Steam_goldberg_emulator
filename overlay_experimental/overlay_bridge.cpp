@@ -439,6 +439,59 @@ __declspec(dllexport) int GSE_OverlayBridge_GetSceStoragePath(char *out, int out
     return (int)path.size();
 }
 
+/* ── Chat functions ───────────────────────────────────────────────────── */
+
+__declspec(dllexport) int GSE_OverlayBridge_GetChatState(uint64_t steam_id, GSE_ChatState *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetChatState(steam_id, out);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_SendChatMessage(uint64_t steam_id, const char *msg)
+{
+    if (!msg || !msg[0]) return;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_SendChatMessage(steam_id, msg);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_OpenChat(uint64_t steam_id)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_OpenChat(steam_id);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_CloseChat(uint64_t steam_id)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_CloseChat(steam_id);
+}
+
+/* ── Avatar functions ─────────────────────────────────────────────────── */
+
+__declspec(dllexport) int GSE_OverlayBridge_GetAvatar(uint64_t steam_id, GSE_AvatarData *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetAvatar(steam_id, out);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetLocalAvatar(GSE_AvatarData *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetLocalAvatar(out);
+}
+
 } // extern "C"
 
 #endif // EMU_OVERLAY

@@ -387,6 +387,16 @@ public:
     void Bridge_SetShowFps(bool v);
     void Bridge_SetShowFrametime(bool v);
     void Bridge_SetShowPlaytime(bool v);
+    
+    // Chat support for ReShade addon
+    int  Bridge_GetChatState(uint64_t steam_id, struct GSE_ChatState *out);
+    void Bridge_SendChatMessage(uint64_t steam_id, const char *msg);
+    void Bridge_OpenChat(uint64_t steam_id);
+    void Bridge_CloseChat(uint64_t steam_id);
+    
+    // Avatar support for ReShade addon
+    int  Bridge_GetAvatar(uint64_t steam_id, struct GSE_AvatarData *out);
+    int  Bridge_GetLocalAvatar(struct GSE_AvatarData *out);
 };
 
 #else // EMU_OVERLAY

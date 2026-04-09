@@ -212,6 +212,31 @@ typedef struct GSE_LocalLobbyInfo {
     uint8_t  _pad[7];
 } GSE_LocalLobbyInfo;
 
+/* Chat state for a friend (for ReShade addon chat UI) */
+#define GSE_CHAT_HISTORY_SIZE 4096
+#define GSE_CHAT_INPUT_SIZE   768
+
+typedef struct GSE_ChatState {
+    uint64_t steam_id;                          /* friend's steam ID */
+    uint8_t  is_open;                           /* 1 if chat window should be shown */
+    uint8_t  has_pending_invite;                /* 1 if there's a pending invite in this chat */
+    uint8_t  needs_attention;                   /* 1 if unread messages */
+    uint8_t  _pad;
+    char     chat_history[GSE_CHAT_HISTORY_SIZE]; /* read-only history text */
+    char     window_title[128];                 /* friend name + status for window title */
+} GSE_ChatState;
+
+/* Avatar info - raw RGBA pixel data */
+#define GSE_AVATAR_SIZE 64   /* 64x64 pixels */
+#define GSE_AVATAR_BYTES (GSE_AVATAR_SIZE * GSE_AVATAR_SIZE * 4)
+
+typedef struct GSE_AvatarData {
+    uint64_t steam_id;                      /* owner of this avatar */
+    uint8_t  valid;                         /* 1 if avatar data is valid */
+    uint8_t  _pad[7];
+    uint8_t  pixels[GSE_AVATAR_BYTES];      /* RGBA 64x64 = 16384 bytes */
+} GSE_AvatarData;
+
 /* ── Function pointer typedefs (for GetProcAddress) ───────────────────── */
 
 /* Core */
@@ -261,6 +286,16 @@ typedef int       (*pfn_GSE_OverlayBridge_GetSceSeriesCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetSceSeries)(GSE_SceSeries *out, int max_count);
 typedef int       (*pfn_GSE_OverlayBridge_GetSceItems)(int series_number, GSE_SceItem *out, int max_count);
 typedef int       (*pfn_GSE_OverlayBridge_GetSceStoragePath)(char *out, int out_size);
+
+/* Chat - for ReShade addon to render chat UI */
+typedef int       (*pfn_GSE_OverlayBridge_GetChatState)(uint64_t steam_id, GSE_ChatState *out);  /* returns 1 if chat exists */
+typedef void      (*pfn_GSE_OverlayBridge_SendChatMessage)(uint64_t steam_id, const char *msg);
+typedef void      (*pfn_GSE_OverlayBridge_OpenChat)(uint64_t steam_id);
+typedef void      (*pfn_GSE_OverlayBridge_CloseChat)(uint64_t steam_id);
+
+/* Avatars - retrieve avatar pixel data */
+typedef int       (*pfn_GSE_OverlayBridge_GetAvatar)(uint64_t steam_id, GSE_AvatarData *out);  /* returns 1 if avatar available */
+typedef int       (*pfn_GSE_OverlayBridge_GetLocalAvatar)(GSE_AvatarData *out);  /* returns 1 if avatar available */
 
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE   1
@@ -318,6 +353,12 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetSceSeries        GetSceSeries;
     pfn_GSE_OverlayBridge_GetSceItems         GetSceItems;
     pfn_GSE_OverlayBridge_GetSceStoragePath   GetSceStoragePath;
+    pfn_GSE_OverlayBridge_GetChatState        GetChatState;
+    pfn_GSE_OverlayBridge_SendChatMessage     SendChatMessage;
+    pfn_GSE_OverlayBridge_OpenChat            OpenChat;
+    pfn_GSE_OverlayBridge_CloseChat           CloseChat;
+    pfn_GSE_OverlayBridge_GetAvatar           GetAvatar;
+    pfn_GSE_OverlayBridge_GetLocalAvatar      GetLocalAvatar;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -356,6 +397,12 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetSceSeries);
     LOAD(GetSceItems);
     LOAD(GetSceStoragePath);
+    LOAD(GetChatState);
+    LOAD(SendChatMessage);
+    LOAD(OpenChat);
+    LOAD(CloseChat);
+    LOAD(GetAvatar);
+    LOAD(GetLocalAvatar);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

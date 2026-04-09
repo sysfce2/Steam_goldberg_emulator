@@ -4430,4 +4430,184 @@ void Steam_Overlay::Bridge_SetShowPlaytime(bool v)
     allow_renderer_frame_processing(v);
 }
 
+/* ── Chat support for ReShade addon ─────────────────────────────────────── */
+
+int Steam_Overlay::Bridge_GetChatState(uint64_t steam_id, GSE_ChatState *out)
+{
+    if (!out) return 0;
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    
+    for (auto &[frd, state] : friends) {
+        if (frd.id() == steam_id) {
+            out->steam_id = steam_id;
+            out->is_open = (state.window_state & window_state_show) ? 1 : 0;
+            out->has_pending_invite = (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) ? 1 : 0;
+            out->needs_attention = (state.window_state & window_state_need_attention) ? 1 : 0;
+            
+            // Copy chat history (truncate if needed)
+            size_t hist_len = state.chat_history.size();
+            if (hist_len >= GSE_CHAT_HISTORY_SIZE) hist_len = GSE_CHAT_HISTORY_SIZE - 1;
+            memcpy(out->chat_history, state.chat_history.c_str(), hist_len);
+            out->chat_history[hist_len] = '\0';
+            
+            // Copy window title
+            strncpy(out->window_title, state.window_title.c_str(), sizeof(out->window_title) - 1);
+            out->window_title[sizeof(out->window_title) - 1] = '\0';
+            
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void Steam_Overlay::Bridge_SendChatMessage(uint64_t steam_id, const char *msg)
+{
+    if (!msg || !msg[0]) return;
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    
+    for (auto &[frd, state] : friends) {
+        if (frd.id() == steam_id) {
+            // Copy message to chat input
+            strncpy(state.chat_input, msg, max_chat_len - 1);
+            state.chat_input[max_chat_len - 1] = '\0';
+            
+            // Trigger send
+            state.window_state |= window_state_send_message;
+            has_friend_action.push(frd);
+            return;
+        }
+    }
+}
+
+void Steam_Overlay::Bridge_OpenChat(uint64_t steam_id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    
+    for (auto &[frd, state] : friends) {
+        if (frd.id() == steam_id) {
+            state.window_state |= window_state_show;
+            state.window_state &= ~window_state_need_attention;
+            return;
+        }
+    }
+}
+
+void Steam_Overlay::Bridge_CloseChat(uint64_t steam_id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    
+    for (auto &[frd, state] : friends) {
+        if (frd.id() == steam_id) {
+            state.window_state &= ~window_state_show;
+            return;
+        }
+    }
+}
+
+/* ── Avatar support for ReShade addon ───────────────────────────────────── */
+
+int Steam_Overlay::Bridge_GetAvatar(uint64_t steam_id, GSE_AvatarData *out)
+{
+    if (!out) return 0;
+    out->steam_id = steam_id;
+    out->valid = 0;
+    
+    // Get avatar image handle from Steam Friends
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    if (!steamFriends) return 0;
+    
+    // Get medium avatar (64x64)
+    int avatar_handle = steamFriends->GetMediumFriendAvatar(CSteamID(steam_id));
+    if (avatar_handle == 0) return 0;
+    
+    // Get image dimensions
+    uint32 w = 0, h = 0;
+    if (!settings->get_image_size(avatar_handle, &w, &h)) return 0;
+    if (w == 0 || h == 0) return 0;
+    
+    // Get image RGBA data
+    const Settings::Image_Data *img = settings->get_image(avatar_handle);
+    if (!img || img->data.empty()) return 0;
+    
+    // Copy image data (resize if needed)
+    if (w == GSE_AVATAR_SIZE && h == GSE_AVATAR_SIZE) {
+        // Perfect size, direct copy
+        size_t data_size = (std::min)(img->data.size(), (size_t)GSE_AVATAR_BYTES);
+        memcpy(out->pixels, img->data.data(), data_size);
+        out->valid = 1;
+    } else {
+        // Need to resize - for simplicity use nearest neighbor
+        // This is a basic resize, consider using stb_image_resize for better quality
+        for (int y = 0; y < GSE_AVATAR_SIZE; ++y) {
+            for (int x = 0; x < GSE_AVATAR_SIZE; ++x) {
+                int src_x = x * w / GSE_AVATAR_SIZE;
+                int src_y = y * h / GSE_AVATAR_SIZE;
+                size_t src_idx = (src_y * w + src_x) * 4;
+                size_t dst_idx = (y * GSE_AVATAR_SIZE + x) * 4;
+                if (src_idx + 3 < img->data.size()) {
+                    out->pixels[dst_idx + 0] = (uint8_t)img->data[src_idx + 0];
+                    out->pixels[dst_idx + 1] = (uint8_t)img->data[src_idx + 1];
+                    out->pixels[dst_idx + 2] = (uint8_t)img->data[src_idx + 2];
+                    out->pixels[dst_idx + 3] = (uint8_t)img->data[src_idx + 3];
+                }
+            }
+        }
+        out->valid = 1;
+    }
+    
+    return out->valid;
+}
+
+int Steam_Overlay::Bridge_GetLocalAvatar(GSE_AvatarData *out)
+{
+    if (!out) return 0;
+    
+    // Get local user's steam ID
+    CSteamID local_id = settings->get_local_steam_id();
+    out->steam_id = local_id.IsValid() ? local_id.ConvertToUint64() : 0;
+    out->valid = 0;
+    
+    // Get avatar image handle from Steam Friends
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    if (!steamFriends) return 0;
+    
+    // Get medium avatar for local user (64x64)
+    int avatar_handle = steamFriends->GetMediumFriendAvatar(local_id);
+    if (avatar_handle == 0) return 0;
+    
+    // Get image dimensions
+    uint32 w = 0, h = 0;
+    if (!settings->get_image_size(avatar_handle, &w, &h)) return 0;
+    if (w == 0 || h == 0) return 0;
+    
+    // Get image RGBA data
+    const Settings::Image_Data *img = settings->get_image(avatar_handle);
+    if (!img || img->data.empty()) return 0;
+    
+    // Copy/resize image data
+    if (w == GSE_AVATAR_SIZE && h == GSE_AVATAR_SIZE) {
+        size_t data_size = (std::min)(img->data.size(), (size_t)GSE_AVATAR_BYTES);
+        memcpy(out->pixels, img->data.data(), data_size);
+        out->valid = 1;
+    } else {
+        for (int y = 0; y < GSE_AVATAR_SIZE; ++y) {
+            for (int x = 0; x < GSE_AVATAR_SIZE; ++x) {
+                int src_x = x * w / GSE_AVATAR_SIZE;
+                int src_y = y * h / GSE_AVATAR_SIZE;
+                size_t src_idx = (src_y * w + src_x) * 4;
+                size_t dst_idx = (y * GSE_AVATAR_SIZE + x) * 4;
+                if (src_idx + 3 < img->data.size()) {
+                    out->pixels[dst_idx + 0] = (uint8_t)img->data[src_idx + 0];
+                    out->pixels[dst_idx + 1] = (uint8_t)img->data[src_idx + 1];
+                    out->pixels[dst_idx + 2] = (uint8_t)img->data[src_idx + 2];
+                    out->pixels[dst_idx + 3] = (uint8_t)img->data[src_idx + 3];
+                }
+            }
+        }
+        out->valid = 1;
+    }
+    
+    return out->valid;
+}
+
 #endif

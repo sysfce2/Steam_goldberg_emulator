@@ -65,8 +65,9 @@ struct IconTexture {
 
 struct __declspec(uuid("a1b2c3d4-1234-5678-abcd-ef0123456789")) addon_device_data
 {
-    std::unordered_map<std::string, IconTexture> icon_cache; // key = ach name + "_achieved"/"_locked"
-    std::vector<IconTexture> pending_destroy;                // deferred GPU resource destruction
+    std::unordered_map<std::string, IconTexture> icon_cache;   // key = ach name + "_achieved"/"_locked"
+    std::unordered_map<uint64_t, IconTexture>    avatar_cache; // key = steam_id
+    std::vector<IconTexture> pending_destroy;                  // deferred GPU resource destruction
 };
 
 /* ── Forward declarations ──────────────────────────────────────────────── */
@@ -74,6 +75,7 @@ struct __declspec(uuid("a1b2c3d4-1234-5678-abcd-ef0123456789")) addon_device_dat
 static void render_main_overlay(effect_runtime *runtime);
 static void render_achievement_list();
 static void render_friends_list();
+static void render_chat_windows();
 
 /* ── Overlay toggle state ─────────────────────────────────────────────── */
 
@@ -90,6 +92,16 @@ static std::string s_sce_preview_key;      // full file path of currently previe
 static std::vector<std::string> s_sce_preview_nav_keys;  // sibling keys for prev/next
 static int s_sce_tex_per_frame = 0;        // per-frame texture load cap counter
 static constexpr int MAX_SCE_TEX_PER_FRAME = 4;
+
+/* ── Chat window state (for ReShade addon chat UI) ───────────────────── */
+
+struct AddonChatWindow {
+    uint64_t steam_id = 0;
+    char friend_name[64] = {};
+    char input_buf[GSE_CHAT_INPUT_SIZE] = {};
+    bool scroll_to_bottom = true;
+};
+static std::vector<AddonChatWindow> s_open_chats;  // currently open chat windows in addon
 
 /* ── Native overlay color constants (matching steam_overlay.cpp) ──────── */
 
@@ -492,6 +504,62 @@ static const IconTexture *load_preview_image(const std::string &file_path)
 
     data->icon_cache[file_path] = icon;
     return &data->icon_cache[file_path];
+}
+
+/* ── Helper: get or create avatar texture for a friend ────────────────── */
+
+static const IconTexture *get_or_upload_avatar(uint64_t steam_id)
+{
+    if (!s_current_device || !s_bridge.GetAvatar) return nullptr;
+    
+    auto *data = s_current_device->get_private_data<addon_device_data>();
+    if (!data) return nullptr;
+    
+    // Check cache first
+    auto it = data->avatar_cache.find(steam_id);
+    if (it != data->avatar_cache.end()) {
+        return it->second.valid ? &it->second : nullptr;
+    }
+    
+    // Fetch avatar from bridge
+    GSE_AvatarData avatar{};
+    if (!s_bridge.GetAvatar(steam_id, &avatar) || !avatar.valid) {
+        // Insert invalid placeholder to avoid re-fetching
+        data->avatar_cache[steam_id] = IconTexture{};
+        return nullptr;
+    }
+    
+    // Upload to GPU
+    IconTexture tex = upload_icon(s_current_device, avatar.pixels, GSE_AVATAR_SIZE, GSE_AVATAR_SIZE);
+    data->avatar_cache[steam_id] = tex;
+    
+    return tex.valid ? &data->avatar_cache[steam_id] : nullptr;
+}
+
+static const IconTexture *get_or_upload_local_avatar()
+{
+    if (!s_current_device || !s_bridge.GetLocalAvatar) return nullptr;
+    
+    auto *data = s_current_device->get_private_data<addon_device_data>();
+    if (!data) return nullptr;
+    
+    // Use 0 as key for local avatar
+    auto it = data->avatar_cache.find(0);
+    if (it != data->avatar_cache.end()) {
+        return it->second.valid ? &it->second : nullptr;
+    }
+    
+    // Fetch local avatar from bridge
+    GSE_AvatarData avatar{};
+    if (!s_bridge.GetLocalAvatar(&avatar) || !avatar.valid) {
+        data->avatar_cache[0] = IconTexture{};
+        return nullptr;
+    }
+    
+    IconTexture tex = upload_icon(s_current_device, avatar.pixels, GSE_AVATAR_SIZE, GSE_AVATAR_SIZE);
+    data->avatar_cache[0] = tex;
+    
+    return tex.valid ? &data->avatar_cache[0] : nullptr;
 }
 
 /* ── Helper: free all SCE textures from the cache ─────────────────────── */
@@ -969,6 +1037,13 @@ static void render_main_overlay(effect_runtime *runtime)
 
     // ── User Info (togglable, matching native LabelText format) ──
     if (s_show_user_info) {
+        // Show local avatar next to user info
+        const float avatar_size = 48.0f;
+        const IconTexture *local_avatar = get_or_upload_local_avatar();
+        if (local_avatar && local_avatar->valid) {
+            ImGui::Image(ImTextureRef(local_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+            ImGui::SameLine();
+        }
         ImGui::LabelText("##playinglabel", "%s  (ID: %llu)  playing AppID %u",
             state.username, (unsigned long long)state.steam_id, state.app_id);
     }
@@ -1228,6 +1303,9 @@ static void render_main_overlay(effect_runtime *runtime)
     if (s_show_achievements) {
         render_achievement_list();
     }
+
+    // ── Chat Windows (floating windows for each open chat) ──
+    render_chat_windows();
 
     // ── SCE Asset Browser Window (matching native exactly) ──
     if (s_show_sce_browser && s_bridge.GetSceStatus && s_bridge.GetSceSeriesCount) {
@@ -1710,6 +1788,14 @@ static void render_friends_list()
             ImGui::Spacing();
         }
 
+        // Avatar + friend name + status on same row
+        const float avatar_size = 32.0f;  // smaller avatar for friend list
+        const IconTexture *avatar = get_or_upload_avatar(f.steam_id);
+        if (avatar && avatar->valid) {
+            ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+            ImGui::SameLine();
+        }
+        
         // Line 1: Friend name + status
         if (!f.is_online)
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", f.name);
@@ -1744,11 +1830,23 @@ static void render_friends_list()
         }
 
         // Line 2: Action buttons
-        if (s_bridge.FriendAction) {
+        {
             char chat_btn[64];
             snprintf(chat_btn, sizeof(chat_btn), "%s##chat_%d", translationChat[s_current_language], i);
             if (ImGui::SmallButton(chat_btn)) {
-                s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_CHAT);
+                // Open addon-side chat window
+                bool found = false;
+                for (auto &cw : s_open_chats) {
+                    if (cw.steam_id == f.steam_id) { found = true; break; }
+                }
+                if (!found) {
+                    AddonChatWindow cw{};
+                    cw.steam_id = f.steam_id;
+                    strncpy(cw.friend_name, f.name, sizeof(cw.friend_name) - 1);
+                    s_open_chats.push_back(cw);
+                }
+                // Also notify the emu DLL so backend chat state is updated
+                if (s_bridge.OpenChat) s_bridge.OpenChat(f.steam_id);
             }
         }
 
@@ -1775,6 +1873,121 @@ static void render_friends_list()
     }
     
     ImGui::EndChild();
+}
+
+/* ── Chat windows (separate floating windows, matching native chat UI) ─── */
+
+static void render_chat_windows()
+{
+    if (!s_bridge.GetChatState || !s_bridge.SendChatMessage) return;
+    
+    auto &io = ImGui::GetIO();
+    
+    // Process each open chat window
+    for (size_t idx = 0; idx < s_open_chats.size(); ) {
+        auto &chat = s_open_chats[idx];
+        
+        // Fetch current chat state from bridge
+        GSE_ChatState cs{};
+        bool got_state = s_bridge.GetChatState(chat.steam_id, &cs) != 0;
+        
+        // Build window title
+        char win_title[128];
+        if (got_state && cs.window_title[0])
+            snprintf(win_title, sizeof(win_title), "%s##chat_%llu", cs.window_title, (unsigned long long)chat.steam_id);
+        else
+            snprintf(win_title, sizeof(win_title), "Chat - %s##chat_%llu", chat.friend_name, (unsigned long long)chat.steam_id);
+        
+        // Set initial size/position for new windows
+        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 200 + idx * 30,
+                                        io.DisplaySize.y * 0.5f - 150 + idx * 30),
+                                 ImGuiCond_FirstUseEver);
+        
+        bool keep_open = true;
+        int style_colors = apply_global_style_colors();
+        
+        if (ImGui::Begin(win_title, &keep_open, ImGuiWindowFlags_NoCollapse)) {
+            float footer_height = ImGui::GetFrameHeightWithSpacing();
+            
+            // Chat history area (scrollable)
+            ImGui::BeginChild("##chat_history", ImVec2(0, -footer_height - 4), true);
+            
+            if (got_state && cs.chat_history[0]) {
+                // Split chat history by newlines and render
+                char *history = cs.chat_history;
+                char *line = history;
+                while (*line) {
+                    char *end = strchr(line, '\n');
+                    if (end) *end = '\0';
+                    
+                    // Colorize: lines starting with "You:" vs friend name
+                    if (strncmp(line, "You: ", 5) == 0) {
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                    } else {
+                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+                    }
+                    
+                    if (!end) break;
+                    *end = '\n';
+                    line = end + 1;
+                }
+            } else {
+                ImGui::TextDisabled("No messages yet.");
+            }
+            
+            // Scroll to bottom if needed
+            if (chat.scroll_to_bottom) {
+                ImGui::SetScrollHereY(1.0f);
+                chat.scroll_to_bottom = false;
+            }
+            
+            // Auto-scroll when new messages arrive (check needs_attention)
+            if (got_state && cs.needs_attention)
+                ImGui::SetScrollHereY(1.0f);
+            
+            ImGui::EndChild();
+            
+            // Input bar
+            ImGui::Separator();
+            
+            // Input field takes most of the width
+            float send_btn_w = ImGui::CalcTextSize("Send").x + ImGui::GetStyle().FramePadding.x * 2 + 8;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send_btn_w - 8);
+            
+            bool send_msg = false;
+            if (ImGui::InputText("##chat_input", chat.input_buf, sizeof(chat.input_buf),
+                    ImGuiInputTextFlags_EnterReturnsTrue)) {
+                send_msg = true;
+            }
+            
+            ImGui::SameLine();
+            if (ImGui::Button("Send") || send_msg) {
+                if (chat.input_buf[0]) {
+                    s_bridge.SendChatMessage(chat.steam_id, chat.input_buf);
+                    chat.input_buf[0] = '\0';
+                    chat.scroll_to_bottom = true;
+                }
+            }
+            
+            // Show pending invite notice if applicable
+            if (got_state && cs.has_pending_invite) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending invite from this friend!");
+            }
+        }
+        ImGui::End();
+        ImGui::PopStyleColor(style_colors);
+        
+        // Remove closed windows
+        if (!keep_open) {
+            // Notify bridge that chat is closed
+            if (s_bridge.CloseChat) s_bridge.CloseChat(chat.steam_id);
+            s_open_chats.erase(s_open_chats.begin() + idx);
+        } else {
+            ++idx;
+        }
+    }
 }
 
 /* ── Achievement list (separate window, matching native layout exactly) ── */
