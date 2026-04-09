@@ -4520,14 +4520,13 @@ int Steam_Overlay::Bridge_GetAvatar(uint64_t steam_id, GSE_AvatarData *out)
     int avatar_handle = steamFriends->GetMediumFriendAvatar(CSteamID(steam_id));
     if (avatar_handle == 0) return 0;
     
-    // Get image dimensions
-    uint32 w = 0, h = 0;
-    if (!settings->get_image_size(avatar_handle, &w, &h)) return 0;
-    if (w == 0 || h == 0) return 0;
-    
     // Get image RGBA data
-    const Settings::Image_Data *img = settings->get_image(avatar_handle);
+    Image_Data *img = settings->get_image(avatar_handle);
     if (!img || img->data.empty()) return 0;
+    
+    uint32 w = img->width;
+    uint32 h = img->height;
+    if (w == 0 || h == 0) return 0;
     
     // Copy image data (resize if needed)
     if (w == GSE_AVATAR_SIZE && h == GSE_AVATAR_SIZE) {
@@ -4575,14 +4574,13 @@ int Steam_Overlay::Bridge_GetLocalAvatar(GSE_AvatarData *out)
     int avatar_handle = steamFriends->GetMediumFriendAvatar(local_id);
     if (avatar_handle == 0) return 0;
     
-    // Get image dimensions
-    uint32 w = 0, h = 0;
-    if (!settings->get_image_size(avatar_handle, &w, &h)) return 0;
-    if (w == 0 || h == 0) return 0;
-    
     // Get image RGBA data
-    const Settings::Image_Data *img = settings->get_image(avatar_handle);
+    Image_Data *img = settings->get_image(avatar_handle);
     if (!img || img->data.empty()) return 0;
+    
+    uint32 w = img->width;
+    uint32 h = img->height;
+    if (w == 0 || h == 0) return 0;
     
     // Copy/resize image data
     if (w == GSE_AVATAR_SIZE && h == GSE_AVATAR_SIZE) {
