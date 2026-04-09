@@ -76,6 +76,7 @@ static void render_main_overlay(effect_runtime *runtime);
 static void render_achievement_list();
 static void render_friends_list();
 static void render_chat_windows();
+static void check_incoming_messages();
 
 /* ── Overlay toggle state ─────────────────────────────────────────────── */
 
@@ -84,6 +85,8 @@ static bool s_show_achievements = false;
 static bool s_show_settings     = false;
 static bool s_show_user_info    = false;
 static bool s_show_sce_browser  = false;
+static bool s_show_chat         = false;
+static int  s_active_chat_idx   = 0;  // currently selected chat tab
 
 /* ── SCE browser state ────────────────────────────────────────────────── */
 
@@ -1055,6 +1058,23 @@ static void render_main_overlay(effect_runtime *runtime)
     if (ImGui::Button(translationToggleUserInfo[s_current_language]))
         s_show_user_info = !s_show_user_info;
 
+    // Chat button - show unread indicator if any chat needs attention
+    ImGui::SameLine();
+    {
+        bool has_unread = false;
+        for (auto &cw : s_open_chats) {
+            GSE_ChatState cs{};
+            if (s_bridge.GetChatState && s_bridge.GetChatState(cw.steam_id, &cs) && cs.needs_attention)
+                has_unread = true;
+        }
+        if (has_unread)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+        if (ImGui::Button(translationChat[s_current_language]))
+            s_show_chat = !s_show_chat;
+        if (has_unread)
+            ImGui::PopStyleColor();
+    }
+
     ImGui::SameLine();
     if (ImGui::Button(translationShowAchievements[s_current_language]))
         s_show_achievements = !s_show_achievements;
@@ -1304,7 +1324,8 @@ static void render_main_overlay(effect_runtime *runtime)
         render_achievement_list();
     }
 
-    // ── Chat Windows (floating windows for each open chat) ──
+    // ── Chat Windows (tabbed window) ──
+    check_incoming_messages();  // auto-add friends who message us
     render_chat_windows();
 
     // ── SCE Asset Browser Window (matching native exactly) ──
@@ -1830,24 +1851,26 @@ static void render_friends_list()
         }
 
         // Line 2: Action buttons
-        {
-            char chat_btn[64];
-            snprintf(chat_btn, sizeof(chat_btn), "%s##chat_%d", translationChat[s_current_language], i);
-            if (ImGui::SmallButton(chat_btn)) {
-                // Open addon-side chat window
-                bool found = false;
-                for (auto &cw : s_open_chats) {
-                    if (cw.steam_id == f.steam_id) { found = true; break; }
-                }
-                if (!found) {
-                    AddonChatWindow cw{};
-                    cw.steam_id = f.steam_id;
-                    strncpy(cw.friend_name, f.name, sizeof(cw.friend_name) - 1);
-                    s_open_chats.push_back(cw);
-                }
-                // Also notify the emu DLL so backend chat state is updated
-                if (s_bridge.OpenChat) s_bridge.OpenChat(f.steam_id);
+        char chat_btn[64];
+        snprintf(chat_btn, sizeof(chat_btn), "%s##chat_%d", translationChat[s_current_language], i);
+        if (ImGui::SmallButton(chat_btn)) {
+            // Add to chat tabs if not already present
+            int found_idx = -1;
+            for (size_t ci = 0; ci < s_open_chats.size(); ++ci) {
+                if (s_open_chats[ci].steam_id == f.steam_id) { found_idx = (int)ci; break; }
             }
+            if (found_idx < 0) {
+                AddonChatWindow cw{};
+                cw.steam_id = f.steam_id;
+                strncpy(cw.friend_name, f.name, sizeof(cw.friend_name) - 1);
+                s_open_chats.push_back(cw);
+                found_idx = (int)s_open_chats.size() - 1;
+            }
+            // Open chat window and select this tab
+            s_show_chat = true;
+            s_active_chat_idx = found_idx;
+            // Notify emu DLL
+            if (s_bridge.OpenChat) s_bridge.OpenChat(f.steam_id);
         }
 
         // Invite button (if we have lobby and same app)
@@ -1875,56 +1898,133 @@ static void render_friends_list()
     ImGui::EndChild();
 }
 
-/* ── Chat windows (separate floating windows, matching native chat UI) ─── */
+/* ── Chat window (single tabbed window with avatars) ─────────────────────── */
+
+// Check for incoming messages from friends and auto-add to chat tabs
+static void check_incoming_messages()
+{
+    if (!s_bridge.GetFriendCount || !s_bridge.GetFriends || !s_bridge.GetChatState) return;
+    
+    int friend_count = s_bridge.GetFriendCount();
+    if (friend_count <= 0) return;
+    
+    std::vector<GSE_Friend> friends(friend_count > 256 ? 256 : friend_count);
+    int count = s_bridge.GetFriends(friends.data(), (int)friends.size());
+    
+    for (int i = 0; i < count; ++i) {
+        GSE_ChatState cs{};
+        if (s_bridge.GetChatState(friends[i].steam_id, &cs) && cs.needs_attention) {
+            // Friend has unread message - add to tabs if not present
+            bool found = false;
+            for (auto &cw : s_open_chats) {
+                if (cw.steam_id == friends[i].steam_id) { found = true; break; }
+            }
+            if (!found) {
+                AddonChatWindow cw{};
+                cw.steam_id = friends[i].steam_id;
+                strncpy(cw.friend_name, friends[i].name, sizeof(cw.friend_name) - 1);
+                s_open_chats.push_back(cw);
+            }
+        }
+    }
+}
 
 static void render_chat_windows()
 {
     if (!s_bridge.GetChatState || !s_bridge.SendChatMessage) return;
+    if (!s_show_chat || s_open_chats.empty()) return;
     
     auto &io = ImGui::GetIO();
     
-    // Process each open chat window
-    for (size_t idx = 0; idx < s_open_chats.size(); ) {
-        auto &chat = s_open_chats[idx];
+    // Clamp active index
+    if (s_active_chat_idx < 0) s_active_chat_idx = 0;
+    if (s_active_chat_idx >= (int)s_open_chats.size()) s_active_chat_idx = (int)s_open_chats.size() - 1;
+    
+    // Window setup
+    ImGui::SetNextWindowSize(ImVec2(450, 350), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 225, io.DisplaySize.y * 0.5f - 175), ImGuiCond_FirstUseEver);
+    
+    int style_colors = apply_global_style_colors();
+    
+    if (ImGui::Begin("Chat##gse_chat_tabbed", &s_show_chat, ImGuiWindowFlags_NoCollapse)) {
+        // Tab bar for multiple chats
+        if (s_open_chats.size() > 1 && ImGui::BeginTabBar("##chat_tabs")) {
+            for (size_t i = 0; i < s_open_chats.size(); ++i) {
+                auto &chat = s_open_chats[i];
+                
+                // Check if this chat needs attention (unread)
+                GSE_ChatState cs{};
+                bool needs_attn = s_bridge.GetChatState(chat.steam_id, &cs) && cs.needs_attention;
+                
+                // Tab flags
+                ImGuiTabItemFlags tab_flags = 0;
+                if ((int)i == s_active_chat_idx)
+                    tab_flags |= ImGuiTabItemFlags_SetSelected;
+                
+                // Color tab if needs attention
+                if (needs_attn)
+                    ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0.6f, 0.4f, 0.1f, 1.0f));
+                
+                bool tab_open = true;
+                if (ImGui::BeginTabItem(chat.friend_name, &tab_open, tab_flags)) {
+                    s_active_chat_idx = (int)i;
+                    ImGui::EndTabItem();
+                }
+                
+                if (needs_attn)
+                    ImGui::PopStyleColor();
+                
+                // Close tab
+                if (!tab_open) {
+                    if (s_bridge.CloseChat) s_bridge.CloseChat(chat.steam_id);
+                    s_open_chats.erase(s_open_chats.begin() + i);
+                    if (s_active_chat_idx >= (int)s_open_chats.size())
+                        s_active_chat_idx = (int)s_open_chats.size() - 1;
+                    --i; // adjust loop
+                }
+            }
+            ImGui::EndTabBar();
+        }
         
-        // Fetch current chat state from bridge
-        GSE_ChatState cs{};
-        bool got_state = s_bridge.GetChatState(chat.steam_id, &cs) != 0;
-        
-        // Build window title
-        char win_title[128];
-        if (got_state && cs.window_title[0])
-            snprintf(win_title, sizeof(win_title), "%s##chat_%llu", cs.window_title, (unsigned long long)chat.steam_id);
-        else
-            snprintf(win_title, sizeof(win_title), "Chat - %s##chat_%llu", chat.friend_name, (unsigned long long)chat.steam_id);
-        
-        // Set initial size/position for new windows
-        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 200 + idx * 30,
-                                        io.DisplaySize.y * 0.5f - 150 + idx * 30),
-                                 ImGuiCond_FirstUseEver);
-        
-        bool keep_open = true;
-        int style_colors = apply_global_style_colors();
-        
-        if (ImGui::Begin(win_title, &keep_open, ImGuiWindowFlags_NoCollapse)) {
-            float footer_height = ImGui::GetFrameHeightWithSpacing();
+        // Render active chat content
+        if (!s_open_chats.empty() && s_active_chat_idx >= 0 && s_active_chat_idx < (int)s_open_chats.size()) {
+            auto &chat = s_open_chats[s_active_chat_idx];
             
-            // Chat history area (scrollable)
-            ImGui::BeginChild("##chat_history", ImVec2(0, -footer_height - 4), true);
+            GSE_ChatState cs{};
+            bool got_state = s_bridge.GetChatState(chat.steam_id, &cs) != 0;
+            
+            float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
+            const float avatar_size = 32.0f;
+            
+            // Chat history area
+            ImGui::BeginChild("##chat_history", ImVec2(0, -footer_height), true);
             
             if (got_state && cs.chat_history[0]) {
-                // Split chat history by newlines and render
+                // Get avatars
+                const IconTexture *friend_avatar = get_or_upload_avatar(chat.steam_id);
+                const IconTexture *local_avatar = get_or_upload_local_avatar();
+                
+                // Split chat history by newlines
                 char *history = cs.chat_history;
                 char *line = history;
                 while (*line) {
                     char *end = strchr(line, '\n');
                     if (end) *end = '\0';
                     
-                    // Colorize: lines starting with "You:" vs friend name
-                    if (strncmp(line, "You: ", 5) == 0) {
+                    bool is_self = (strncmp(line, "You: ", 5) == 0);
+                    
+                    // Show avatar + message
+                    if (is_self) {
+                        if (local_avatar && local_avatar->valid) {
+                            ImGui::Image(ImTextureRef(local_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+                            ImGui::SameLine();
+                        }
                         ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
                     } else {
+                        if (friend_avatar && friend_avatar->valid) {
+                            ImGui::Image(ImTextureRef(friend_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+                            ImGui::SameLine();
+                        }
                         ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
                     }
                     
@@ -1936,27 +2036,22 @@ static void render_chat_windows()
                 ImGui::TextDisabled("No messages yet.");
             }
             
-            // Scroll to bottom if needed
-            if (chat.scroll_to_bottom) {
+            // Auto-scroll
+            if (chat.scroll_to_bottom || (got_state && cs.needs_attention)) {
                 ImGui::SetScrollHereY(1.0f);
                 chat.scroll_to_bottom = false;
             }
             
-            // Auto-scroll when new messages arrive (check needs_attention)
-            if (got_state && cs.needs_attention)
-                ImGui::SetScrollHereY(1.0f);
-            
             ImGui::EndChild();
             
             // Input bar
-            ImGui::Separator();
-            
-            // Input field takes most of the width
             float send_btn_w = ImGui::CalcTextSize("Send").x + ImGui::GetStyle().FramePadding.x * 2 + 8;
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send_btn_w - 8);
             
             bool send_msg = false;
-            if (ImGui::InputText("##chat_input", chat.input_buf, sizeof(chat.input_buf),
+            char input_id[32];
+            snprintf(input_id, sizeof(input_id), "##chat_input_%d", s_active_chat_idx);
+            if (ImGui::InputText(input_id, chat.input_buf, sizeof(chat.input_buf),
                     ImGuiInputTextFlags_EnterReturnsTrue)) {
                 send_msg = true;
             }
@@ -1970,24 +2065,14 @@ static void render_chat_windows()
                 }
             }
             
-            // Show pending invite notice if applicable
+            // Pending invite notice
             if (got_state && cs.has_pending_invite) {
-                ImGui::Spacing();
                 ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending invite from this friend!");
             }
         }
-        ImGui::End();
-        ImGui::PopStyleColor(style_colors);
-        
-        // Remove closed windows
-        if (!keep_open) {
-            // Notify bridge that chat is closed
-            if (s_bridge.CloseChat) s_bridge.CloseChat(chat.steam_id);
-            s_open_chats.erase(s_open_chats.begin() + idx);
-        } else {
-            ++idx;
-        }
     }
+    ImGui::End();
+    ImGui::PopStyleColor(style_colors);
 }
 
 /* ── Achievement list (separate window, matching native layout exactly) ── */
