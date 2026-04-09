@@ -298,10 +298,12 @@ typedef int       (*pfn_GSE_OverlayBridge_GetAvatar)(uint64_t steam_id, GSE_Avat
 typedef int       (*pfn_GSE_OverlayBridge_GetLocalAvatar)(GSE_AvatarData *out);  /* returns 1 if avatar available */
 
 /* Friend action IDs */
-#define GSE_FRIEND_ACTION_INVITE   1
-#define GSE_FRIEND_ACTION_JOIN     2
-#define GSE_FRIEND_ACTION_COPY_ID  3
-#define GSE_FRIEND_ACTION_CHAT     4
+#define GSE_FRIEND_ACTION_INVITE         1
+#define GSE_FRIEND_ACTION_JOIN           2
+#define GSE_FRIEND_ACTION_COPY_ID        3
+#define GSE_FRIEND_ACTION_CHAT           4
+#define GSE_FRIEND_ACTION_ACCEPT_INVITE  5
+#define GSE_FRIEND_ACTION_REFUSE_INVITE  6
 
 /* Option IDs for Get/SetOption */
 #define GSE_OPT_FRIEND_NOTIF_ENABLE          1  /* bool */

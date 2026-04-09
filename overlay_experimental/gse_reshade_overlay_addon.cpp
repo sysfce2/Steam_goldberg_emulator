@@ -1934,21 +1934,69 @@ static void check_incoming_messages()
 static void render_chat_windows()
 {
     if (!s_bridge.GetChatState || !s_bridge.SendChatMessage) return;
-    if (!s_show_chat || s_open_chats.empty()) return;
+    if (!s_show_chat) return;
     
     auto &io = ImGui::GetIO();
-    
-    // Clamp active index
-    if (s_active_chat_idx < 0) s_active_chat_idx = 0;
-    if (s_active_chat_idx >= (int)s_open_chats.size()) s_active_chat_idx = (int)s_open_chats.size() - 1;
     
     // Window setup
     ImGui::SetNextWindowSize(ImVec2(450, 350), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 225, io.DisplaySize.y * 0.5f - 175), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(1.0f);  // Non-transparent window
     
     int style_colors = apply_global_style_colors();
     
     if (ImGui::Begin("Chat##gse_chat_tabbed", &s_show_chat, ImGuiWindowFlags_NoCollapse)) {
+        // If no chats open, show friend picker
+        if (s_open_chats.empty()) {
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Select a friend to start chatting:");
+            ImGui::Spacing();
+            
+            // List friends to start chat with
+            if (s_bridge.GetFriendCount && s_bridge.GetFriends) {
+                int friend_count = s_bridge.GetFriendCount();
+                if (friend_count > 0) {
+                    std::vector<GSE_Friend> friends(friend_count > 64 ? 64 : friend_count);
+                    int count = s_bridge.GetFriends(friends.data(), (int)friends.size());
+                    
+                    ImGui::BeginChild("##friend_picker", ImVec2(0, 0), true);
+                    for (int i = 0; i < count; ++i) {
+                        auto &f = friends[i];
+                        ImGui::PushID(i);
+                        
+                        // Avatar + name button
+                        const float avatar_size = 24.0f;
+                        const IconTexture *avatar = get_or_upload_avatar(f.steam_id);
+                        
+                        if (avatar && avatar->valid) {
+                            ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+                            ImGui::SameLine();
+                        }
+                        
+                        if (ImGui::Selectable(f.name, false)) {
+                            AddonChatWindow cw{};
+                            cw.steam_id = f.steam_id;
+                            strncpy(cw.friend_name, f.name, sizeof(cw.friend_name) - 1);
+                            s_open_chats.push_back(cw);
+                            s_active_chat_idx = (int)s_open_chats.size() - 1;
+                            if (s_bridge.OpenChat) s_bridge.OpenChat(f.steam_id);
+                        }
+                        
+                        ImGui::PopID();
+                    }
+                    ImGui::EndChild();
+                } else {
+                    ImGui::TextDisabled("No friends online.");
+                }
+            }
+            
+            ImGui::End();
+            ImGui::PopStyleColor(style_colors);
+            return;
+        }
+        
+        // Clamp active index
+        if (s_active_chat_idx < 0) s_active_chat_idx = 0;
+        if (s_active_chat_idx >= (int)s_open_chats.size()) s_active_chat_idx = (int)s_open_chats.size() - 1;
         // Tab bar for multiple chats
         if (s_open_chats.size() > 1 && ImGui::BeginTabBar("##chat_tabs")) {
             for (size_t i = 0; i < s_open_chats.size(); ++i) {
@@ -1998,35 +2046,41 @@ static void render_chat_windows()
             float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
             const float avatar_size = 32.0f;
             
+            // Friend avatar + name header (single display, like native overlay)
+            const IconTexture *friend_avatar = get_or_upload_avatar(chat.steam_id);
+            if (friend_avatar && friend_avatar->valid) {
+                ImGui::Image(ImTextureRef(friend_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+                ImGui::SameLine();
+            }
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", chat.friend_name);
+            ImGui::Separator();
+            
             // Chat history area
             ImGui::BeginChild("##chat_history", ImVec2(0, -footer_height), true);
             
             if (got_state && cs.chat_history[0]) {
-                // Get avatars
-                const IconTexture *friend_avatar = get_or_upload_avatar(chat.steam_id);
-                const IconTexture *local_avatar = get_or_upload_local_avatar();
-                
-                // Split chat history by newlines
+                // Split chat history by newlines and display messages
                 char *history = cs.chat_history;
                 char *line = history;
                 while (*line) {
                     char *end = strchr(line, '\n');
                     if (end) *end = '\0';
                     
+                    // Check message type and display with appropriate style
                     bool is_self = (strncmp(line, "You: ", 5) == 0);
+                    bool is_invite = (strstr(line, "[INVITE]") != nullptr);
+                    bool is_invite_accepted = (strstr(line, "[INVITE ACCEPTED]") != nullptr);
+                    bool is_invite_refused = (strstr(line, "[INVITE REFUSED]") != nullptr);
                     
-                    // Show avatar + message
-                    if (is_self) {
-                        if (local_avatar && local_avatar->valid) {
-                            ImGui::Image(ImTextureRef(local_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
-                            ImGui::SameLine();
-                        }
+                    if (is_invite_accepted) {
+                        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", line);
+                    } else if (is_invite_refused) {
+                        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "%s", line);
+                    } else if (is_invite) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", line);
+                    } else if (is_self) {
                         ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
                     } else {
-                        if (friend_avatar && friend_avatar->valid) {
-                            ImGui::Image(ImTextureRef(friend_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
-                            ImGui::SameLine();
-                        }
                         ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
                     }
                     
@@ -2067,9 +2121,22 @@ static void render_chat_windows()
                 }
             }
             
-            // Pending invite notice
+            // Pending invite notice with Accept/Refuse buttons
             if (got_state && cs.has_pending_invite) {
+                ImGui::Separator();
                 ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending invite from this friend!");
+                ImGui::SameLine();
+                if (ImGui::Button("Accept##accept_invite")) {
+                    if (s_bridge.FriendAction)
+                        s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_ACCEPT_INVITE);
+                    chat.scroll_to_bottom = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Refuse##refuse_invite")) {
+                    if (s_bridge.FriendAction)
+                        s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_REFUSE_INVITE);
+                    chat.scroll_to_bottom = true;
+                }
             }
         }
     }

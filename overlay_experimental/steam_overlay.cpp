@@ -1106,16 +1106,22 @@ void Steam_Overlay::build_friend_window(Friend const& frd, friend_window_state& 
 
         // Fill this with the chat box and maybe the invitation
         if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
             ImGui::LabelText("##label", translationInvitedYouToJoinTheGame[current_language], frd.name().c_str(), frd.appid());
+            ImGui::PopStyleColor();
             ImGui::SameLine();
             if (ImGui::Button(translationAccept[current_language])) {
                 state.window_state |= window_state_join;
                 this->has_friend_action.push(frd);
+                // Add accepted status to chat history
+                state.chat_history.append("[INVITE ACCEPTED] You accepted the invite\n");
             }
 
             ImGui::SameLine();
             if (ImGui::Button(translationRefuse[current_language])) {
                 state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                // Add refused status to chat history
+                state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
             }
         }
 
@@ -3669,6 +3675,11 @@ void Steam_Overlay::SetLobbyInvite(Friend friendId, uint64 lobbyId)
         frd.window_state |= window_state_lobby_invite;
         // Make sure don't have rich presence invite and a lobby invite (it should not happen but who knows)
         frd.window_state &= ~window_state_rich_invite;
+        
+        // Add invite to chat history
+        std::string invite_msg = "[INVITE] " + i->first.name() + " invited you to join their lobby";
+        frd.chat_history.append(invite_msg).append("\n", 1);
+        
         add_invite_notification(*i);
         notify_sound_user_invite(i->second);
     }
@@ -3688,6 +3699,11 @@ void Steam_Overlay::SetRichInvite(Friend friendId, const char* connect_str)
         frd.window_state |= window_state_rich_invite;
         // Make sure don't have rich presence invite and a lobby invite (it should not happen but who knows)
         frd.window_state &= ~window_state_lobby_invite;
+        
+        // Add invite to chat history
+        std::string invite_msg = "[INVITE] " + i->first.name() + " invited you to join their game";
+        frd.chat_history.append(invite_msg).append("\n", 1);
+        
         add_invite_notification(*i);
         notify_sound_user_invite(i->second);
     }
@@ -4521,6 +4537,19 @@ void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
                 break;
             case 4: // chat
                 state.window_state |= window_state_show;
+                break;
+            case 5: // accept invite
+                if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+                    state.window_state |= window_state_join;
+                    has_friend_action.push(frd);
+                    state.chat_history.append("[INVITE ACCEPTED] You accepted the invite\n");
+                }
+                break;
+            case 6: // refuse invite
+                if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+                    state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                    state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                }
                 break;
             default: break;
             }
