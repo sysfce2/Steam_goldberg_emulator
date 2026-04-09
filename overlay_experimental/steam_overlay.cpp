@@ -3852,6 +3852,19 @@ int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count)
 {
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
 
+    // Build a map from achievement API name to group index
+    Steam_User_Stats *steamUserStats = get_steam_client()->steam_user_stats;
+    std::unordered_map<std::string, int16_t> name_to_group;
+    if (steamUserStats && steamUserStats->steamhunters_data_populated) {
+        int16_t group_idx = 0;
+        for (const auto &grp : steamUserStats->steamhunters_achievement_groups) {
+            for (const auto &api_name : grp.achievementApiNames) {
+                name_to_group[api_name] = group_idx;
+            }
+            ++group_idx;
+        }
+    }
+
     int count = (std::min)(max_count, static_cast<int>(achievements.size()));
     for (int i = 0; i < count; ++i) {
         auto &a = achievements[i];
@@ -3866,6 +3879,10 @@ int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count)
         o.unlock_time = a.unlock_time;
         o.hidden = a.hidden ? 1 : 0;
         o.achieved = a.achieved ? 1 : 0;
+
+        // Group index (-1 = ungrouped/base game)
+        auto git = name_to_group.find(a.name);
+        o.group_index = (git != name_to_group.end()) ? git->second : -1;
 
         // Global percentage
         auto it = ach_global_percentages.find(a.name);
@@ -3906,6 +3923,43 @@ int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count)
             o.icon_gray_w = 64;
             o.icon_gray_h = 64;
         }
+    }
+    return count;
+}
+
+int Steam_Overlay::Bridge_HasAchievementGroups()
+{
+    Steam_User_Stats *steamUserStats = get_steam_client()->steam_user_stats;
+    if (!steamUserStats) return 0;
+    return (steamUserStats->steamhunters_data_populated
+            && !steamUserStats->steamhunters_achievement_groups.empty()) ? 1 : 0;
+}
+
+int Steam_Overlay::Bridge_GetAchievementGroupCount()
+{
+    Steam_User_Stats *steamUserStats = get_steam_client()->steam_user_stats;
+    if (!steamUserStats || !steamUserStats->steamhunters_data_populated) return 0;
+    return static_cast<int>(steamUserStats->steamhunters_achievement_groups.size());
+}
+
+int Steam_Overlay::Bridge_GetAchievementGroups(GSE_AchievementGroup *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+
+    Steam_User_Stats *steamUserStats = get_steam_client()->steam_user_stats;
+    if (!steamUserStats || !steamUserStats->steamhunters_data_populated) return 0;
+
+    const auto &groups = steamUserStats->steamhunters_achievement_groups;
+    int count = (std::min)(max_count, static_cast<int>(groups.size()));
+    for (int i = 0; i < count; ++i) {
+        const auto &g = groups[i];
+        auto &o = out[i];
+        memset(&o, 0, sizeof(o));
+
+        bridge_safe_copy(o.name, sizeof(o.name), g.name);
+        bridge_safe_copy(o.dlc_app_name, sizeof(o.dlc_app_name), g.dlcAppName);
+        o.dlc_app_id = g.dlcAppId;
+        o.achievement_count = static_cast<int32_t>(g.achievementApiNames.size());
     }
     return count;
 }

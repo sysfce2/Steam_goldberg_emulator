@@ -132,6 +132,30 @@ __declspec(dllexport) int GSE_OverlayBridge_GetAchievements(GSE_Achievement *out
     return client->steam_overlay->Bridge_GetAchievements(out, max_count);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_HasAchievementGroups(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_HasAchievementGroups();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetAchievementGroupCount(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetAchievementGroupCount();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetAchievementGroups(GSE_AchievementGroup *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+
+    return client->steam_overlay->Bridge_GetAchievementGroups(out, max_count);
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetNotifications(GSE_Notification *out, int max_count)
 {
     if (!out || max_count <= 0) return 0;

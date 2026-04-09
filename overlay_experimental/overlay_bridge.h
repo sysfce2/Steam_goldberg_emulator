@@ -88,7 +88,7 @@ typedef struct GSE_Achievement {
     uint32_t unlock_time;
     uint8_t  hidden;
     uint8_t  achieved;
-    uint8_t  _pad[2];
+    int16_t  group_index;           /* -1 = ungrouped/base game, >=0 = index into achievement groups */
     float    global_percent;        /*  0..100, -1 if unknown */
     /* Icon pixel data pointers.
      * These point into the emu's decoded icon buffers.
@@ -101,6 +101,13 @@ typedef struct GSE_Achievement {
     int32_t  icon_gray_w;
     int32_t  icon_gray_h;
 } GSE_Achievement;
+
+typedef struct GSE_AchievementGroup {
+    char     name[128];             /* sub-group name (e.g. "Gwent"), may be empty */
+    char     dlc_app_name[256];     /* DLC display name, empty = base game */
+    int32_t  dlc_app_id;            /* DLC app ID, 0 = base game */
+    int32_t  achievement_count;     /* number of achievements in this group */
+} GSE_AchievementGroup;
 
 typedef struct GSE_Notification {
     int32_t  id;
@@ -203,6 +210,9 @@ typedef void      (*pfn_GSE_OverlayBridge_ShowOverlay)(int show);
 /* Achievements */
 typedef int       (*pfn_GSE_OverlayBridge_GetAchievementCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetAchievements)(GSE_Achievement *out, int max_count);
+typedef int       (*pfn_GSE_OverlayBridge_HasAchievementGroups)(void);  /* 1 if steamhunters group data is available */
+typedef int       (*pfn_GSE_OverlayBridge_GetAchievementGroupCount)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetAchievementGroups)(GSE_AchievementGroup *out, int max_count);
 
 /* Notifications — returns count of active (non-expired) notifications */
 typedef int       (*pfn_GSE_OverlayBridge_GetNotifications)(GSE_Notification *out, int max_count);
@@ -269,6 +279,9 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_ShowOverlay         ShowOverlay;
     pfn_GSE_OverlayBridge_GetAchievementCount GetAchievementCount;
     pfn_GSE_OverlayBridge_GetAchievements     GetAchievements;
+    pfn_GSE_OverlayBridge_HasAchievementGroups HasAchievementGroups;
+    pfn_GSE_OverlayBridge_GetAchievementGroupCount GetAchievementGroupCount;
+    pfn_GSE_OverlayBridge_GetAchievementGroups GetAchievementGroups;
     pfn_GSE_OverlayBridge_GetNotifications    GetNotifications;
     pfn_GSE_OverlayBridge_ExpireNotification  ExpireNotification;
     pfn_GSE_OverlayBridge_GetDisplayInfo      GetDisplayInfo;
@@ -303,6 +316,9 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(ShowOverlay);
     LOAD(GetAchievementCount);
     LOAD(GetAchievements);
+    LOAD(HasAchievementGroups);
+    LOAD(GetAchievementGroupCount);
+    LOAD(GetAchievementGroups);
     LOAD(GetNotifications);
     LOAD(ExpireNotification);
     LOAD(GetDisplayInfo);
