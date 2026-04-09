@@ -2517,7 +2517,8 @@ static void render_achievement_list()
             }
 
             char pbuf[32]{};
-            if (has_progress) snprintf(pbuf, sizeof(pbuf), "%u/%u", a.progress, a.max_progress);
+            bool show_progress = a.max_progress > 1 || (a.max_progress > 0 && !achieved);
+            if (show_progress) snprintf(pbuf, sizeof(pbuf), "%u/%u", achieved ? a.max_progress : a.progress, a.max_progress);
 
             float fill = achieved ? 1.0f : (has_progress ? (float)a.progress / (float)a.max_progress : 0.0f);
             ImVec2 sbar_pos = ImGui::GetCursorScreenPos();
@@ -2552,7 +2553,7 @@ static void render_achievement_list()
                 draw_shadowed(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
             }
 
-            if (has_progress) {
+            if (show_progress && pbuf[0]) {
                 ImVec2 pbar_sz = ImGui::CalcTextSize(pbuf);
                 ImVec2 pbar_pos = { sbar_pos.x + (sbar_width - pbar_sz.x) * 0.5f, sbar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
                 draw_shadowed(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);

@@ -3006,7 +3006,8 @@ void Steam_Overlay::render_main_window()
                         }
 
                         char pbuf[32]{};
-                        if (has_progress) snprintf(pbuf, sizeof(pbuf), "%u/%u", x.progress, x.max_progress);
+                        bool show_progress = x.max_progress > 1 || (x.max_progress > 0 && !achieved);
+                        if (show_progress) snprintf(pbuf, sizeof(pbuf), "%u/%u", achieved ? x.max_progress : x.progress, x.max_progress);
 
                         float fill = achieved ? 1.0f : (has_progress ? (float)x.progress / (float)x.max_progress : 0.0f);
                         ImVec2 bar_pos   = ImGui::GetCursorScreenPos();
@@ -3037,7 +3038,7 @@ void Steam_Overlay::render_main_window()
                             draw_shadowed(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
                         }
 
-                        if (has_progress) {
+                        if (show_progress && pbuf[0]) {
                             ImVec2 pbar_sz  = ImGui::CalcTextSize(pbuf);
                             ImVec2 pbar_pos = { bar_pos.x + (bar_width - pbar_sz.x) * 0.5f, bar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
                             draw_shadowed(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
