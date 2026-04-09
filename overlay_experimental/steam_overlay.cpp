@@ -1945,13 +1945,14 @@ void Steam_Overlay::overlay_render_proc()
         render_main_window();
     }
 
+    if (stats.show_any_stats()) {
+        stats.render_stats(current_language);
+    }
+
+    // Notifications rendered LAST so they always draw on top of everything
     if (notifications.size()) {
         ImGuiIO &io = ImGui::GetIO();
         build_notifications(io.DisplaySize.x, io.DisplaySize.y);
-    }
-
-    if (stats.show_any_stats()) {
-        stats.render_stats(current_language);
     }
 
     if (imgui_colors_patched) {
