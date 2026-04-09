@@ -1891,7 +1891,19 @@ void Steam_Overlay::overlay_render_proc()
     // We still keep data structures alive so the bridge can read them.
     // If the addon stops calling (unloaded/disabled), the heartbeat goes stale
     // and the native overlay automatically resumes after the timeout.
-    if (Bridge_IsConnected()) return;
+    if (Bridge_IsConnected()) {
+        // Even in bridge mode, render friend chat windows if any are open
+        // (ReShade addon doesn't have chat UI, so we provide it via native rendering)
+        std::lock_guard lock(overlay_mutex);
+        if (Ready()) {
+            for (auto &[frd, state] : friends) {
+                if (state.window_state & window_state_show) {
+                    build_friend_window(frd, state);
+                }
+            }
+        }
+        return;
+    }
 
     std::lock_guard lock(overlay_mutex);
 
@@ -3602,6 +3614,28 @@ void Steam_Overlay::FriendDisconnect(Friend _friend)
     auto it = friends.find(_friend);
     if (it != friends.end())
         friends.erase(it);
+}
+
+void Steam_Overlay::FriendUpdate(Friend _friend)
+{
+    if (settings->disable_overlay && !settings->enable_overlay_bridge) return;
+
+    PRINT_DEBUG("%" PRIu64 " lobby_id=%" PRIu64 "", _friend.id(), _friend.lobby_id());
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    
+    // Find existing friend entry by ID
+    for (auto it = friends.begin(); it != friends.end(); ++it) {
+        if (it->first.id() == _friend.id()) {
+            // Preserve the window state
+            friend_window_state state = it->second;
+            // Update window title with new appid
+            state.window_title = _friend.name() + " " + translationPlaying[current_language] + " " + std::to_string(_friend.appid());
+            // Remove old entry and insert with updated Friend key
+            friends.erase(it);
+            friends[_friend] = state;
+            return;
+        }
+    }
 }
 
 // show a notification when the user unlocks an achievement

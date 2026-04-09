@@ -1521,6 +1521,8 @@ void Steam_Friends::Callback(Common_Message *msg)
             }
             //TODO: callbacks?
             *f = msg->friend_();
+            // Notify overlay of updated friend data (e.g., lobby_id changed)
+            overlay->FriendUpdate(*f);
         }
     }
 
