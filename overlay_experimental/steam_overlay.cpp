@@ -2812,9 +2812,29 @@ void Steam_Overlay::render_main_window()
                             ach_global_percentages[ax.name] = global_dist(rng);
                     }
                 }
-                ImGui::BeginChild(translationAchievements[current_language]);
 
-                // ---- sort / group controls ----
+                // ---- Tab bar: In Progress | My Achievements | Global Stats ----
+                if (ImGui::BeginTabBar("##ach_tabs")) {
+                    if (ImGui::BeginTabItem("In Progress##ach_tab0")) {
+                        ach_current_tab = 0;
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("My Achievements##ach_tab1")) {
+                        ach_current_tab = 1;
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Global Stats##ach_tab2")) {
+                        ach_current_tab = 2;
+                        ImGui::EndTabItem();
+                    }
+                    ImGui::EndTabBar();
+                }
+
+                // ---- Search + sort/group controls ----
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
+                ImGui::InputTextWithHint("##ach_search", "Search achievements...", ach_search_buf, sizeof(ach_search_buf));
+
+                ImGui::SameLine();
                 Steam_User_Stats *steamUserStats_sh = get_steam_client()->steam_user_stats;
                 bool has_sh_groups = steamUserStats_sh->steamhunters_data_populated
                                      && !steamUserStats_sh->steamhunters_achievement_groups.empty();
@@ -2829,6 +2849,46 @@ void Steam_Overlay::render_main_window()
 
                 ImGui::Separator();
 
+                ImGui::BeginChild(translationAchievements[current_language]);
+
+                // ---- search filter (case-insensitive substring) ----
+                std::string search_lower;
+                bool has_search = ach_search_buf[0] != '\0';
+                if (has_search) {
+                    search_lower = ach_search_buf;
+                    std::transform(search_lower.begin(), search_lower.end(), search_lower.begin(),
+                        [](unsigned char c){ return std::tolower(c); });
+                }
+                auto ach_matches_search = [&](const Overlay_Achievement &a) -> bool {
+                    if (!has_search) return true;
+                    std::string t = a.title;
+                    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c){ return std::tolower(c); });
+                    if (t.find(search_lower) != std::string::npos) return true;
+                    std::string n = a.name;
+                    std::transform(n.begin(), n.end(), n.begin(), [](unsigned char c){ return std::tolower(c); });
+                    if (n.find(search_lower) != std::string::npos) return true;
+                    std::string d = a.description;
+                    std::transform(d.begin(), d.end(), d.begin(), [](unsigned char c){ return std::tolower(c); });
+                    return d.find(search_lower) != std::string::npos;
+                };
+
+                // ---- tab filter ----
+                auto ach_matches_tab = [&](const Overlay_Achievement &a) -> bool {
+                    switch (ach_current_tab) {
+                        case 0: // In Progress: has progress tracking and partial progress, not achieved
+                            return !a.achieved && a.max_progress > 0 && a.progress > 0;
+                        case 1: // My Achievements: all
+                            return true;
+                        case 2: // Global Stats: all
+                            return true;
+                        default: return true;
+                    }
+                };
+
+                // ---- obtainability info from SteamHunters ----
+                bool has_sh_data = steamUserStats_sh->steamhunters_data_populated
+                                   && !steamUserStats_sh->steamhunters_achievement_data.empty();
+
                 // ---- comparator (unlocked-recent → locked → hidden; schema or global % for locked) ----
                 auto ach_compare = [&](size_t ai, size_t bi) -> bool {
                     const auto &a = achievements[ai];
@@ -2837,14 +2897,23 @@ void Steam_Overlay::render_main_window()
                     bool b_hidden = b.hidden && !b.achieved;
                     if (a_hidden != b_hidden) return !a_hidden;
                     if (a_hidden) return false;
-                    if (a.achieved != b.achieved) return a.achieved > b.achieved;
-                    if (a.achieved) return a.unlock_time > b.unlock_time;
-                    if (!ach_sort_schema_order) {
+                    if (ach_current_tab == 2) {
+                        // Global Stats tab: always sort by global % descending
                         auto ita = ach_global_percentages.find(a.name);
                         auto itb = ach_global_percentages.find(b.name);
                         float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
                         float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
                         if (pa != pb) return pa > pb;
+                    } else {
+                        if (a.achieved != b.achieved) return a.achieved > b.achieved;
+                        if (a.achieved) return a.unlock_time > b.unlock_time;
+                        if (!ach_sort_schema_order) {
+                            auto ita = ach_global_percentages.find(a.name);
+                            auto itb = ach_global_percentages.find(b.name);
+                            float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
+                            float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
+                            if (pa != pb) return pa > pb;
+                        }
                     }
                     return ai < bi; // tie-break: schema order
                 };
@@ -2864,16 +2933,31 @@ void Steam_Overlay::render_main_window()
                     bool has_icon = x.icon->GetResourceId() != 0 || x.icon_gray->GetResourceId() != 0;
                     bool rendered = false;
 
+                    // Title line with obtainability badges
                     if (has_icon) {
-                        {
-                            const char *sym_for_measure = achieved ? u8"\u2713" : u8"\u2717";
-                            float sym_w = ImGui::CalcTextSize(sym_for_measure).x;
-                            float title_x_offset = (icon_col_w - sym_w) * 0.5f;
-                            if (title_x_offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + title_x_offset);
-                        }
-                        if (hidden) ImGui::Text("%s", translationHiddenAchievement[current_language]);
-                        else        ImGui::Text("%s", x.title.c_str());
+                        const char *sym_for_measure = achieved ? u8"\u2713" : u8"\u2717";
+                        float sym_w = ImGui::CalcTextSize(sym_for_measure).x;
+                        float title_x_offset = (icon_col_w - sym_w) * 0.5f;
+                        if (title_x_offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + title_x_offset);
+                    }
+                    if (hidden) ImGui::Text("%s", translationHiddenAchievement[current_language]);
+                    else        ImGui::Text("%s", x.title.c_str());
 
+                    // Obtainability badges (SteamHunters)
+                    if (has_sh_data) {
+                        auto sit = steamUserStats_sh->steamhunters_achievement_data.find(x.name);
+                        if (sit != steamUserStats_sh->steamhunters_achievement_data.end() && sit->second.obtainability > 0) {
+                            ImGui::SameLine();
+                            switch (sit->second.obtainability) {
+                                case 1: ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "[Missable]"); break;
+                                case 2: ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "[Bugged]"); break;
+                                case 3: ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[Online Only]"); break;
+                                default: ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[Special]"); break;
+                            }
+                        }
+                    }
+
+                    if (has_icon) {
                         std::string tbl_id = std::string("##ach_") + x.name;
                         if (ImGui::BeginTable(tbl_id.c_str(), 2)) {
                             rendered = true;
@@ -2893,10 +2977,8 @@ void Steam_Overlay::render_main_window()
 
                     if (!rendered) {
                         if (hidden) {
-                            ImGui::Text("%s", translationHiddenAchievement[current_language]);
                             ImGui::TextDisabled("%s", x.description.c_str());
                         } else {
-                            ImGui::Text("%s", x.title.c_str());
                             ImGui::TextWrapped("%s", x.description.c_str());
                         }
                     }
@@ -2962,11 +3044,20 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // --- global % ---
+                    // --- global % + SteamHunters community % ---
                     {
                         auto it = ach_global_percentages.find(x.name);
-                        if (it != ach_global_percentages.end())
+                        if (it != ach_global_percentages.end()) {
                             ImGui::TextDisabled(translationGlobalAchievementPercent[current_language], it->second);
+                            // Show SteamHunters community % alongside if available
+                            if (has_sh_data) {
+                                auto sit = steamUserStats_sh->steamhunters_achievement_data.find(x.name);
+                                if (sit != steamUserStats_sh->steamhunters_achievement_data.end() && sit->second.localPercentage >= 0.0f) {
+                                    ImGui::SameLine();
+                                    ImGui::TextDisabled("| %.1f%% of hunters", sit->second.localPercentage);
+                                }
+                            }
+                        }
                     }
 
                     ImGui::Separator();
@@ -2978,15 +3069,56 @@ void Steam_Overlay::render_main_window()
                 for (size_t i = 0; i < achievements.size(); ++i)
                     ach_name_idx[achievements[i].name] = i;
 
-                if (ach_group_by_sh && has_sh_groups) {
-                    // === GROUPED RENDER ===
+                // ---- build filtered index list (tab + search) ----
+                std::vector<size_t> filtered_idx;
+                filtered_idx.reserve(achievements.size());
+                for (size_t i = 0; i < achievements.size(); ++i) {
+                    if (!ach_matches_tab(achievements[i])) continue;
+                    if (!ach_matches_search(achievements[i])) continue;
+                    filtered_idx.push_back(i);
+                }
+
+                // ---- "My Achievements" tab: split into Unlocked/Locked sections ----
+                if (ach_current_tab == 1 && !ach_group_by_sh) {
+                    // Unlocked section
+                    std::vector<size_t> unlocked, locked;
+                    for (size_t fi : filtered_idx) {
+                        if (achievements[fi].achieved) unlocked.push_back(fi);
+                        else locked.push_back(fi);
+                    }
+                    std::stable_sort(unlocked.begin(), unlocked.end(), ach_compare);
+                    std::stable_sort(locked.begin(), locked.end(), ach_compare);
+
+                    char hdr_u[64]; snprintf(hdr_u, sizeof(hdr_u), "Unlocked (%d)##ach_unlocked", (int)unlocked.size());
+                    char hdr_l[64]; snprintf(hdr_l, sizeof(hdr_l), "Locked (%d)##ach_locked", (int)locked.size());
+
+                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.15f, 0.35f, 0.15f, 0.80f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.20f, 0.45f, 0.20f, 0.90f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.25f, 0.55f, 0.25f, 1.00f));
+                    bool open_u = ImGui::CollapsingHeader(hdr_u, ImGuiTreeNodeFlags_DefaultOpen);
+                    ImGui::PopStyleColor(3);
+                    if (open_u) {
+                        for (size_t si : unlocked) render_ach_item(achievements[si]);
+                    }
+
+                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.35f, 0.20f, 0.20f, 0.80f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.45f, 0.25f, 0.25f, 0.90f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.55f, 0.30f, 0.30f, 1.00f));
+                    bool open_l = ImGui::CollapsingHeader(hdr_l, ImGuiTreeNodeFlags_DefaultOpen);
+                    ImGui::PopStyleColor(3);
+                    if (open_l) {
+                        for (size_t si : locked) render_ach_item(achievements[si]);
+                    }
+                } else if (ach_group_by_sh && has_sh_groups) {
+                    // === GROUPED RENDER (any tab) ===
                     std::unordered_set<size_t> rendered_set;
+                    std::unordered_set<size_t> filtered_set(filtered_idx.begin(), filtered_idx.end());
 
                     for (const auto &grp : steamUserStats_sh->steamhunters_achievement_groups) {
                         std::vector<size_t> grp_idx;
                         for (const auto &api_name : grp.achievementApiNames) {
                             auto it = ach_name_idx.find(api_name);
-                            if (it != ach_name_idx.end()) {
+                            if (it != ach_name_idx.end() && filtered_set.count(it->second)) {
                                 grp_idx.push_back(it->second);
                                 rendered_set.insert(it->second);
                             }
@@ -2998,7 +3130,12 @@ void Steam_Overlay::render_main_window()
                         std::string hdr = grp.dlcAppName.empty() ? "Base Game" : grp.dlcAppName;
                         if (!grp.name.empty()) hdr += " \xe2\x80\x94 " + grp.name; // em-dash
 
-                        // collapsible tree node; default open
+                        // count achieved in group
+                        int grp_done = 0;
+                        for (size_t gi : grp_idx) if (achievements[gi].achieved) ++grp_done;
+                        char grp_count[32]; snprintf(grp_count, sizeof(grp_count), " (%d/%d)", grp_done, (int)grp_idx.size());
+                        hdr += grp_count;
+
                         ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
@@ -3009,16 +3146,19 @@ void Steam_Overlay::render_main_window()
                         }
                     }
 
-                    // render any achievements not assigned to any group as "Base Game"
+                    // render any achievements not assigned to any group as "Other"
                     std::vector<size_t> ungrouped;
-                    for (size_t i = 0; i < achievements.size(); ++i)
-                        if (rendered_set.find(i) == rendered_set.end()) ungrouped.push_back(i);
+                    for (size_t fi : filtered_idx)
+                        if (rendered_set.find(fi) == rendered_set.end()) ungrouped.push_back(fi);
                     if (!ungrouped.empty()) {
                         std::stable_sort(ungrouped.begin(), ungrouped.end(), ach_compare);
+                        int ug_done = 0;
+                        for (size_t gi : ungrouped) if (achievements[gi].achieved) ++ug_done;
+                        char ug_hdr[64]; snprintf(ug_hdr, sizeof(ug_hdr), "Base Game (%d/%d)##ach_base", ug_done, (int)ungrouped.size());
                         ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
                         ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
-                        bool open = ImGui::CollapsingHeader("Base Game##ach_base", ImGuiTreeNodeFlags_DefaultOpen);
+                        bool open = ImGui::CollapsingHeader(ug_hdr, ImGuiTreeNodeFlags_DefaultOpen);
                         ImGui::PopStyleColor(3);
                         if (open) {
                             for (size_t gi : ungrouped) render_ach_item(achievements[gi]);
@@ -3026,10 +3166,15 @@ void Steam_Overlay::render_main_window()
                     }
                 } else {
                     // === FLAT SORTED RENDER ===
-                    std::vector<size_t> sorted_idx(achievements.size());
-                    std::iota(sorted_idx.begin(), sorted_idx.end(), 0);
-                    std::stable_sort(sorted_idx.begin(), sorted_idx.end(), ach_compare);
-                    for (size_t si : sorted_idx) render_ach_item(achievements[si]);
+                    std::stable_sort(filtered_idx.begin(), filtered_idx.end(), ach_compare);
+                    for (size_t si : filtered_idx) render_ach_item(achievements[si]);
+                }
+
+                if (filtered_idx.empty()) {
+                    if (ach_current_tab == 0)
+                        ImGui::TextDisabled("No achievements with active progress.");
+                    else if (has_search)
+                        ImGui::TextDisabled("No achievements match your search.");
                 }
 
                 ImGui::EndChild();
@@ -4316,6 +4461,20 @@ int Steam_Overlay::Bridge_GetAchievements(GSE_Achievement *out, int max_count)
         // Global percentage
         auto it = ach_global_percentages.find(a.name);
         o.global_percent = (it != ach_global_percentages.end()) ? it->second : -1.0f;
+
+        // SteamHunters per-achievement data
+        o.sh_local_percent = -1.0f;
+        o.sh_points = 0;
+        o.obtainability = 0;
+        o._pad = 0;
+        if (steamUserStats && steamUserStats->steamhunters_data_populated) {
+            auto sit = steamUserStats->steamhunters_achievement_data.find(a.name);
+            if (sit != steamUserStats->steamhunters_achievement_data.end()) {
+                o.sh_local_percent = sit->second.localPercentage;
+                o.sh_points = static_cast<int16_t>(sit->second.points);
+                o.obtainability = static_cast<uint8_t>(sit->second.obtainability);
+            }
+        }
 
         // Decode icon pixel data on demand for the bridge.
         // When the ReShade addon is connected, overlay_render_proc() returns early

@@ -90,6 +90,10 @@ typedef struct GSE_Achievement {
     uint8_t  achieved;
     int16_t  group_index;           /* -1 = ungrouped/base game, >=0 = index into achievement groups */
     float    global_percent;        /*  0..100, -1 if unknown */
+    float    sh_local_percent;      /*  SteamHunters community hunter %, -1 if unknown */
+    int16_t  sh_points;             /*  SteamHunters rarity points, 0 if unknown */
+    uint8_t  obtainability;         /*  0=normal, 1=missable, 2=deprecated/glitched, 3=online-only */
+    uint8_t  _pad;
     /* Icon pixel data pointers.
      * These point into the emu's decoded icon buffers.
      * Valid only until the next call to GSE_OverlayBridge_GetAchievements.

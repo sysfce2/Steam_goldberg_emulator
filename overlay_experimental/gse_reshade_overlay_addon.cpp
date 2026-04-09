@@ -28,6 +28,7 @@
 #include <chrono>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <algorithm>
 #include <numeric>
@@ -2255,6 +2256,8 @@ static void render_chat_windows()
 
 static bool s_ach_sort_schema_order = true;
 static bool s_ach_group_by_dlc = false;
+static int  s_ach_current_tab = 1;    // 0=In Progress, 1=My Achievements, 2=Global Stats
+static char s_ach_search_buf[256] = {};
 
 static void render_achievement_list()
 {
@@ -2334,23 +2337,70 @@ static void render_achievement_list()
             s_bridge.SimulateAchievements();
     }
 
-    // ── Sort control (matching native toggle) ──
-    ImGui::BeginChild("Achievements##ach_child");
+    // ── Tab bar: In Progress | My Achievements | Global Stats ──
+    if (ImGui::BeginTabBar("##ach_tabs")) {
+        if (ImGui::BeginTabItem("In Progress##ach_tab0")) {
+            s_ach_current_tab = 0;
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("My Achievements##ach_tab1")) {
+            s_ach_current_tab = 1;
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Global Stats##ach_tab2")) {
+            s_ach_current_tab = 2;
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
 
+    // ── Search + sort/group controls ──
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
+    ImGui::InputTextWithHint("##ach_search", "Search achievements...", s_ach_search_buf, sizeof(s_ach_search_buf));
+
+    ImGui::SameLine();
+    bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
+    if (has_groups) {
+        if (ImGui::Button(s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
+            s_ach_group_by_dlc = !s_ach_group_by_dlc;
+        ImGui::SameLine();
+    }
     if (ImGui::Button(s_ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %##ach_srt"))
         s_ach_sort_schema_order = !s_ach_sort_schema_order;
 
-    // ── Group by DLC toggle (matching native) ──
-    bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
-    if (has_groups) {
-        ImGui::SameLine();
-        if (ImGui::Button(s_ach_group_by_dlc ? "Group by DLC: ON##ach_grp" : "Group by DLC: OFF##ach_grp"))
-            s_ach_group_by_dlc = !s_ach_group_by_dlc;
-    }
-
     ImGui::Separator();
 
-    // ── Comparator (matching native: unlocked-recent first, then locked, then hidden) ──
+    ImGui::BeginChild("Achievements##ach_child");
+
+    // ── Search filter (case-insensitive substring) ──
+    std::string search_lower;
+    bool has_search = s_ach_search_buf[0] != '\0';
+    if (has_search) {
+        search_lower = s_ach_search_buf;
+        std::transform(search_lower.begin(), search_lower.end(), search_lower.begin(),
+            [](unsigned char c){ return (char)std::tolower(c); });
+    }
+    auto ach_matches_search = [&](const GSE_Achievement &a) -> bool {
+        if (!has_search) return true;
+        auto lower_contains = [&](const char *str) -> bool {
+            std::string s = str;
+            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return (char)std::tolower(c); });
+            return s.find(search_lower) != std::string::npos;
+        };
+        return lower_contains(a.title) || lower_contains(a.name) || lower_contains(a.description);
+    };
+
+    // ── Tab filter ──
+    auto ach_matches_tab = [&](const GSE_Achievement &a) -> bool {
+        switch (s_ach_current_tab) {
+            case 0: return !a.achieved && a.max_progress > 0 && a.progress > 0;
+            case 1: return true;
+            case 2: return true;
+            default: return true;
+        }
+    };
+
+    // ── Comparator ──
     auto ach_compare = [&](int ai, int bi) -> bool {
         const auto &a = achs[ai];
         const auto &b = achs[bi];
@@ -2358,19 +2408,24 @@ static void render_achievement_list()
         bool b_hidden = b.hidden && !b.achieved;
         if (a_hidden != b_hidden) return !a_hidden;
         if (a_hidden) return false;
-        if (a.achieved != b.achieved) return a.achieved > b.achieved;
-        if (a.achieved) return a.unlock_time > b.unlock_time;
-        if (!s_ach_sort_schema_order) {
-            float pa = a.global_percent;
-            float pb = b.global_percent;
-            if (pa < 0) pa = -1.0f;
-            if (pb < 0) pb = -1.0f;
+        if (s_ach_current_tab == 2) {
+            // Global Stats: always sort by global %
+            float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
+            float pb = b.global_percent < 0 ? -1.0f : b.global_percent;
             if (pa != pb) return pa > pb;
+        } else {
+            if (a.achieved != b.achieved) return a.achieved > b.achieved;
+            if (a.achieved) return a.unlock_time > b.unlock_time;
+            if (!s_ach_sort_schema_order) {
+                float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
+                float pb = b.global_percent < 0 ? -1.0f : b.global_percent;
+                if (pa != pb) return pa > pb;
+            }
         }
-        return ai < bi; // schema order tie-break
+        return ai < bi;
     };
 
-    // ── Render each achievement (matching native render_ach_item lambda) ──
+    // ── Per-achievement render lambda ──
     const float bar_h = font_size;
     const float icon_col_w = ICON_SIZE;
 
@@ -2385,6 +2440,17 @@ static void render_achievement_list()
         // Title
         if (hidden) ImGui::Text("[%s]", translationHiddenAchievement[s_current_language]);
         else        ImGui::Text("%s", a.title);
+
+        // Obtainability badges
+        if (a.obtainability > 0) {
+            ImGui::SameLine();
+            switch (a.obtainability) {
+                case 1: ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "[Missable]"); break;
+                case 2: ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "[Bugged]"); break;
+                case 3: ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[Online Only]"); break;
+                default: ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[Special]"); break;
+            }
+        }
 
         // Icon + description table (matching native 2-column layout)
         if (ImGui::BeginTable("##ach_tbl", 2)) {
@@ -2429,7 +2495,7 @@ static void render_achievement_list()
             ImGui::EndTable();
         }
 
-        // ── Status bar (ProgressBar + shadow text overlay, matching native exactly) ──
+        // ── Status bar (ProgressBar + shadow text overlay) ──
         {
             const char *sym;
             ImU32 sym_col;
@@ -2493,30 +2559,72 @@ static void render_achievement_list()
             }
         }
 
-        // ── Global % ──
-        if (a.global_percent >= 0.0f)
+        // ── Global % + SteamHunters community % ──
+        if (a.global_percent >= 0.0f) {
             ImGui::TextDisabled(translationGlobalAchievementPercent[s_current_language], a.global_percent);
+            if (a.sh_local_percent >= 0.0f) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("| %.1f%% of hunters", a.sh_local_percent);
+            }
+        }
 
         ImGui::Separator();
         ImGui::PopID();
     };
 
-    // ── Grouped or flat rendering ──
-    if (s_ach_group_by_dlc && has_groups && s_bridge.GetAchievementGroupCount && s_bridge.GetAchievementGroups) {
-        // === GROUPED RENDER ===
+    // ── Build filtered index list (tab + search) ──
+    std::vector<int> filtered_idx;
+    filtered_idx.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        if (!ach_matches_tab(achs[i])) continue;
+        if (!ach_matches_search(achs[i])) continue;
+        filtered_idx.push_back(i);
+    }
+
+    // ── "My Achievements" tab: split into Unlocked/Locked sections ──
+    if (s_ach_current_tab == 1 && !s_ach_group_by_dlc) {
+        std::vector<int> unlocked, locked;
+        for (int fi : filtered_idx) {
+            if (achs[fi].achieved) unlocked.push_back(fi);
+            else locked.push_back(fi);
+        }
+        std::stable_sort(unlocked.begin(), unlocked.end(), ach_compare);
+        std::stable_sort(locked.begin(), locked.end(), ach_compare);
+
+        char hdr_u[64]; snprintf(hdr_u, sizeof(hdr_u), "Unlocked (%d)##ach_unlocked", (int)unlocked.size());
+        char hdr_l[64]; snprintf(hdr_l, sizeof(hdr_l), "Locked (%d)##ach_locked", (int)locked.size());
+
+        ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.15f, 0.35f, 0.15f, 0.80f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.45f, 0.20f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.25f, 0.55f, 0.25f, 1.00f));
+        bool open_u = ImGui::CollapsingHeader(hdr_u, ImGuiTreeNodeFlags_DefaultOpen);
+        ImGui::PopStyleColor(3);
+        if (open_u) {
+            for (int si : unlocked) render_ach_item(si);
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.35f, 0.20f, 0.20f, 0.80f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.45f, 0.25f, 0.25f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.55f, 0.30f, 0.30f, 1.00f));
+        bool open_l = ImGui::CollapsingHeader(hdr_l, ImGuiTreeNodeFlags_DefaultOpen);
+        ImGui::PopStyleColor(3);
+        if (open_l) {
+            for (int si : locked) render_ach_item(si);
+        }
+    } else if (s_ach_group_by_dlc && has_groups && s_bridge.GetAchievementGroupCount && s_bridge.GetAchievementGroups) {
+        // === GROUPED RENDER (any tab) ===
         int group_count = s_bridge.GetAchievementGroupCount();
         std::vector<GSE_AchievementGroup> groups(group_count);
         group_count = s_bridge.GetAchievementGroups(groups.data(), group_count);
 
-        // Render each group's achievements
+        std::unordered_set<int> filtered_set(filtered_idx.begin(), filtered_idx.end());
         std::vector<bool> rendered(count, false);
         for (int gi = 0; gi < group_count; ++gi) {
             const auto &grp = groups[gi];
 
-            // Collect achievements belonging to this group
             std::vector<int> grp_idx;
             for (int i = 0; i < count; ++i) {
-                if (achs[i].group_index == gi) {
+                if (achs[i].group_index == gi && filtered_set.count(i)) {
                     grp_idx.push_back(i);
                     rendered[i] = true;
                 }
@@ -2524,17 +2632,20 @@ static void render_achievement_list()
             if (grp_idx.empty()) continue;
             std::stable_sort(grp_idx.begin(), grp_idx.end(), ach_compare);
 
-            // Group header: "DLC Name" or "DLC Name — Sub-group"
             std::string hdr = (grp.dlc_app_name[0] == '\0') ? "Base Game" : grp.dlc_app_name;
             if (grp.name[0] != '\0') {
-                hdr += " \xe2\x80\x94 "; // em-dash
+                hdr += " \xe2\x80\x94 ";
                 hdr += grp.name;
             }
+            // count achieved in group
+            int grp_done = 0;
+            for (int idx : grp_idx) if (achs[idx].achieved) ++grp_done;
+            char grp_count_buf[32]; snprintf(grp_count_buf, sizeof(grp_count_buf), " (%d/%d)", grp_done, (int)grp_idx.size());
+            hdr += grp_count_buf;
             hdr += "##grp_";
             hdr += std::to_string(gi);
 
-            // Collapsible tree node with styling matching native
-            ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
+            ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
             bool open = ImGui::CollapsingHeader(hdr.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
@@ -2544,17 +2655,20 @@ static void render_achievement_list()
             }
         }
 
-        // Render any achievements not assigned to any group as "Base Game"
+        // Ungrouped
         std::vector<int> ungrouped;
-        for (int i = 0; i < count; ++i) {
-            if (!rendered[i]) ungrouped.push_back(i);
+        for (int fi : filtered_idx) {
+            if (!rendered[fi]) ungrouped.push_back(fi);
         }
         if (!ungrouped.empty()) {
             std::stable_sort(ungrouped.begin(), ungrouped.end(), ach_compare);
-            ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
+            int ug_done = 0;
+            for (int idx : ungrouped) if (achs[idx].achieved) ++ug_done;
+            char ug_hdr[64]; snprintf(ug_hdr, sizeof(ug_hdr), "Base Game (%d/%d)##ach_base", ug_done, (int)ungrouped.size());
+            ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
-            bool open = ImGui::CollapsingHeader("Base Game##ach_base", ImGuiTreeNodeFlags_DefaultOpen);
+            bool open = ImGui::CollapsingHeader(ug_hdr, ImGuiTreeNodeFlags_DefaultOpen);
             ImGui::PopStyleColor(3);
             if (open) {
                 for (int idx : ungrouped) render_ach_item(idx);
@@ -2562,10 +2676,15 @@ static void render_achievement_list()
         }
     } else {
         // === FLAT SORTED RENDER ===
-        std::vector<int> sorted_idx(count);
-        for (int i = 0; i < count; ++i) sorted_idx[i] = i;
-        std::stable_sort(sorted_idx.begin(), sorted_idx.end(), ach_compare);
-        for (int si = 0; si < count; ++si) render_ach_item(sorted_idx[si]);
+        std::stable_sort(filtered_idx.begin(), filtered_idx.end(), ach_compare);
+        for (int si : filtered_idx) render_ach_item(si);
+    }
+
+    if (filtered_idx.empty()) {
+        if (s_ach_current_tab == 0)
+            ImGui::TextDisabled("No achievements with active progress.");
+        else if (has_search)
+            ImGui::TextDisabled("No achievements match your search.");
     }
 
     ImGui::EndChild();
