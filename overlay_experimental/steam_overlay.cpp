@@ -1094,6 +1094,16 @@ void Steam_Overlay::build_friend_window(Friend const& frd, friend_window_state& 
             state.window_state &= ~window_state_need_attention;
         }
 
+        // Show friend's avatar at the top of the chat window
+        const float avatar_size = 32.0f;
+        bool has_avatar = try_load_avatar(const_cast<friend_window_state&>(state), frd.id());
+        if (has_avatar && state.avatar_resource && state.avatar_resource->GetResourceId() != 0) {
+            ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
+            ImGui::Separator();
+        }
+
         // Fill this with the chat box and maybe the invitation
         if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
             ImGui::LabelText("##label", translationInvitedYouToJoinTheGame[current_language], frd.name().c_str(), frd.appid());
@@ -1884,6 +1894,83 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
     return icon_rsrc->GetResourceId() != 0;
 }
 
+bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
+{
+    if (!_renderer) return false;
+    
+    // Already loaded?
+    if (state.avatar_resource && state.avatar_resource->GetResourceId() != 0) return true;
+    
+    // Create resource if not exist
+    if (!state.avatar_resource) {
+        state.avatar_resource = _renderer->CreateResource();
+        if (!state.avatar_resource) return false;
+    }
+    
+    // Try to get avatar handle
+    if (state.avatar_handle == -1) {
+        Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+        if (!steamFriends) return false;
+        state.avatar_handle = steamFriends->GetMediumFriendAvatar(CSteamID(steam_id));
+    }
+    if (state.avatar_handle <= 0) return false;
+    
+    // Get image data
+    Image_Data *img = settings->get_image(state.avatar_handle);
+    if (!img || img->data.empty()) return false;
+    
+    int iw = static_cast<int>(img->width);
+    int ih = static_cast<int>(img->height);
+    if (iw <= 0 || ih <= 0 || img->data.size() < (size_t)iw * ih * 4) return false;
+    
+    // Store pixel data - AttachResource holds a raw pointer so buffer must outlive resource
+    state.avatar_pixels = img->data;
+    srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+        (uint8_t*)state.avatar_pixels.data(), (size_t)iw * ih);
+    state.avatar_resource->AttachResource((void*)state.avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih);
+    
+    return state.avatar_resource->GetResourceId() != 0;
+}
+
+bool Steam_Overlay::try_load_local_avatar()
+{
+    if (!_renderer) return false;
+    
+    // Already loaded?
+    if (local_avatar_resource && local_avatar_resource->GetResourceId() != 0) return true;
+    
+    // Create resource if not exist
+    if (!local_avatar_resource) {
+        local_avatar_resource = _renderer->CreateResource();
+        if (!local_avatar_resource) return false;
+    }
+    
+    // Try to get avatar handle
+    if (local_avatar_handle == -1) {
+        Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+        if (!steamFriends) return false;
+        CSteamID local_id = settings->get_local_steam_id();
+        local_avatar_handle = steamFriends->GetMediumFriendAvatar(local_id);
+    }
+    if (local_avatar_handle <= 0) return false;
+    
+    // Get image data
+    Image_Data *img = settings->get_image(local_avatar_handle);
+    if (!img || img->data.empty()) return false;
+    
+    int iw = static_cast<int>(img->width);
+    int ih = static_cast<int>(img->height);
+    if (iw <= 0 || ih <= 0 || img->data.size() < (size_t)iw * ih * 4) return false;
+    
+    // Store pixel data - AttachResource holds a raw pointer so buffer must outlive resource
+    local_avatar_pixels = img->data;
+    srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+        (uint8_t*)local_avatar_pixels.data(), (size_t)iw * ih);
+    local_avatar_resource->AttachResource((void*)local_avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih);
+    
+    return local_avatar_resource->GetResourceId() != 0;
+}
+
 // Try to make this function as short as possible or it might affect game's fps.
 void Steam_Overlay::overlay_render_proc()
 {
@@ -2057,6 +2144,13 @@ void Steam_Overlay::render_main_window()
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoBringToFrontOnFocus)) {
         if (show_user_info) {
+            // Show local user avatar next to info
+            const float avatar_size = 48.0f;
+            bool has_local_avatar = try_load_local_avatar();
+            if (has_local_avatar && local_avatar_resource && local_avatar_resource->GetResourceId() != 0) {
+                ImGui::Image(local_avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
+                ImGui::SameLine();
+            }
             ImGui::LabelText("##playinglabel", translationUserPlaying[current_language],
                 settings->get_local_name(),
                 settings->get_local_steam_id().ConvertToUint64(),
@@ -2347,6 +2441,27 @@ void Steam_Overlay::render_main_window()
                     ImGui::Spacing();
                 }
 
+                // Try to load avatar texture (lazy)
+                bool has_avatar = try_load_avatar(i.second, i.first.id());
+                
+                // Layout: avatar on left, info on right
+                const float avatar_size = 32.0f;
+                const float content_start_x = ImGui::GetCursorPosX();
+                
+                // Avatar or placeholder
+                if (has_avatar && i.second.avatar_resource && i.second.avatar_resource->GetResourceId() != 0) {
+                    ImGui::Image(i.second.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
+                } else {
+                    // Placeholder box
+                    ImVec2 p = ImGui::GetCursorScreenPos();
+                    ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                    ImGui::Dummy(ImVec2(avatar_size, avatar_size));
+                }
+                ImGui::SameLine();
+                
+                // Right side: name, status, buttons in a group
+                ImGui::BeginGroup();
+
                 // Line 1: Friend name + status
                 ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", i.first.name().c_str());
                 ImGui::SameLine();
@@ -2399,6 +2514,7 @@ void Steam_Overlay::render_main_window()
                     ImGui::SetClipboardText(std::to_string(i.first.id()).c_str());
                 }
 
+                ImGui::EndGroup(); // end right-side info group
                 ImGui::PopID();
                 build_friend_window(i.first, i.second);
                 ++friend_idx;

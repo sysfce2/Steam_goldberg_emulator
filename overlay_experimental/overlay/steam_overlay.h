@@ -44,6 +44,11 @@ struct friend_window_state
     char chat_input[max_chat_len];
 
     bool joinable;
+    
+    // Avatar texture (lazy loaded)
+    InGameOverlay::RendererResource_t* avatar_resource{nullptr};
+    std::string avatar_pixels{};  // kept alive for AttachResource
+    int avatar_handle{-1};        // Settings image handle, -1 = not loaded
 };
 
 struct Friend_Less
@@ -173,6 +178,13 @@ class Steam_Overlay
             if (t.resource) { t.resource->Delete(); t.resource = nullptr; }
         sce_textures.clear();
     }
+
+    // Local user avatar (loaded once, displayed in user info)
+    InGameOverlay::RendererResource_t* local_avatar_resource{nullptr};
+    std::string local_avatar_pixels{};
+    int local_avatar_handle{-1};
+    bool try_load_avatar(friend_window_state &state, uint64 steam_id);
+    bool try_load_local_avatar();
 
     // achievement list display options
     bool ach_group_by_sh{false};       // group achievements by SteamHunters DLC/update groups
