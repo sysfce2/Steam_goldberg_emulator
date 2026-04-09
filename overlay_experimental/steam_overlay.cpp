@@ -2541,15 +2541,50 @@ void Steam_Overlay::render_main_window()
                 // Right side: name, steamid, status, buttons in a group
                 ImGui::BeginGroup();
 
-                // Line 1: Friend name
+                // Line 1: Friend name + playing appid
                 ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", i.first.name().c_str());
+                if (i.first.appid() != 0) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(Playing %u)", i.first.appid());
+                }
 
                 // Line 2: SteamID
                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "ID: %llu", (unsigned long long)i.first.id());
 
-                // Line 3: Status - In Lobby / Playing
+                // Line 3: Lobby status or In Game
+                Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+                Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+                std::string connect;
+                if (steamFriends) {
+                    connect = steamFriends->get_friend_rich_presence_silent(CSteamID((uint64)i.first.id()), "connect");
+                }
+
                 if (i.first.lobby_id() != 0) {
-                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby %llu", (unsigned long long)i.first.lobby_id());
+                    // Friend is in a lobby - show "Connected to OwnerName - Lobby ID (x/y)"
+                    CSteamID friend_lobby((uint64)i.first.lobby_id());
+                    std::string owner_name;
+                    int member_count = 0, member_limit = 0;
+                    if (matchmaking) {
+                        CSteamID owner = matchmaking->GetLobbyOwner(friend_lobby);
+                        if (owner.IsValid() && steamFriends) {
+                            const char *oname = steamFriends->GetFriendPersonaName(owner);
+                            if (oname && oname[0]) owner_name = oname;
+                        }
+                        member_count = matchmaking->GetNumLobbyMembers(friend_lobby);
+                        member_limit = matchmaking->GetLobbyMemberLimit(friend_lobby);
+                    }
+
+                    if (!owner_name.empty() && member_limit > 0) {
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Connected to %s - Lobby %llu (%d/%d)",
+                            owner_name.c_str(), (unsigned long long)i.first.lobby_id(), member_count, member_limit);
+                    } else if (!owner_name.empty()) {
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Connected to %s - Lobby %llu",
+                            owner_name.c_str(), (unsigned long long)i.first.lobby_id());
+                    } else {
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby %llu",
+                            (unsigned long long)i.first.lobby_id());
+                    }
+
                     // Join button on same line if joinable
                     if (i.second.joinable) {
                         ImGui::SameLine();
@@ -2565,19 +2600,8 @@ void Steam_Overlay::render_main_window()
                     if (ImGui::SmallButton(copylobby_btn.c_str())) {
                         ImGui::SetClipboardText(std::to_string(i.first.lobby_id()).c_str());
                     }
-                } else if (i.first.appid() != 0) {
-                    ImGui::TextDisabled("Playing %u", i.first.appid());
-                }
-
-                // Connect string (under status)
-                {
-                    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
-                    if (steamFriends) {
-                        std::string connect = steamFriends->get_friend_rich_presence_silent(CSteamID((uint64)i.first.id()), "connect");
-                        if (!connect.empty()) {
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Connect: %s", connect.c_str());
-                        }
-                    }
+                } else if (!connect.empty()) {
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Game");
                 }
 
                 // Action buttons
@@ -4494,6 +4518,23 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
             if (!connect.empty()) {
                 strncpy(o.connect_string, connect.c_str(), GSE_CONNECT_STRING_SIZE - 1);
                 o.connect_string[GSE_CONNECT_STRING_SIZE - 1] = '\0';
+            }
+        }
+
+        // Get friend's lobby details (owner name, member count/limit)
+        if (o.in_lobby) {
+            Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+            if (matchmaking) {
+                CSteamID friend_lobby((uint64)frd.lobby_id());
+                CSteamID owner = matchmaking->GetLobbyOwner(friend_lobby);
+                if (owner.IsValid() && steamFriends) {
+                    const char *oname = steamFriends->GetFriendPersonaName(owner);
+                    if (oname && oname[0]) {
+                        bridge_safe_copy(o.lobby_owner_name, sizeof(o.lobby_owner_name), std::string(oname));
+                    }
+                }
+                o.lobby_member_count = matchmaking->GetNumLobbyMembers(friend_lobby);
+                o.lobby_member_limit = matchmaking->GetLobbyMemberLimit(friend_lobby);
             }
         }
 

@@ -1888,18 +1888,32 @@ static void render_friends_list()
         
         ImGui::BeginGroup();
 
-        // Line 1: Friend name
+        // Line 1: Friend name + playing appid
         if (!f.is_online)
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", f.name);
         else
             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", f.name);
+        if (f.appid != 0) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(Playing %u)", f.appid);
+        }
 
         // Line 2: SteamID
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "ID: %llu", (unsigned long long)f.steam_id);
 
-        // Line 3: Status - In Lobby / Playing
+        // Line 3: Lobby status or In Game
         if (f.lobby_id != 0) {
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby %llu", (unsigned long long)f.lobby_id);
+            // Friend is in a lobby - show "Connected to OwnerName - Lobby ID (x/y)"
+            if (f.lobby_owner_name[0] != '\0' && f.lobby_member_limit > 0) {
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Connected to %s - Lobby %llu (%d/%d)",
+                    f.lobby_owner_name, (unsigned long long)f.lobby_id, f.lobby_member_count, f.lobby_member_limit);
+            } else if (f.lobby_owner_name[0] != '\0') {
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Connected to %s - Lobby %llu",
+                    f.lobby_owner_name, (unsigned long long)f.lobby_id);
+            } else {
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby %llu", (unsigned long long)f.lobby_id);
+            }
+
             // Join button if joinable
             if (f.is_joinable && s_bridge.FriendAction) {
                 ImGui::SameLine();
@@ -1917,13 +1931,8 @@ static void render_friends_list()
                 snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)f.lobby_id);
                 ImGui::SetClipboardText(lobby_str);
             }
-        } else if (f.appid != 0) {
-            ImGui::TextDisabled("Playing %u", f.appid);
-        }
-
-        // Connect string (always show if available)
-        if (f.connect_string[0] != '\0') {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Connect: %s", f.connect_string);
+        } else if (f.connect_string[0] != '\0') {
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Game");
         }
 
         // Action buttons
