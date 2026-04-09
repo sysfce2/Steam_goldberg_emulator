@@ -197,8 +197,20 @@ typedef struct GSE_Friend {
     uint8_t  is_joinable;
     uint8_t  same_app;              /* 1 if friend is playing the same app */
     uint8_t  window_state;          /* bitmask: show, invite, join, etc. */
-    uint8_t  _pad[4];
+    uint8_t  in_lobby;              /* 1 if friend is currently in a lobby */
+    uint8_t  _pad[3];
+    uint32_t appid;                 /* friend's current app/game ID */
+    uint64_t lobby_id;              /* friend's current lobby ID (0 if none) */
 } GSE_Friend;
+
+typedef struct GSE_LocalLobbyInfo {
+    uint64_t lobby_id;              /* local user's current lobby ID (0 if none) */
+    uint64_t lobby_owner;           /* lobby owner steam ID */
+    int32_t  member_count;          /* number of members in lobby */
+    int32_t  member_limit;          /* max members allowed */
+    uint8_t  is_owner;              /* 1 if local user is the lobby owner */
+    uint8_t  _pad[7];
+} GSE_LocalLobbyInfo;
 
 /* ── Function pointer typedefs (for GetProcAddress) ───────────────────── */
 
@@ -226,6 +238,7 @@ typedef float     (*pfn_GSE_OverlayBridge_GetSDRWhiteScale)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetFriendCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetFriends)(GSE_Friend *out, int max_count);
 typedef int       (*pfn_GSE_OverlayBridge_HasLobby)(void);  /* 1 if local user has a lobby/connect string */
+typedef int       (*pfn_GSE_OverlayBridge_GetLocalLobbyInfo)(GSE_LocalLobbyInfo *out);  /* returns 1 if in lobby */
 
 /* Language */
 typedef int       (*pfn_GSE_OverlayBridge_GetLanguage)(void);  /* returns language index (0-30) for translations */
@@ -253,6 +266,7 @@ typedef int       (*pfn_GSE_OverlayBridge_GetSceStoragePath)(char *out, int out_
 #define GSE_FRIEND_ACTION_INVITE   1
 #define GSE_FRIEND_ACTION_JOIN     2
 #define GSE_FRIEND_ACTION_COPY_ID  3
+#define GSE_FRIEND_ACTION_CHAT     4
 
 /* Option IDs for Get/SetOption */
 #define GSE_OPT_FRIEND_NOTIF_ENABLE          1  /* bool */
@@ -289,6 +303,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetFriendCount      GetFriendCount;
     pfn_GSE_OverlayBridge_GetFriends          GetFriends;
     pfn_GSE_OverlayBridge_HasLobby            HasLobby;
+    pfn_GSE_OverlayBridge_GetLocalLobbyInfo   GetLocalLobbyInfo;
     pfn_GSE_OverlayBridge_GetLanguage         GetLanguage;
     pfn_GSE_OverlayBridge_GetOption           GetOption;
     pfn_GSE_OverlayBridge_SetOption           SetOption;
@@ -326,6 +341,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetFriendCount);
     LOAD(GetFriends);
     LOAD(HasLobby);
+    LOAD(GetLocalLobbyInfo);
     LOAD(GetLanguage);
     LOAD(GetOption);
     LOAD(SetOption);

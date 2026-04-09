@@ -1031,6 +1031,12 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
             auto friend_id_str = std::to_string(frd.id());
             ImGui::SetClipboardText(friend_id_str.c_str());
         }
+        // user clicked on "copy lobby id" on a friend (if they're in a lobby)
+        if (frd.lobby_id() != 0 && ImGui::Button("Copy Lobby ID##PopupCopyLobbyId")) {
+            close_popup = true;
+            auto lobby_id_str = std::to_string(frd.lobby_id());
+            ImGui::SetClipboardText(lobby_id_str.c_str());
+        }
         // If we have the same appid, activate the invite/join buttons
         if (settings->get_local_game_id().AppID() == frd.appid()) {
             // user clicked on "invite to game"
@@ -2285,6 +2291,26 @@ void Steam_Overlay::render_main_window()
         ImGui::Spacing();
         ImGui::LabelText("##label", "%s", translationFriends[current_language]);
 
+        // Show local user's lobby info if in a lobby
+        if (i_have_lobby) {
+            CSteamID lobby = settings->get_lobby();
+            if (lobby.IsValid()) {
+                Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+                if (matchmaking) {
+                    int member_count = matchmaking->GetNumLobbyMembers(lobby);
+                    int member_limit = matchmaking->GetLobbyMemberLimit(lobby);
+                    CSteamID owner = matchmaking->GetLobbyOwner(lobby);
+                    bool is_owner = (owner.ConvertToUint64() == settings->get_local_steam_id().ConvertToUint64());
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Your Lobby: %llu (%d/%d) %s",
+                        lobby.ConvertToUint64(), member_count, member_limit, is_owner ? "[Owner]" : "");
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Copy ID##copy_local_lobby")) {
+                        ImGui::SetClipboardText(std::to_string(lobby.ConvertToUint64()).c_str());
+                    }
+                }
+            }
+        }
+
         if (!friends.empty()) {
             if (i_have_lobby) {
                 std::string inviteAll(translationInviteAll[current_language]);
@@ -2298,7 +2324,19 @@ void Steam_Overlay::render_main_window()
                 std::for_each(friends.begin(), friends.end(), [this](std::pair<Friend const, friend_window_state> &i) {
                     ImGui::PushID(i.second.id-base_friend_window_id+base_friend_item_id);
 
-                    ImGui::Selectable(i.second.window_title.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
+                    // Build dynamic display string with lobby info
+                    std::string display_text = i.first.name();
+                    display_text += " ";
+                    display_text += translationPlaying[current_language];
+                    display_text += " ";
+                    display_text += std::to_string(i.first.appid());
+                    if (i.first.lobby_id() != 0) {
+                        display_text += " [Lobby: ";
+                        display_text += std::to_string(i.first.lobby_id());
+                        display_text += "]";
+                    }
+
+                    ImGui::Selectable(display_text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
                     build_friend_context_menu(i.first, i.second);
                     if (ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(0)) {
                         i.second.window_state |= window_state_show;
@@ -4107,6 +4145,9 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
         o.is_joinable = state.joinable ? 1 : 0;
         o.same_app = (frd.appid() == local_appid) ? 1 : 0;
         o.window_state = state.window_state;
+        o.appid = frd.appid();
+        o.lobby_id = frd.lobby_id();
+        o.in_lobby = (frd.lobby_id() != 0) ? 1 : 0;
 
         ++written;
     }
@@ -4117,6 +4158,28 @@ int Steam_Overlay::Bridge_HasLobby() const
 {
     // Same logic as i_have_lobby in steam_run_callback_update_my_lobby()
     return i_have_lobby ? 1 : 0;
+}
+
+int Steam_Overlay::Bridge_GetLocalLobbyInfo(GSE_LocalLobbyInfo *out) const
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+
+    if (!i_have_lobby) return 0;
+
+    CSteamID lobby = settings->get_lobby();
+    if (!lobby.IsValid()) return 0;
+
+    Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+    if (!matchmaking) return 0;
+
+    out->lobby_id = lobby.ConvertToUint64();
+    out->lobby_owner = matchmaking->GetLobbyOwner(lobby).ConvertToUint64();
+    out->member_count = matchmaking->GetNumLobbyMembers(lobby);
+    out->member_limit = matchmaking->GetLobbyMemberLimit(lobby);
+    out->is_owner = (out->lobby_owner == settings->get_local_steam_id().ConvertToUint64()) ? 1 : 0;
+
+    return 1;
 }
 
 int Steam_Overlay::Bridge_GetLanguage() const
@@ -4260,6 +4323,9 @@ void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
                     state.window_state |= window_state_join;
                     has_friend_action.push(frd);
                 }
+                break;
+            case 4: // chat
+                state.window_state |= window_state_show;
                 break;
             default: break;
             }

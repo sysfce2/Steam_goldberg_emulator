@@ -373,6 +373,7 @@ public:
     int  Bridge_GetFriendCount() const;
     int  Bridge_GetFriends(struct GSE_Friend *out, int max_count) const;
     int  Bridge_HasLobby() const;
+    int  Bridge_GetLocalLobbyInfo(struct GSE_LocalLobbyInfo *out) const;
     int  Bridge_GetLanguage() const;
     void Bridge_RequestSaveSettings();
     void Bridge_MarkConnected();
