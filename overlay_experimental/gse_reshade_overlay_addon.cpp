@@ -163,6 +163,119 @@ static void get_playtime(int &hr, int &min, int &sec)
     sec = elapsed % 60;
 }
 
+/* ── Swap chain format detection ──────────────────────────────────────── */
+
+struct SwapChainInfo {
+    const char* format_str;  // e.g. "R16G16B16A16_FLOAT"
+    const char* type_str;    // e.g. "HDR  |  scRGB / Linear  |  BT.709+"
+    const char* api_str;     // e.g. "Direct3D 11"
+    bool        is_hdr;      // true for HDR formats
+    bool        needs_srgb_decode; // true for FP16/scRGB (sRGB->linear needed)
+};
+
+static SwapChainInfo get_swapchain_info(effect_runtime *runtime)
+{
+    SwapChainInfo info = { "Unknown", "Unknown", "Unknown", false, false };
+    
+    if (!runtime) return info;
+    
+    device *dev = runtime->get_device();
+    if (!dev) return info;
+    
+    // Get API name
+    switch (dev->get_api()) {
+        case device_api::d3d9:   info.api_str = "Direct3D 9";  break;
+        case device_api::d3d10:  info.api_str = "Direct3D 10"; break;
+        case device_api::d3d11:  info.api_str = "Direct3D 11"; break;
+        case device_api::d3d12:  info.api_str = "Direct3D 12"; break;
+        case device_api::opengl: info.api_str = "OpenGL";      break;
+        case device_api::vulkan: info.api_str = "Vulkan";      break;
+        default:                 info.api_str = "Unknown API"; break;
+    }
+    
+    resource backbuffer = runtime->get_back_buffer(0);
+    if (!backbuffer.handle) return info;
+    
+    resource_desc desc = dev->get_resource_desc(backbuffer);
+    format fmt = desc.texture.format;
+    
+    switch (fmt) {
+        // ---- HDR / float formats -------------------------------------------
+        case format::r16g16b16a16_float:
+            info.format_str = "R16G16B16A16_FLOAT";
+            info.type_str   = "HDR  |  scRGB / Linear  |  BT.709+";
+            info.is_hdr     = true;
+            info.needs_srgb_decode = true;
+            break;
+        case format::r16g16b16a16_unorm:
+            info.format_str = "R16G16B16A16_UNORM";
+            info.type_str   = "HDR  |  Linear UNORM  |  BT.2020";
+            info.is_hdr     = true;
+            break;
+        case format::r32g32b32a32_float:
+            info.format_str = "R32G32B32A32_FLOAT";
+            info.type_str   = "HDR  |  Linear FP32  |  wide gamut";
+            info.is_hdr     = true;
+            break;
+        // ---- 10-bit HDR10 formats ------------------------------------------
+        case format::r10g10b10a2_unorm:
+            info.format_str = "R10G10B10A2_UNORM";
+            info.type_str   = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+            info.is_hdr     = true;
+            break;
+        case format::b10g10r10a2_unorm:
+            info.format_str = "B10G10R10A2_UNORM";
+            info.type_str   = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+            info.is_hdr     = true;
+            break;
+        // ---- 8-bit SDR formats ---------------------------------------------
+        case format::r8g8b8a8_unorm:
+            info.format_str = "R8G8B8A8_UNORM";
+            info.type_str   = "SDR  |  sRGB  |  Rec.709";
+            break;
+        case format::r8g8b8a8_unorm_srgb:
+            info.format_str = "R8G8B8A8_UNORM_SRGB";
+            info.type_str   = "SDR  |  sRGB (hw decode)  |  Rec.709";
+            break;
+        case format::b8g8r8a8_unorm:
+            info.format_str = "B8G8R8A8_UNORM";
+            info.type_str   = "SDR  |  sRGB  |  Rec.709";
+            break;
+        case format::b8g8r8a8_unorm_srgb:
+            info.format_str = "B8G8R8A8_UNORM_SRGB";
+            info.type_str   = "SDR  |  sRGB (hw decode)  |  Rec.709";
+            break;
+        case format::b8g8r8x8_unorm:
+            info.format_str = "B8G8R8X8_UNORM";
+            info.type_str   = "SDR  |  sRGB  |  Rec.709  (no alpha)";
+            break;
+        case format::b8g8r8x8_unorm_srgb:
+            info.format_str = "B8G8R8X8_UNORM_SRGB";
+            info.type_str   = "SDR  |  sRGB (hw decode)  |  Rec.709  (no alpha)";
+            break;
+        // ---- 16-bit SDR formats (legacy) -----------------------------------
+        case format::b5g6r5_unorm:
+            info.format_str = "B5G6R5_UNORM";
+            info.type_str   = "SDR  |  sRGB  |  16-bit RGB565";
+            break;
+        case format::b5g5r5a1_unorm:
+            info.format_str = "B5G5R5A1_UNORM";
+            info.type_str   = "SDR  |  sRGB  |  16-bit 5551";
+            break;
+        default:
+            // Try to provide some info based on format value
+            {
+                static char fmt_buf[32];
+                snprintf(fmt_buf, sizeof(fmt_buf), "Format %u", (unsigned)fmt);
+                info.format_str = fmt_buf;
+                info.type_str   = "Unknown format type";
+            }
+            break;
+    }
+    
+    return info;
+}
+
 /* ── Helper: apply native overlay style colors ────────────────────────── */
 
 static int apply_global_style_colors()
@@ -971,9 +1084,22 @@ static void render_main_overlay(effect_runtime *runtime)
     ImGui::Spacing();
     ImGui::Separator();
     {
-        ImGui::TextDisabled("API        : ReShade Addon  (no ingame_overlay)");
+        // Swap chain info (queried directly from ReShade)
+        SwapChainInfo sc_info = get_swapchain_info(runtime);
+        ImGui::TextDisabled("API        : ReShade Addon  |  %s", sc_info.api_str);
         ImGui::TextDisabled("Emu build  : %s", state.build_string);
         ImGui::TextDisabled("Build date : %s", state.build_date);
+
+        ImGui::TextDisabled("Swapchain  : %s", sc_info.format_str);
+        ImGui::TextDisabled("           : %s", sc_info.type_str);
+        
+        // sRGB correction note (ReShade handles gamma via its own pipeline)
+        if (sc_info.needs_srgb_decode)
+            ImGui::TextDisabled("sRGB corr. : ReShade handles gamma — FP16 detected");
+        else if (sc_info.is_hdr)
+            ImGui::TextDisabled("sRGB corr. : N/A  — HDR10/PQ managed by display");
+        else
+            ImGui::TextDisabled("sRGB corr. : N/A  — SDR, ReShade passes through");
 
         // Per-display info
         if (s_bridge.GetDisplayInfo) {
