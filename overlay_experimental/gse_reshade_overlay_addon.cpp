@@ -973,8 +973,7 @@ static void on_reshade_overlay(effect_runtime *runtime)
 
     update_fps();
 
-    // Always render notifications and stats (even when ReShade overlay is closed)
-    render_notifications(runtime);
+    // Stats HUD (always visible when enabled)
     render_stats_hud();
 
     // Toggle main overlay with our own hotkey (Shift+Tab)
@@ -1000,6 +999,9 @@ static void on_reshade_overlay(effect_runtime *runtime)
     if (s_show_main_overlay) {
         render_main_overlay(runtime);
     }
+
+    // Notifications rendered LAST so they always draw on top of everything
+    render_notifications(runtime);
 }
 
 /* ── Main overlay window (rendered when user toggles with Shift+Tab) ──── */
