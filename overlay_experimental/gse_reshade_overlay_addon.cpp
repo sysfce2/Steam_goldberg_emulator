@@ -1581,7 +1581,7 @@ static void render_friends_list()
 
                 // Join (if friend is joinable)
                 if (f.is_joinable && s_bridge.FriendAction) {
-                    if (ImGui::Button("Join##PopupAcceptInvite")) {
+                    if (ImGui::Button("Accept Game Invite##PopupAcceptInvite")) {
                         close = true;
                         s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
                     }
