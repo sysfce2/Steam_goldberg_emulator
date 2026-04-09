@@ -201,6 +201,7 @@ typedef struct GSE_Friend {
     uint8_t  _pad[3];
     uint32_t appid;                 /* friend's current app/game ID */
     uint64_t lobby_id;              /* friend's current lobby ID (0 if none) */
+    char     connect_string[GSE_CONNECT_STRING_SIZE]; /* friend's connect string (may be empty) */
 } GSE_Friend;
 
 #define GSE_CONNECT_STRING_SIZE 256

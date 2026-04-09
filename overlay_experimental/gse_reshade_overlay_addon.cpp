@@ -1825,14 +1825,13 @@ static void render_friends_list()
     // Check if local user has a lobby (for Invite All and individual Invite buttons)
     bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
 
-    // Show local user's lobby info if in a lobby
+    // Show local user's lobby info if in a lobby (only if we own it)
     if (has_lobby && s_bridge.GetLocalLobbyInfo) {
         GSE_LocalLobbyInfo lobby_info{};
-        if (s_bridge.GetLocalLobbyInfo(&lobby_info)) {
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Your Lobby: %llu (%d/%d) %s",
+        if (s_bridge.GetLocalLobbyInfo(&lobby_info) && lobby_info.is_owner) {
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Your Lobby: %llu (%d/%d) [Owner]",
                 (unsigned long long)lobby_info.lobby_id,
-                lobby_info.member_count, lobby_info.member_limit,
-                lobby_info.is_owner ? "[Owner]" : "");
+                lobby_info.member_count, lobby_info.member_limit);
             ImGui::SameLine();
             if (ImGui::SmallButton("Copy ID##copy_local_lobby")) {
                 char lobby_str[32];
@@ -1864,8 +1863,8 @@ static void render_friends_list()
     }
 
     // Friends list with multi-line layout per friend
-    float list_height = ImGui::GetTextLineHeightWithSpacing() * 3.5f * (count < 5 ? count : 5) + ImGui::GetStyle().FramePadding.y * 2;
-    if (list_height < ImGui::GetTextLineHeightWithSpacing() * 3.5f) list_height = ImGui::GetTextLineHeightWithSpacing() * 3.5f;
+    float list_height = ImGui::GetTextLineHeightWithSpacing() * 5.5f * (count < 5 ? count : 5) + ImGui::GetStyle().FramePadding.y * 2;
+    if (list_height < ImGui::GetTextLineHeightWithSpacing() * 5.5f) list_height = ImGui::GetTextLineHeightWithSpacing() * 5.5f;
     
     ImGui::BeginChild("##friends_child", ImVec2(0, list_height), true);
     
@@ -1879,25 +1878,29 @@ static void render_friends_list()
             ImGui::Spacing();
         }
 
-        // Avatar + friend name + status on same row
-        const float avatar_size = 32.0f;  // smaller avatar for friend list
+        // Avatar (bigger, same as local user)
+        const float avatar_size = 48.0f;
         const IconTexture *avatar = get_or_upload_avatar(f.steam_id);
         if (avatar && avatar->valid) {
             ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
             ImGui::SameLine();
         }
         
-        // Line 1: Friend name + status
+        ImGui::BeginGroup();
+
+        // Line 1: Friend name
         if (!f.is_online)
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", f.name);
         else
             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", f.name);
-        
-        ImGui::SameLine();
+
+        // Line 2: SteamID
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "ID: %llu", (unsigned long long)f.steam_id);
+
+        // Line 3: Status - In Lobby / Playing
         if (f.lobby_id != 0) {
-            // Friend is in a lobby
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "- In Lobby %llu", (unsigned long long)f.lobby_id);
-            // Join button on same line if joinable
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby %llu", (unsigned long long)f.lobby_id);
+            // Join button if joinable
             if (f.is_joinable && s_bridge.FriendAction) {
                 ImGui::SameLine();
                 char join_btn[64];
@@ -1906,7 +1909,6 @@ static void render_friends_list()
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
                 }
             }
-            // Copy Lobby button next to Join
             ImGui::SameLine();
             char copylobby_btn[64];
             snprintf(copylobby_btn, sizeof(copylobby_btn), "Copy Lobby##cplob_%d", i);
@@ -1916,11 +1918,15 @@ static void render_friends_list()
                 ImGui::SetClipboardText(lobby_str);
             }
         } else if (f.appid != 0) {
-            // Friend is playing a game (no lobby)
-            ImGui::TextDisabled("- Playing %u", f.appid);
+            ImGui::TextDisabled("Playing %u", f.appid);
         }
 
-        // Line 2: Action buttons
+        // Connect string (always show if available)
+        if (f.connect_string[0] != '\0') {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Connect: %s", f.connect_string);
+        }
+
+        // Action buttons
         char chat_btn[64];
         snprintf(chat_btn, sizeof(chat_btn), "%s##chat_%d", translationChat[s_current_language], i);
         if (ImGui::SmallButton(chat_btn)) {
@@ -1962,6 +1968,7 @@ static void render_friends_list()
             ImGui::SetClipboardText(id_str);
         }
 
+        ImGui::EndGroup();
         ImGui::PopID();
     }
     
