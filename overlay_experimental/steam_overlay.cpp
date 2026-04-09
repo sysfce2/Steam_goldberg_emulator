@@ -2320,34 +2320,78 @@ void Steam_Overlay::render_main_window()
                 }
             }
 
-            if (ImGuiHelper_BeginListBox("##label", static_cast<int>(friends.size()))) {
-                std::for_each(friends.begin(), friends.end(), [this](std::pair<Friend const, friend_window_state> &i) {
-                    ImGui::PushID(i.second.id-base_friend_window_id+base_friend_item_id);
+            // Friends list with multi-line layout per friend
+            float list_height = ImGui::GetTextLineHeightWithSpacing() * 3.5f * std::min((int)friends.size(), 5) + ImGui::GetStyle().FramePadding.y * 2;
+            ImGui::BeginChild("##friends_child", ImVec2(0, list_height), true);
+            
+            int friend_idx = 0;
+            std::for_each(friends.begin(), friends.end(), [this, &friend_idx](std::pair<Friend const, friend_window_state> &i) {
+                ImGui::PushID(i.second.id-base_friend_window_id+base_friend_item_id);
 
-                    // Build dynamic display string with lobby info
-                    std::string display_text = i.first.name();
-                    display_text += " ";
-                    display_text += translationPlaying[current_language];
-                    display_text += " ";
-                    display_text += std::to_string(i.first.appid());
-                    if (i.first.lobby_id() != 0) {
-                        display_text += " [Lobby: ";
-                        display_text += std::to_string(i.first.lobby_id());
-                        display_text += "]";
+                // Separator between friends (except before first)
+                if (friend_idx > 0) {
+                    ImGui::Separator();
+                    ImGui::Spacing();
+                }
+
+                // Line 1: Friend name + status
+                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", i.first.name().c_str());
+                ImGui::SameLine();
+                if (i.first.lobby_id() != 0) {
+                    // Friend is in a lobby
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "- In Lobby %llu", (unsigned long long)i.first.lobby_id());
+                    // Join button on same line if joinable
+                    if (i.second.joinable) {
+                        ImGui::SameLine();
+                        std::string join_btn = translationJoin[current_language];
+                        join_btn += "##join_" + std::to_string(i.first.id());
+                        if (ImGui::SmallButton(join_btn.c_str())) {
+                            i.second.window_state |= window_state_join;
+                            has_friend_action.push(i.first);
+                        }
                     }
-
-                    ImGui::Selectable(display_text.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
-                    build_friend_context_menu(i.first, i.second);
-                    if (ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(0)) {
-                        i.second.window_state |= window_state_show;
+                    // Copy Lobby button next to Join
+                    ImGui::SameLine();
+                    std::string copylobby_btn = "Copy Lobby##cplob_" + std::to_string(i.first.id());
+                    if (ImGui::SmallButton(copylobby_btn.c_str())) {
+                        ImGui::SetClipboardText(std::to_string(i.first.lobby_id()).c_str());
                     }
+                } else if (i.first.appid() != 0) {
+                    // Friend is playing a game (no lobby)
+                    ImGui::TextDisabled("- Playing %u", i.first.appid());
+                }
 
-                    ImGui::PopID();
+                // Line 2: Action buttons
+                std::string chat_btn = translationChat[current_language];
+                chat_btn += "##chat_" + std::to_string(i.first.id());
+                if (ImGui::SmallButton(chat_btn.c_str())) {
+                    i.second.window_state |= window_state_show;
+                }
+                
+                // Invite button (if we have lobby and same app)
+                if (i_have_lobby && settings->get_local_game_id().AppID() == i.first.appid()) {
+                    ImGui::SameLine();
+                    std::string invite_btn = translationInvite[current_language];
+                    invite_btn += "##inv_" + std::to_string(i.first.id());
+                    if (ImGui::SmallButton(invite_btn.c_str())) {
+                        i.second.window_state |= window_state_invite;
+                        has_friend_action.push(i.first);
+                    }
+                }
 
-                    build_friend_window(i.first, i.second);
-                });
-                ImGui::EndListBox();
-            }
+                ImGui::SameLine();
+                std::string copyid_btn = translationCopyId[current_language];
+                copyid_btn += "##cpid_" + std::to_string(i.first.id());
+                if (ImGui::SmallButton(copyid_btn.c_str())) {
+                    ImGui::SetClipboardText(std::to_string(i.first.id()).c_str());
+                }
+
+                ImGui::PopID();
+                build_friend_window(i.first, i.second);
+                ++friend_idx;
+            });
+            
+            ImGui::EndChild();
         }
 
         // user clicked on "show achievements" button

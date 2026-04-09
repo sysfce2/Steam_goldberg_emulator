@@ -1568,97 +1568,87 @@ static void render_friends_list()
         }
     }
 
-    // List box with friends (matching native)
-    int list_h_items = count < 7 ? count : 7;
-    if (list_h_items < 1) list_h_items = 1;
-    float item_h = ImGui::GetTextLineHeightWithSpacing();
-    ImVec2 list_size(0, item_h * list_h_items + ImGui::GetStyle().FramePadding.y * 2);
+    // Friends list with multi-line layout per friend
+    float list_height = ImGui::GetTextLineHeightWithSpacing() * 3.5f * (count < 5 ? count : 5) + ImGui::GetStyle().FramePadding.y * 2;
+    if (list_height < ImGui::GetTextLineHeightWithSpacing() * 3.5f) list_height = ImGui::GetTextLineHeightWithSpacing() * 3.5f;
+    
+    ImGui::BeginChild("##friends_child", ImVec2(0, list_height), true);
+    
+    for (int i = 0; i < count; ++i) {
+        auto &f = friends[i];
+        ImGui::PushID(i);
 
-    if (ImGui::BeginListBox("##friends_list", list_size)) {
-        for (int i = 0; i < count; ++i) {
-            auto &f = friends[i];
-            ImGui::PushID(i);
-
-            // Online friends in normal text, offline greyed-out (matching native)
-            if (!f.is_online)
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-
-            // Build display string with app ID and lobby info
-            char display_text[256];
-            if (f.lobby_id != 0) {
-                snprintf(display_text, sizeof(display_text), "%s (App: %u) [Lobby: %llu]",
-                    f.name, f.appid, (unsigned long long)f.lobby_id);
-            } else {
-                snprintf(display_text, sizeof(display_text), "%s (App: %u)", f.name, f.appid);
-            }
-
-            ImGui::Selectable(display_text, false, ImGuiSelectableFlags_AllowDoubleClick);
-
-            if (!f.is_online)
-                ImGui::PopStyleColor();
-
-            // Context menu (matching native: Chat, Copy ID, Invite, Join)
-            if (ImGui::BeginPopupContextItem("Friends_ContextMenu", 1)) {
-                bool close = false;
-
-                // Chat (opens friend chat window)
-                if (s_bridge.FriendAction) {
-                    char chat_btn[128];
-                    snprintf(chat_btn, sizeof(chat_btn), "%s##PopupChat", translationChat[s_current_language]);
-                    if (ImGui::Button(chat_btn)) {
-                        close = true;
-                        s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_CHAT);
-                    }
-                }
-
-                // Copy ID (always available)
-                if (ImGui::Button(translationCopyId[s_current_language])) {
-                    close = true;
-                    char id_str[32];
-                    snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)f.steam_id);
-                    ImGui::SetClipboardText(id_str);
-                }
-
-                // Copy Lobby ID (if friend is in a lobby)
-                if (f.lobby_id != 0) {
-                    if (ImGui::Button("Copy Lobby ID##PopupCopyLobbyId")) {
-                        close = true;
-                        char lobby_str[32];
-                        snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)f.lobby_id);
-                        ImGui::SetClipboardText(lobby_str);
-                    }
-                }
-
-                // Invite (if we have a lobby AND friend is playing the same app)
-                if (has_lobby && f.same_app && s_bridge.FriendAction) {
-                    char invite_btn[128];
-                    snprintf(invite_btn, sizeof(invite_btn), "%s##PopupInviteToGame", translationInvite[s_current_language]);
-                    if (ImGui::Button(invite_btn)) {
-                        close = true;
-                        s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);
-                    }
-                }
-
-                // Join (if friend is joinable)
-                if (f.is_joinable && s_bridge.FriendAction) {
-                    char join_btn[128];
-                    snprintf(join_btn, sizeof(join_btn), "%s##PopupAcceptInvite", translationJoin[s_current_language]);
-                    if (ImGui::Button(join_btn)) {
-                        close = true;
-                        s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
-                    }
-                }
-
-                if (close)
-                    ImGui::CloseCurrentPopup();
-
-                ImGui::EndPopup();
-            }
-
-            ImGui::PopID();
+        // Separator between friends (except before first)
+        if (i > 0) {
+            ImGui::Separator();
+            ImGui::Spacing();
         }
-        ImGui::EndListBox();
+
+        // Line 1: Friend name + status
+        if (!f.is_online)
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", f.name);
+        else
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", f.name);
+        
+        ImGui::SameLine();
+        if (f.lobby_id != 0) {
+            // Friend is in a lobby
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "- In Lobby %llu", (unsigned long long)f.lobby_id);
+            // Join button on same line if joinable
+            if (f.is_joinable && s_bridge.FriendAction) {
+                ImGui::SameLine();
+                char join_btn[64];
+                snprintf(join_btn, sizeof(join_btn), "%s##join_%d", translationJoin[s_current_language], i);
+                if (ImGui::SmallButton(join_btn)) {
+                    s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
+                }
+            }
+            // Copy Lobby button next to Join
+            ImGui::SameLine();
+            char copylobby_btn[64];
+            snprintf(copylobby_btn, sizeof(copylobby_btn), "Copy Lobby##cplob_%d", i);
+            if (ImGui::SmallButton(copylobby_btn)) {
+                char lobby_str[32];
+                snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)f.lobby_id);
+                ImGui::SetClipboardText(lobby_str);
+            }
+        } else if (f.appid != 0) {
+            // Friend is playing a game (no lobby)
+            ImGui::TextDisabled("- Playing %u", f.appid);
+        }
+
+        // Line 2: Action buttons
+        if (s_bridge.FriendAction) {
+            char chat_btn[64];
+            snprintf(chat_btn, sizeof(chat_btn), "%s##chat_%d", translationChat[s_current_language], i);
+            if (ImGui::SmallButton(chat_btn)) {
+                s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_CHAT);
+            }
+        }
+
+        // Invite button (if we have lobby and same app)
+        if (has_lobby && f.same_app && s_bridge.FriendAction) {
+            ImGui::SameLine();
+            char invite_btn[64];
+            snprintf(invite_btn, sizeof(invite_btn), "%s##inv_%d", translationInvite[s_current_language], i);
+            if (ImGui::SmallButton(invite_btn)) {
+                s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);
+            }
+        }
+
+        ImGui::SameLine();
+        char copyid_btn[64];
+        snprintf(copyid_btn, sizeof(copyid_btn), "%s##cpid_%d", translationCopyId[s_current_language], i);
+        if (ImGui::SmallButton(copyid_btn)) {
+            char id_str[32];
+            snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)f.steam_id);
+            ImGui::SetClipboardText(id_str);
+        }
+
+        ImGui::PopID();
     }
+    
+    ImGui::EndChild();
 }
 
 /* ── Achievement list (separate window, matching native layout exactly) ── */
