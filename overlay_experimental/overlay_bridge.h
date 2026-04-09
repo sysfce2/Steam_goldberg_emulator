@@ -221,6 +221,16 @@ typedef struct GSE_LocalLobbyInfo {
     char     exe_name[GSE_EXE_NAME_SIZE];             /* game executable filename (e.g. "game.exe") */
 } GSE_LocalLobbyInfo;
 
+typedef struct GSE_GameServerInfo {
+    uint8_t  active;                /* 1 if a game server is running in this process */
+    uint8_t  _pad[3];
+    uint32_t num_players;           /* current player count */
+    uint32_t max_players;           /* max player count */
+    uint32_t bot_players;           /* bot count */
+    char     server_name[128];      /* server name */
+    char     map_name[64];          /* current map */
+} GSE_GameServerInfo;
+
 /* Chat state for a friend (for ReShade addon chat UI) */
 #define GSE_CHAT_HISTORY_SIZE 4096
 #define GSE_CHAT_INPUT_SIZE   768
@@ -275,6 +285,7 @@ typedef int       (*pfn_GSE_OverlayBridge_HasLobby)(void);  /* 1 if local user h
 typedef int       (*pfn_GSE_OverlayBridge_GetLocalLobbyInfo)(GSE_LocalLobbyInfo *out);  /* returns 1 if in lobby */
 typedef int       (*pfn_GSE_OverlayBridge_GetConnectString)(char *out, int out_size);  /* returns 1 if connect string set */
 typedef int       (*pfn_GSE_OverlayBridge_GetExeName)(char *out, int out_size);  /* returns 1 if exe name available */
+typedef int       (*pfn_GSE_OverlayBridge_GetGameServerInfo)(GSE_GameServerInfo *out);  /* returns 1 if game server active */
 
 /* Language */
 typedef int       (*pfn_GSE_OverlayBridge_GetLanguage)(void);  /* returns language index (0-30) for translations */
@@ -354,6 +365,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetLocalLobbyInfo   GetLocalLobbyInfo;
     pfn_GSE_OverlayBridge_GetConnectString    GetConnectString;
     pfn_GSE_OverlayBridge_GetExeName          GetExeName;
+    pfn_GSE_OverlayBridge_GetGameServerInfo    GetGameServerInfo;
     pfn_GSE_OverlayBridge_GetLanguage         GetLanguage;
     pfn_GSE_OverlayBridge_GetOption           GetOption;
     pfn_GSE_OverlayBridge_SetOption           SetOption;
@@ -400,6 +412,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetLocalLobbyInfo);
     LOAD(GetConnectString);
     LOAD(GetExeName);
+    LOAD(GetGameServerInfo);
     LOAD(GetLanguage);
     LOAD(GetOption);
     LOAD(SetOption);

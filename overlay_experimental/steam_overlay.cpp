@@ -2213,6 +2213,35 @@ void Steam_Overlay::render_main_window()
                     }
                 }
             }
+
+            // Show game server info (listen server in same process)
+            {
+                Steam_GameServer *gs = get_steam_client()->steam_gameserver;
+                if (gs && gs->BLoggedOn()) {
+                    const auto &sd = gs->get_server_data();
+                    std::string sname = sd.server_name();
+                    std::string mname = sd.map_name();
+                    uint32 num = sd.num_players();
+                    uint32 maxp = sd.max_player_count();
+
+                    if (!sname.empty() || !mname.empty() || maxp > 0) {
+                        // Build: "ServerName - MapName (players/max)"
+                        std::string server_line = "Server: ";
+                        if (!sname.empty()) {
+                            server_line += sname;
+                            if (!mname.empty()) server_line += " - " + mname;
+                        } else if (!mname.empty()) {
+                            server_line += mname;
+                        }
+                        if (maxp > 0) {
+                            char counts[32];
+                            snprintf(counts, sizeof(counts), " (%u/%u)", num, maxp);
+                            server_line += counts;
+                        }
+                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", server_line.c_str());
+                    }
+                }
+            }
         }
 
         ImGui::Spacing();
@@ -4618,6 +4647,24 @@ int Steam_Overlay::Bridge_GetExeName(char *out, int out_size) const
 
     strncpy(out, name.c_str(), out_size - 1);
     out[out_size - 1] = '\0';
+    return 1;
+}
+
+int Steam_Overlay::Bridge_GetGameServerInfo(GSE_GameServerInfo *out) const
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+
+    Steam_GameServer *gs = get_steam_client()->steam_gameserver;
+    if (!gs || !gs->BLoggedOn()) return 0;
+
+    const auto &sd = gs->get_server_data();
+    out->active = 1;
+    out->num_players = sd.num_players();
+    out->max_players = sd.max_player_count();
+    out->bot_players = sd.bot_player_count();
+    bridge_safe_copy(out->server_name, sizeof(out->server_name), sd.server_name());
+    bridge_safe_copy(out->map_name, sizeof(out->map_name), sd.map_name());
     return 1;
 }
 

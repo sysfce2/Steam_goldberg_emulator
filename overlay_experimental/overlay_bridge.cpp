@@ -235,6 +235,13 @@ __declspec(dllexport) int GSE_OverlayBridge_GetExeName(char *out, int out_size)
     return client->steam_overlay->Bridge_GetExeName(out, out_size);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetGameServerInfo(GSE_GameServerInfo *out)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetGameServerInfo(out);
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetLanguage(void)
 {
     auto *client = get_steam_client();

@@ -1106,6 +1106,29 @@ static void render_main_overlay(effect_runtime *runtime)
                 }
             }
         }
+
+        // Show game server info (listen server in same process)
+        if (s_bridge.GetGameServerInfo) {
+            GSE_GameServerInfo gs_info{};
+            if (s_bridge.GetGameServerInfo(&gs_info) && gs_info.active) {
+                bool has_name = (gs_info.server_name[0] != '\0');
+                bool has_map = (gs_info.map_name[0] != '\0');
+                if (has_name || has_map || gs_info.max_players > 0) {
+                    char server_line[256] = "Server: ";
+                    size_t off = strlen(server_line);
+                    if (has_name) {
+                        off += snprintf(server_line + off, sizeof(server_line) - off, "%s", gs_info.server_name);
+                        if (has_map) off += snprintf(server_line + off, sizeof(server_line) - off, " - %s", gs_info.map_name);
+                    } else if (has_map) {
+                        off += snprintf(server_line + off, sizeof(server_line) - off, "%s", gs_info.map_name);
+                    }
+                    if (gs_info.max_players > 0) {
+                        snprintf(server_line + off, sizeof(server_line) - off, " (%u/%u)", gs_info.num_players, gs_info.max_players);
+                    }
+                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", server_line);
+                }
+            }
+        }
     }
 
     ImGui::Spacing();
