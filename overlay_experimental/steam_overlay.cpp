@@ -2797,13 +2797,25 @@ void Steam_Overlay::render_main_window()
                                 ax.unlock_time = 0;
                             }
                         } else {
-                            // regular achievement: ~50% chance achieved
-                            if (roll < 50) {
+                            // regular achievement: ~40% achieved, ~30% in-progress (fake), ~30% locked
+                            if (roll < 40) {
                                 ax.achieved = true;
                                 ax.unlock_time = now_ts - time_dist(rng);
+                                ax.max_progress = 0;
+                                ax.progress = 0;
+                            } else if (roll < 70) {
+                                ax.achieved = false;
+                                ax.unlock_time = 0;
+                                // assign a fake progress bar so it shows up in "In Progress" tab
+                                std::uniform_int_distribution<uint32_t> fake_max(5, 50);
+                                ax.max_progress = fake_max(rng);
+                                std::uniform_int_distribution<uint32_t> fake_prog(1, ax.max_progress - 1);
+                                ax.progress = fake_prog(rng);
                             } else {
                                 ax.achieved = false;
                                 ax.unlock_time = 0;
+                                ax.max_progress = 0;
+                                ax.progress = 0;
                             }
                         }
 
@@ -2831,14 +2843,34 @@ void Steam_Overlay::render_main_window()
                 }
 
                 // ---- Search + sort/group controls ----
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-                ImGui::InputTextWithHint("##ach_search", "Search achievements...", ach_search_buf, sizeof(ach_search_buf));
-
-                ImGui::SameLine();
                 Steam_User_Stats *steamUserStats_sh = get_steam_client()->steam_user_stats;
                 bool has_sh_groups = steamUserStats_sh->steamhunters_data_populated
                                      && !steamUserStats_sh->steamhunters_achievement_groups.empty();
 
+                // measure button widths to size the search box dynamically
+                const auto &style = ImGui::GetStyle();
+                float btn_w = 0.0f;
+                float spacing = style.ItemSpacing.x;
+                if (has_sh_groups) {
+                    const char *grp_lbl = ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
+                    btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
+                }
+                {
+                    const char *srt_lbl = ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %%##ach_srt";
+                    btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
+                }
+                {
+                    const char *hid_lbl = ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid";
+                    btn_w += ImGui::CalcTextSize(hid_lbl).x + style.FramePadding.x * 2.0f + spacing;
+                }
+                float avail = ImGui::GetContentRegionAvail().x;
+                float search_w = avail - btn_w;
+                if (search_w < ImGui::GetFontSize() * 6.0f) search_w = ImGui::GetFontSize() * 6.0f;
+
+                ImGui::SetNextItemWidth(search_w);
+                ImGui::InputTextWithHint("##ach_search", "Search achievements...", ach_search_buf, sizeof(ach_search_buf));
+
+                ImGui::SameLine();
                 if (has_sh_groups) {
                     if (ImGui::Button(ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
                         ach_group_by_sh = !ach_group_by_sh;
@@ -2846,6 +2878,9 @@ void Steam_Overlay::render_main_window()
                 }
                 if (ImGui::Button(ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %%##ach_srt"))
                     ach_sort_schema_order = !ach_sort_schema_order;
+                ImGui::SameLine();
+                if (ImGui::Button(ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid"))
+                    ach_hidden_last = !ach_hidden_last;
 
                 ImGui::Separator();
 
@@ -2895,8 +2930,10 @@ void Steam_Overlay::render_main_window()
                     const auto &b = achievements[bi];
                     bool a_hidden = a.hidden && !a.achieved;
                     bool b_hidden = b.hidden && !b.achieved;
-                    if (a_hidden != b_hidden) return !a_hidden;
-                    if (a_hidden) return false;
+                    if (ach_hidden_last) {
+                        if (a_hidden != b_hidden) return !a_hidden;
+                        if (a_hidden) return false;
+                    }
                     if (ach_current_tab == 2) {
                         // Global Stats tab: always sort by global % descending
                         auto ita = ach_global_percentages.find(a.name);
@@ -4930,12 +4967,24 @@ void Steam_Overlay::Bridge_SimulateAchievements()
                 ax.unlock_time = 0;
             }
         } else {
-            if (roll < 50) {
+            // regular achievement: ~40% achieved, ~30% in-progress (fake), ~30% locked
+            if (roll < 40) {
                 ax.achieved = true;
                 ax.unlock_time = now_ts - time_dist(rng);
+                ax.max_progress = 0;
+                ax.progress = 0;
+            } else if (roll < 70) {
+                ax.achieved = false;
+                ax.unlock_time = 0;
+                std::uniform_int_distribution<uint32_t> fake_max(5, 50);
+                ax.max_progress = fake_max(rng);
+                std::uniform_int_distribution<uint32_t> fake_prog(1, ax.max_progress - 1);
+                ax.progress = fake_prog(rng);
             } else {
                 ax.achieved = false;
                 ax.unlock_time = 0;
+                ax.max_progress = 0;
+                ax.progress = 0;
             }
         }
         if (ach_global_percentages.find(ax.name) == ach_global_percentages.end())

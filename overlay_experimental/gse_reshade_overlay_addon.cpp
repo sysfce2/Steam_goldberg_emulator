@@ -2256,6 +2256,7 @@ static void render_chat_windows()
 
 static bool s_ach_sort_schema_order = true;
 static bool s_ach_group_by_dlc = false;
+static bool s_ach_hidden_last = true;
 static int  s_ach_current_tab = 1;    // 0=In Progress, 1=My Achievements, 2=Global Stats
 static char s_ach_search_buf[256] = {};
 
@@ -2355,11 +2356,32 @@ static void render_achievement_list()
     }
 
     // ── Search + sort/group controls ──
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
+    bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
+
+    // measure button widths to size the search box dynamically
+    const auto &style = ImGui::GetStyle();
+    float btn_w = 0.0f;
+    float spacing = style.ItemSpacing.x;
+    if (has_groups) {
+        const char *grp_lbl = s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
+        btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
+    }
+    {
+        const char *srt_lbl = s_ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %##ach_srt";
+        btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
+    }
+    {
+        const char *hid_lbl = s_ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid";
+        btn_w += ImGui::CalcTextSize(hid_lbl).x + style.FramePadding.x * 2.0f + spacing;
+    }
+    float avail = ImGui::GetContentRegionAvail().x;
+    float search_w = avail - btn_w;
+    if (search_w < ImGui::GetFontSize() * 6.0f) search_w = ImGui::GetFontSize() * 6.0f;
+
+    ImGui::SetNextItemWidth(search_w);
     ImGui::InputTextWithHint("##ach_search", "Search achievements...", s_ach_search_buf, sizeof(s_ach_search_buf));
 
     ImGui::SameLine();
-    bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
     if (has_groups) {
         if (ImGui::Button(s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
             s_ach_group_by_dlc = !s_ach_group_by_dlc;
@@ -2367,6 +2389,9 @@ static void render_achievement_list()
     }
     if (ImGui::Button(s_ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %##ach_srt"))
         s_ach_sort_schema_order = !s_ach_sort_schema_order;
+    ImGui::SameLine();
+    if (ImGui::Button(s_ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid"))
+        s_ach_hidden_last = !s_ach_hidden_last;
 
     ImGui::Separator();
 
@@ -2406,8 +2431,10 @@ static void render_achievement_list()
         const auto &b = achs[bi];
         bool a_hidden = a.hidden && !a.achieved;
         bool b_hidden = b.hidden && !b.achieved;
-        if (a_hidden != b_hidden) return !a_hidden;
-        if (a_hidden) return false;
+        if (s_ach_hidden_last) {
+            if (a_hidden != b_hidden) return !a_hidden;
+            if (a_hidden) return false;
+        }
         if (s_ach_current_tab == 2) {
             // Global Stats: always sort by global %
             float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
