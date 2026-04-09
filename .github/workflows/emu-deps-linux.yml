@@ -53,6 +53,7 @@ jobs:
 
       # mandatory Linux packages
       - name: "Install required packages"
+        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
         shell: "bash"
         run: |
           sudo dpkg --add-architecture i386
