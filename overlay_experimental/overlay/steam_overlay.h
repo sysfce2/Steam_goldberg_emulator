@@ -190,8 +190,7 @@ class Steam_Overlay
 
     // achievement list display options
     bool ach_group_by_sh{false};       // group achievements by SteamHunters DLC/update groups
-    bool ach_sort_schema_order{false}; // false = sort locked by global % (Steam default); true = schema/DLC order
-    bool ach_hidden_last{true};        // true = hidden (locked) achievements sorted to end; false = sorted normally
+    int  ach_sort_mode{0};             // 0=Global %, 1=Schema Order, 2=Alphabetical
     int  ach_current_tab{1};           // 0=In Progress, 1=My Achievements, 2=Global Stats
     char ach_search_buf[256]{};        // search filter for achievements
 

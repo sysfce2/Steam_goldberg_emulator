@@ -2847,21 +2847,21 @@ void Steam_Overlay::render_main_window()
                 bool has_sh_groups = steamUserStats_sh->steamhunters_data_populated
                                      && !steamUserStats_sh->steamhunters_achievement_groups.empty();
 
+                // Global Stats tab: no sort/group controls, just search
+                bool show_sort_controls = (ach_current_tab != 2);
+
                 // measure button widths to size the search box dynamically
                 const auto &style = ImGui::GetStyle();
                 float btn_w = 0.0f;
                 float spacing = style.ItemSpacing.x;
-                if (has_sh_groups) {
-                    const char *grp_lbl = ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
-                    btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
-                }
-                {
-                    const char *srt_lbl = ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %%##ach_srt";
+                if (show_sort_controls) {
+                    if (has_sh_groups) {
+                        const char *grp_lbl = ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
+                        btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
+                    }
+                    const char *sort_labels[] = { "Sort: Global %%##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
+                    const char *srt_lbl = sort_labels[ach_sort_mode % 3];
                     btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
-                }
-                {
-                    const char *hid_lbl = ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid";
-                    btn_w += ImGui::CalcTextSize(hid_lbl).x + style.FramePadding.x * 2.0f + spacing;
                 }
                 float avail = ImGui::GetContentRegionAvail().x;
                 float search_w = avail - btn_w;
@@ -2870,17 +2870,17 @@ void Steam_Overlay::render_main_window()
                 ImGui::SetNextItemWidth(search_w);
                 ImGui::InputTextWithHint("##ach_search", "Search achievements...", ach_search_buf, sizeof(ach_search_buf));
 
-                ImGui::SameLine();
-                if (has_sh_groups) {
-                    if (ImGui::Button(ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
-                        ach_group_by_sh = !ach_group_by_sh;
+                if (show_sort_controls) {
                     ImGui::SameLine();
+                    if (has_sh_groups) {
+                        if (ImGui::Button(ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
+                            ach_group_by_sh = !ach_group_by_sh;
+                        ImGui::SameLine();
+                    }
+                    const char *sort_labels[] = { "Sort: Global %%##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
+                    if (ImGui::Button(sort_labels[ach_sort_mode % 3]))
+                        ach_sort_mode = (ach_sort_mode + 1) % 3;
                 }
-                if (ImGui::Button(ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %%##ach_srt"))
-                    ach_sort_schema_order = !ach_sort_schema_order;
-                ImGui::SameLine();
-                if (ImGui::Button(ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid"))
-                    ach_hidden_last = !ach_hidden_last;
 
                 ImGui::Separator();
 
@@ -2924,32 +2924,36 @@ void Steam_Overlay::render_main_window()
                 bool has_sh_data = steamUserStats_sh->steamhunters_data_populated
                                    && !steamUserStats_sh->steamhunters_achievement_data.empty();
 
-                // ---- comparator (unlocked-recent → locked → hidden; schema or global % for locked) ----
+                // ---- comparator (unlocked-recent → locked → hidden; sort mode for locked) ----
                 auto ach_compare = [&](size_t ai, size_t bi) -> bool {
                     const auto &a = achievements[ai];
                     const auto &b = achievements[bi];
-                    bool a_hidden = a.hidden && !a.achieved;
-                    bool b_hidden = b.hidden && !b.achieved;
-                    if (ach_hidden_last) {
-                        if (a_hidden != b_hidden) return !a_hidden;
-                        if (a_hidden) return false;
-                    }
                     if (ach_current_tab == 2) {
-                        // Global Stats tab: always sort by global % descending
+                        // Global Stats tab: sort purely by global % descending, hidden mixed in
                         auto ita = ach_global_percentages.find(a.name);
                         auto itb = ach_global_percentages.find(b.name);
                         float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
                         float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
                         if (pa != pb) return pa > pb;
                     } else {
+                        // hidden (locked) achievements always last
+                        bool a_hidden = a.hidden && !a.achieved;
+                        bool b_hidden = b.hidden && !b.achieved;
+                        if (a_hidden != b_hidden) return !a_hidden;
+                        if (a_hidden) return false;
                         if (a.achieved != b.achieved) return a.achieved > b.achieved;
                         if (a.achieved) return a.unlock_time > b.unlock_time;
-                        if (!ach_sort_schema_order) {
+                        if (ach_sort_mode == 0) {
+                            // Global %
                             auto ita = ach_global_percentages.find(a.name);
                             auto itb = ach_global_percentages.find(b.name);
                             float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
                             float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
                             if (pa != pb) return pa > pb;
+                        } else if (ach_sort_mode == 2) {
+                            // Alphabetical
+                            int cmp = strcmp(a.title, b.title);
+                            if (cmp != 0) return cmp < 0;
                         }
                     }
                     return ai < bi; // tie-break: schema order

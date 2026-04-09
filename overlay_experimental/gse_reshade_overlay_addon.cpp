@@ -2254,9 +2254,8 @@ static void render_chat_windows()
 
 /* ── Achievement list (separate window, matching native layout exactly) ── */
 
-static bool s_ach_sort_schema_order = true;
+static int  s_ach_sort_mode = 0;      // 0=Global %, 1=Schema Order, 2=Alphabetical
 static bool s_ach_group_by_dlc = false;
-static bool s_ach_hidden_last = true;
 static int  s_ach_current_tab = 1;    // 0=In Progress, 1=My Achievements, 2=Global Stats
 static char s_ach_search_buf[256] = {};
 
@@ -2358,21 +2357,21 @@ static void render_achievement_list()
     // ── Search + sort/group controls ──
     bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
 
+    // Global Stats tab: no sort/group controls, just search
+    bool show_sort_controls = (s_ach_current_tab != 2);
+
     // measure button widths to size the search box dynamically
     const auto &style = ImGui::GetStyle();
     float btn_w = 0.0f;
     float spacing = style.ItemSpacing.x;
-    if (has_groups) {
-        const char *grp_lbl = s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
-        btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
-    }
-    {
-        const char *srt_lbl = s_ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %##ach_srt";
+    if (show_sort_controls) {
+        if (has_groups) {
+            const char *grp_lbl = s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
+            btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
+        }
+        const char *sort_labels[] = { "Sort: Global %##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
+        const char *srt_lbl = sort_labels[s_ach_sort_mode % 3];
         btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
-    }
-    {
-        const char *hid_lbl = s_ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid";
-        btn_w += ImGui::CalcTextSize(hid_lbl).x + style.FramePadding.x * 2.0f + spacing;
     }
     float avail = ImGui::GetContentRegionAvail().x;
     float search_w = avail - btn_w;
@@ -2381,17 +2380,17 @@ static void render_achievement_list()
     ImGui::SetNextItemWidth(search_w);
     ImGui::InputTextWithHint("##ach_search", "Search achievements...", s_ach_search_buf, sizeof(s_ach_search_buf));
 
-    ImGui::SameLine();
-    if (has_groups) {
-        if (ImGui::Button(s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
-            s_ach_group_by_dlc = !s_ach_group_by_dlc;
+    if (show_sort_controls) {
         ImGui::SameLine();
+        if (has_groups) {
+            if (ImGui::Button(s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
+                s_ach_group_by_dlc = !s_ach_group_by_dlc;
+            ImGui::SameLine();
+        }
+        const char *sort_labels[] = { "Sort: Global %##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
+        if (ImGui::Button(sort_labels[s_ach_sort_mode % 3]))
+            s_ach_sort_mode = (s_ach_sort_mode + 1) % 3;
     }
-    if (ImGui::Button(s_ach_sort_schema_order ? "Sort: Schema Order##ach_srt" : "Sort: Global %##ach_srt"))
-        s_ach_sort_schema_order = !s_ach_sort_schema_order;
-    ImGui::SameLine();
-    if (ImGui::Button(s_ach_hidden_last ? "Hidden: Last##ach_hid" : "Hidden: Mixed##ach_hid"))
-        s_ach_hidden_last = !s_ach_hidden_last;
 
     ImGui::Separator();
 
@@ -2429,24 +2428,28 @@ static void render_achievement_list()
     auto ach_compare = [&](int ai, int bi) -> bool {
         const auto &a = achs[ai];
         const auto &b = achs[bi];
-        bool a_hidden = a.hidden && !a.achieved;
-        bool b_hidden = b.hidden && !b.achieved;
-        if (s_ach_hidden_last) {
-            if (a_hidden != b_hidden) return !a_hidden;
-            if (a_hidden) return false;
-        }
         if (s_ach_current_tab == 2) {
-            // Global Stats: always sort by global %
+            // Global Stats: sort purely by global % descending, hidden mixed in
             float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
             float pb = b.global_percent < 0 ? -1.0f : b.global_percent;
             if (pa != pb) return pa > pb;
         } else {
+            // hidden (locked) achievements always last
+            bool a_hidden = a.hidden && !a.achieved;
+            bool b_hidden = b.hidden && !b.achieved;
+            if (a_hidden != b_hidden) return !a_hidden;
+            if (a_hidden) return false;
             if (a.achieved != b.achieved) return a.achieved > b.achieved;
             if (a.achieved) return a.unlock_time > b.unlock_time;
-            if (!s_ach_sort_schema_order) {
+            if (s_ach_sort_mode == 0) {
+                // Global %
                 float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
                 float pb = b.global_percent < 0 ? -1.0f : b.global_percent;
                 if (pa != pb) return pa > pb;
+            } else if (s_ach_sort_mode == 2) {
+                // Alphabetical
+                int cmp = strcmp(a.title, b.title);
+                if (cmp != 0) return cmp < 0;
             }
         }
         return ai < bi;
