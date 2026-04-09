@@ -217,6 +217,9 @@ typedef int       (*pfn_GSE_OverlayBridge_GetFriendCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetFriends)(GSE_Friend *out, int max_count);
 typedef int       (*pfn_GSE_OverlayBridge_HasLobby)(void);  /* 1 if local user has a lobby/connect string */
 
+/* Language */
+typedef int       (*pfn_GSE_OverlayBridge_GetLanguage)(void);  /* returns language index (0-30) for translations */
+
 /* Settings read/write (key-value string pairs) */
 typedef int       (*pfn_GSE_OverlayBridge_GetOption)(int option_id);
 typedef void      (*pfn_GSE_OverlayBridge_SetOption)(int option_id, int value);
@@ -273,6 +276,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetFriendCount      GetFriendCount;
     pfn_GSE_OverlayBridge_GetFriends          GetFriends;
     pfn_GSE_OverlayBridge_HasLobby            HasLobby;
+    pfn_GSE_OverlayBridge_GetLanguage         GetLanguage;
     pfn_GSE_OverlayBridge_GetOption           GetOption;
     pfn_GSE_OverlayBridge_SetOption           SetOption;
     pfn_GSE_OverlayBridge_TestAchievement     TestAchievement;
@@ -306,6 +310,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetFriendCount);
     LOAD(GetFriends);
     LOAD(HasLobby);
+    LOAD(GetLanguage);
     LOAD(GetOption);
     LOAD(SetOption);
     LOAD(TestAchievement);

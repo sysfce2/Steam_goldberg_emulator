@@ -190,6 +190,13 @@ __declspec(dllexport) int GSE_OverlayBridge_HasLobby(void)
     return client->steam_overlay->Bridge_HasLobby();
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetLanguage(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetLanguage();
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetOption(int option_id)
 {
     auto *client = get_steam_client();

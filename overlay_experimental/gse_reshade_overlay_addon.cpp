@@ -21,6 +21,7 @@
 #include <reshade.hpp>
 
 #include "overlay_bridge.h"
+#include "overlay/steam_overlay_translations.h"
 
 #include <cstring>
 #include <cstdio>
@@ -50,6 +51,7 @@ extern "C" __declspec(dllexport) const char *DESCRIPTION = "Steam emu overlay re
 static HMODULE          s_emu_dll  = nullptr;
 static GSE_BridgeFunctions s_bridge  = {};
 static bool             s_bridge_ok = false;
+static int              s_current_language = 0;  // translation language index
 
 /* ── Per-device GPU texture cache (achievement icons) ─────────────────── */
 
@@ -211,6 +213,13 @@ static bool try_connect_bridge()
         char msg[64];
         snprintf(msg, sizeof(msg), "GSE bridge connected (ABI v%u)", ver);
         reshade::log::message(reshade::log::level::info, msg);
+    }
+
+    // Get the current language for translations
+    if (s_bridge.GetLanguage) {
+        s_current_language = s_bridge.GetLanguage();
+        if (s_current_language < 0 || s_current_language >= TRANSLATION_NUMBER_OF_LANGUAGES)
+            s_current_language = 0;
     }
 
     // Cache the SCE storage path
@@ -656,7 +665,7 @@ static void render_notifications(effect_runtime *runtime)
             }
             case GSE_NOTIF_INVITE:
                 ImGui::TextWrapped("%s", n.message);
-                if (ImGui::Button("Join")) {
+                if (ImGui::Button(translationJoin[s_current_language])) {
                     // Expire the notification on accept
                     if (s_bridge.ExpireNotification)
                         s_bridge.ExpireNotification(n.id);
@@ -855,28 +864,28 @@ static void render_main_overlay(effect_runtime *runtime)
 
     // ── Button Bar (matching native order exactly) ──
     ImGui::SameLine();
-    if (ImGui::Button("Toggle User Info"))
+    if (ImGui::Button(translationToggleUserInfo[s_current_language]))
         s_show_user_info = !s_show_user_info;
 
     ImGui::SameLine();
-    if (ImGui::Button("Show Achievements"))
+    if (ImGui::Button(translationShowAchievements[s_current_language]))
         s_show_achievements = !s_show_achievements;
 
     ImGui::SameLine();
-    if (ImGui::Button("Test Achievement")) {
+    if (ImGui::Button(translationTestAchievement[s_current_language])) {
         if (s_bridge.TestAchievement)
             s_bridge.TestAchievement();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Copy ID")) {
+    if (ImGui::Button(translationCopyId[s_current_language])) {
         char id_str[32];
         snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)state.steam_id);
         ImGui::SetClipboardText(id_str);
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Settings"))
+    if (ImGui::Button(translationSettings[s_current_language]))
         s_show_settings = !s_show_settings;
 
     // ── SCE buttons (matching native: only shown when catalog data is present) ──
@@ -948,13 +957,13 @@ static void render_main_overlay(effect_runtime *runtime)
         bool fps_on = state.show_fps != 0;
         bool ft_on  = state.show_frametime != 0;
         bool pt_on  = state.show_playtime != 0;
-        if (ImGui::Checkbox("FPS", &fps_on) && s_bridge.SetOption)
+        if (ImGui::Checkbox(translationFpsCheckbox[s_current_language], &fps_on) && s_bridge.SetOption)
             s_bridge.SetOption(GSE_OPT_SHOW_FPS, fps_on ? 1 : 0);
         ImGui::SameLine();
-        if (ImGui::Checkbox("Frametime", &ft_on) && s_bridge.SetOption)
+        if (ImGui::Checkbox(translationFrametimeCheckbox[s_current_language], &ft_on) && s_bridge.SetOption)
             s_bridge.SetOption(GSE_OPT_SHOW_FRAMETIME, ft_on ? 1 : 0);
         ImGui::SameLine();
-        if (ImGui::Checkbox("Playtime", &pt_on) && s_bridge.SetOption)
+        if (ImGui::Checkbox(translationPlaytimeCheckbox[s_current_language], &pt_on) && s_bridge.SetOption)
             s_bridge.SetOption(GSE_OPT_SHOW_PLAYTIME, pt_on ? 1 : 0);
     }
 
@@ -1009,7 +1018,7 @@ static void render_main_overlay(effect_runtime *runtime)
     // ── Friends Section (matching native: label + Invite All button + ListBox) ──
     ImGui::Spacing();
     ImGui::Spacing();
-    ImGui::LabelText("##label", "Friends");
+    ImGui::LabelText("##label", "%s", translationFriends[s_current_language]);
 
     render_friends_list();
 
@@ -1019,8 +1028,10 @@ static void render_main_overlay(effect_runtime *runtime)
     // ── Settings Window (separate Begin(), matching native) ──
     if (s_show_settings) {
         ImGui::SetNextWindowBgAlpha(1.0f);
-        if (ImGui::Begin("Global Settings##gse_settings", &s_show_settings)) {
-            ImGui::Text("Configure overlay behaviour below.");
+        char settings_title[256];
+        snprintf(settings_title, sizeof(settings_title), "%s##gse_settings", translationGlobalSettingsWindow[s_current_language]);
+        if (ImGui::Begin(settings_title, &s_show_settings)) {
+            ImGui::Text("%s", translationGlobalSettingsWindowDescription[s_current_language]);
             ImGui::Separator();
 
             if (s_bridge.GetOption && s_bridge.SetOption) {
@@ -1052,8 +1063,8 @@ static void render_main_overlay(effect_runtime *runtime)
             }
 
             ImGui::Separator();
-            ImGui::Text("Restart the game to apply some settings.");
-            if (ImGui::Button("Save")) {
+            ImGui::Text("%s", translationRestartTheGameToApply[s_current_language]);
+            if (ImGui::Button(translationSave[s_current_language])) {
                 if (s_bridge.SetOption)
                     s_bridge.SetOption(GSE_OPT_DISABLE_ALL_WARNINGS, s_bridge.GetOption(GSE_OPT_DISABLE_ALL_WARNINGS)); // triggers save
                 s_show_settings = false;
@@ -1071,17 +1082,16 @@ static void render_main_overlay(effect_runtime *runtime)
             ImGui::SetNextWindowFocus();
             ImGui::SetNextWindowBgAlpha(1.0f);
             bool show_win = true;
-            if (ImGui::Begin("Warning##gse_warn", &show_win)) {
+            char warn_title[256];
+            snprintf(warn_title, sizeof(warn_title), "%s##gse_warn", translationWarning[s_current_language]);
+            if (ImGui::Begin(warn_title, &show_win)) {
                 if (state.warn_bad_appid) {
                     ImGui::TextColored(ImVec4(1, 0, 0, 1), "WARNING WARNING WARNING");
-                    ImGui::TextWrapped("The AppID is 0 or invalid. This may cause issues with many features. "
-                        "Make sure to set a valid AppID in the emu configuration.");
+                    ImGui::TextWrapped("%s", translationWarningDescription_badAppid[s_current_language]);
                     ImGui::TextColored(ImVec4(1, 0, 0, 1), "WARNING WARNING WARNING");
                 }
                 if (state.warn_local_save) {
-                    ImGui::TextColored(ImVec4(1, 0.8f, 0, 1),
-                        "Using local save. Achievements and stats are stored locally "
-                        "and will not sync with Steam servers.");
+                    ImGui::TextColored(ImVec4(1, 0.8f, 0, 1), "%s", translationWarningDescription_localSave[s_current_language]);
                 }
             }
             ImGui::End();
@@ -1534,7 +1544,9 @@ static void render_friends_list()
     bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
 
     if (has_lobby && s_bridge.InviteAllFriends) {
-        if (ImGui::Button("Invite All##PopupInviteAllFriends")) {
+        char invite_all_btn[128];
+        snprintf(invite_all_btn, sizeof(invite_all_btn), "%s##PopupInviteAllFriends", translationInviteAll[s_current_language]);
+        if (ImGui::Button(invite_all_btn)) {
             s_bridge.InviteAllFriends();
         }
     }
@@ -1564,7 +1576,7 @@ static void render_friends_list()
                 bool close = false;
 
                 // Copy ID (always available)
-                if (ImGui::Button("Copy ID")) {
+                if (ImGui::Button(translationCopyId[s_current_language])) {
                     close = true;
                     char id_str[32];
                     snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)f.steam_id);
@@ -1573,7 +1585,9 @@ static void render_friends_list()
 
                 // Invite (if we have a lobby AND friend is playing the same app)
                 if (has_lobby && f.same_app && s_bridge.FriendAction) {
-                    if (ImGui::Button("Invite##PopupInviteToGame")) {
+                    char invite_btn[128];
+                    snprintf(invite_btn, sizeof(invite_btn), "%s##PopupInviteToGame", translationInvite[s_current_language]);
+                    if (ImGui::Button(invite_btn)) {
                         close = true;
                         s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);
                     }
@@ -1581,7 +1595,9 @@ static void render_friends_list()
 
                 // Join (if friend is joinable)
                 if (f.is_joinable && s_bridge.FriendAction) {
-                    if (ImGui::Button("Accept Game Invite##PopupAcceptInvite")) {
+                    char join_btn[128];
+                    snprintf(join_btn, sizeof(join_btn), "%s##PopupAcceptInvite", translationJoin[s_current_language]);
+                    if (ImGui::Button(join_btn)) {
                         close = true;
                         s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
                     }
@@ -1629,7 +1645,9 @@ static void render_achievement_list()
     ImGui::SetNextWindowSizeConstraints(ImVec2(min_w, font_size * 32.0f), ImVec2(8192, 8192));
     ImGui::SetNextWindowBgAlpha(1.0f);
 
-    if (!ImGui::Begin("Achievements##gse_ach", &s_show_achievements)) {
+    char ach_win_title[256];
+    snprintf(ach_win_title, sizeof(ach_win_title), "%s##gse_ach", translationAchievementWindow[s_current_language]);
+    if (!ImGui::Begin(ach_win_title, &s_show_achievements)) {
         ImGui::End();
         return;
     }
@@ -1725,7 +1743,7 @@ static void render_achievement_list()
         ImGui::Separator();
 
         // Title
-        if (hidden) ImGui::Text("[Hidden Achievement]");
+        if (hidden) ImGui::Text("[%s]", translationHiddenAchievement[s_current_language]);
         else        ImGui::Text("%s", a.title);
 
         // Icon + description table (matching native 2-column layout)
@@ -1837,7 +1855,7 @@ static void render_achievement_list()
 
         // ── Global % ──
         if (a.global_percent >= 0.0f)
-            ImGui::TextDisabled("%.1f%% of players", a.global_percent);
+            ImGui::TextDisabled(translationGlobalAchievementPercent[s_current_language], a.global_percent);
 
         ImGui::Separator();
         ImGui::PopID();

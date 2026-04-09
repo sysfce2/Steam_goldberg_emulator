@@ -4065,6 +4065,11 @@ int Steam_Overlay::Bridge_HasLobby() const
     return i_have_lobby ? 1 : 0;
 }
 
+int Steam_Overlay::Bridge_GetLanguage() const
+{
+    return current_language;
+}
+
 void Steam_Overlay::Bridge_RequestSaveSettings()
 {
     save_settings = true;
