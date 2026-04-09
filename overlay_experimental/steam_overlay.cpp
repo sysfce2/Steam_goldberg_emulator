@@ -4517,7 +4517,7 @@ int Steam_Overlay::Bridge_GetAvatar(uint64_t steam_id, GSE_AvatarData *out)
     if (!steamFriends) return 0;
     
     // Get medium avatar (64x64)
-    int avatar_handle = steamFriends->GetMediumFriendAvatar(CSteamID(steam_id));
+    int avatar_handle = steamFriends->GetMediumFriendAvatar(CSteamID((uint64)steam_id));
     if (avatar_handle == 0) return 0;
     
     // Get image RGBA data
