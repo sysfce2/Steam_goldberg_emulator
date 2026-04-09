@@ -190,6 +190,9 @@ typedef struct GSE_SceItem {
     int32_t  badge_xp;
 } GSE_SceItem;
 
+#define GSE_CONNECT_STRING_SIZE 256
+#define GSE_EXE_NAME_SIZE 256
+
 typedef struct GSE_Friend {
     uint64_t steam_id;
     char     name[128];
@@ -203,9 +206,6 @@ typedef struct GSE_Friend {
     uint64_t lobby_id;              /* friend's current lobby ID (0 if none) */
     char     connect_string[GSE_CONNECT_STRING_SIZE]; /* friend's connect string (may be empty) */
 } GSE_Friend;
-
-#define GSE_CONNECT_STRING_SIZE 256
-#define GSE_EXE_NAME_SIZE 256
 
 typedef struct GSE_LocalLobbyInfo {
     uint64_t lobby_id;              /* local user's current lobby ID (0 if none) */

@@ -98,6 +98,7 @@ jobs:
           retention-days: 7
 
   emu-linux-all:
+    needs: ["emu-win-prep"]
     name: "Emu linux all"
     if: ${{ !cancelled() }}
     uses: "./.github/workflows/emu-build-all-linux.yml"

@@ -2573,7 +2573,7 @@ void Steam_Overlay::render_main_window()
                 {
                     Steam_Friends *steamFriends = get_steam_client()->steam_friends;
                     if (steamFriends) {
-                        std::string connect = steamFriends->get_friend_rich_presence_silent(i.first.id(), "connect");
+                        std::string connect = steamFriends->get_friend_rich_presence_silent(CSteamID((uint64)i.first.id()), "connect");
                         if (!connect.empty()) {
                             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Connect: %s", connect.c_str());
                         }
@@ -4490,7 +4490,7 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
         // Get friend's connect string
         Steam_Friends *steamFriends = get_steam_client()->steam_friends;
         if (steamFriends) {
-            std::string connect = steamFriends->get_friend_rich_presence_silent(frd.id(), "connect");
+            std::string connect = steamFriends->get_friend_rich_presence_silent(CSteamID((uint64)frd.id()), "connect");
             if (!connect.empty()) {
                 strncpy(o.connect_string, connect.c_str(), GSE_CONNECT_STRING_SIZE - 1);
                 o.connect_string[GSE_CONNECT_STRING_SIZE - 1] = '\0';
