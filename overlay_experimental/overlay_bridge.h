@@ -203,6 +203,9 @@ typedef struct GSE_Friend {
     uint64_t lobby_id;              /* friend's current lobby ID (0 if none) */
 } GSE_Friend;
 
+#define GSE_CONNECT_STRING_SIZE 256
+#define GSE_EXE_NAME_SIZE 256
+
 typedef struct GSE_LocalLobbyInfo {
     uint64_t lobby_id;              /* local user's current lobby ID (0 if none) */
     uint64_t lobby_owner;           /* lobby owner steam ID */
@@ -210,6 +213,8 @@ typedef struct GSE_LocalLobbyInfo {
     int32_t  member_limit;          /* max members allowed */
     uint8_t  is_owner;              /* 1 if local user is the lobby owner */
     uint8_t  _pad[7];
+    char     connect_string[GSE_CONNECT_STRING_SIZE]; /* connect string if set (may be empty) */
+    char     exe_name[GSE_EXE_NAME_SIZE];             /* game executable filename (e.g. "game.exe") */
 } GSE_LocalLobbyInfo;
 
 /* Chat state for a friend (for ReShade addon chat UI) */
@@ -264,6 +269,8 @@ typedef int       (*pfn_GSE_OverlayBridge_GetFriendCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetFriends)(GSE_Friend *out, int max_count);
 typedef int       (*pfn_GSE_OverlayBridge_HasLobby)(void);  /* 1 if local user has a lobby/connect string */
 typedef int       (*pfn_GSE_OverlayBridge_GetLocalLobbyInfo)(GSE_LocalLobbyInfo *out);  /* returns 1 if in lobby */
+typedef int       (*pfn_GSE_OverlayBridge_GetConnectString)(char *out, int out_size);  /* returns 1 if connect string set */
+typedef int       (*pfn_GSE_OverlayBridge_GetExeName)(char *out, int out_size);  /* returns 1 if exe name available */
 
 /* Language */
 typedef int       (*pfn_GSE_OverlayBridge_GetLanguage)(void);  /* returns language index (0-30) for translations */
@@ -341,6 +348,8 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetFriends          GetFriends;
     pfn_GSE_OverlayBridge_HasLobby            HasLobby;
     pfn_GSE_OverlayBridge_GetLocalLobbyInfo   GetLocalLobbyInfo;
+    pfn_GSE_OverlayBridge_GetConnectString    GetConnectString;
+    pfn_GSE_OverlayBridge_GetExeName          GetExeName;
     pfn_GSE_OverlayBridge_GetLanguage         GetLanguage;
     pfn_GSE_OverlayBridge_GetOption           GetOption;
     pfn_GSE_OverlayBridge_SetOption           SetOption;
@@ -385,6 +394,8 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetFriends);
     LOAD(HasLobby);
     LOAD(GetLocalLobbyInfo);
+    LOAD(GetConnectString);
+    LOAD(GetExeName);
     LOAD(GetLanguage);
     LOAD(GetOption);
     LOAD(SetOption);

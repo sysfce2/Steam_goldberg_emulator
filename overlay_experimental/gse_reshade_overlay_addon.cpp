@@ -1051,6 +1051,61 @@ static void render_main_overlay(effect_runtime *runtime)
         }
         ImGui::LabelText("##playinglabel", "%s  (ID: %llu)  playing AppID %u",
             state.username, (unsigned long long)state.steam_id, state.app_id);
+        
+        // Show lobby/game status
+        bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
+        if (has_lobby) {
+            GSE_LocalLobbyInfo lobby_info{};
+            bool got_lobby_info = s_bridge.GetLocalLobbyInfo && s_bridge.GetLocalLobbyInfo(&lobby_info);
+
+            // Get connect string (try from lobby info first, then standalone API)
+            char connect_str[GSE_CONNECT_STRING_SIZE] = {};
+            bool has_connect_str = false;
+            if (got_lobby_info && lobby_info.connect_string[0] != '\0') {
+                strncpy(connect_str, lobby_info.connect_string, GSE_CONNECT_STRING_SIZE - 1);
+                has_connect_str = true;
+            } else if (s_bridge.GetConnectString) {
+                has_connect_str = (s_bridge.GetConnectString(connect_str, GSE_CONNECT_STRING_SIZE) != 0);
+            }
+
+            // Get exe name for full launch command
+            char exe_name[GSE_EXE_NAME_SIZE] = {};
+            if (got_lobby_info && lobby_info.exe_name[0] != '\0') {
+                strncpy(exe_name, lobby_info.exe_name, GSE_EXE_NAME_SIZE - 1);
+            } else if (s_bridge.GetExeName) {
+                s_bridge.GetExeName(exe_name, GSE_EXE_NAME_SIZE);
+            }
+
+            if (got_lobby_info) {
+                // Actual matchmaking lobby
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby (%d/%d) %s", 
+                    lobby_info.member_count, lobby_info.member_limit,
+                    lobby_info.is_owner ? "[Owner]" : "");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy Lobby ID")) {
+                    char lobby_str[32];
+                    snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)lobby_info.lobby_id);
+                    ImGui::SetClipboardText(lobby_str);
+                }
+            } else if (has_connect_str) {
+                // Connect-string only (no formal lobby, but friends can join)
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Hosting Game");
+            }
+
+            if (has_connect_str) {
+                char launch_cmd[GSE_EXE_NAME_SIZE + GSE_CONNECT_STRING_SIZE + 2] = {};
+                if (exe_name[0] != '\0') {
+                    snprintf(launch_cmd, sizeof(launch_cmd), "%s %s", exe_name, connect_str);
+                } else {
+                    snprintf(launch_cmd, sizeof(launch_cmd), "%s", connect_str);
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Launch: %s", launch_cmd);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##launch")) {
+                    ImGui::SetClipboardText(launch_cmd);
+                }
+            }
+        }
     }
 
     ImGui::Spacing();
@@ -1783,6 +1838,19 @@ static void render_friends_list()
                 char lobby_str[32];
                 snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)lobby_info.lobby_id);
                 ImGui::SetClipboardText(lobby_str);
+            }
+            if (lobby_info.connect_string[0] != '\0') {
+                char launch_cmd[GSE_EXE_NAME_SIZE + GSE_CONNECT_STRING_SIZE + 2] = {};
+                if (lobby_info.exe_name[0] != '\0') {
+                    snprintf(launch_cmd, sizeof(launch_cmd), "%s %s", lobby_info.exe_name, lobby_info.connect_string);
+                } else {
+                    snprintf(launch_cmd, sizeof(launch_cmd), "%s", lobby_info.connect_string);
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Launch: %s", launch_cmd);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Copy##copy_launch_fl")) {
+                    ImGui::SetClipboardText(launch_cmd);
+                }
             }
         }
     }

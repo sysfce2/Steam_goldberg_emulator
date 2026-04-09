@@ -2168,6 +2168,51 @@ void Steam_Overlay::render_main_window()
                 settings->get_local_name(),
                 settings->get_local_steam_id().ConvertToUint64(),
                 settings->get_local_game_id().AppID());
+            
+            // Show lobby/game status
+            if (i_have_lobby) {
+                Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+                std::string connect_str;
+                if (steamFriends) {
+                    connect_str = steamFriends->get_friend_rich_presence_silent(settings->get_local_steam_id(), "connect");
+                }
+
+                CSteamID lobby = settings->get_lobby();
+                if (lobby.IsValid()) {
+                    Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+                    if (matchmaking) {
+                        int member_count = matchmaking->GetNumLobbyMembers(lobby);
+                        int member_limit = matchmaking->GetLobbyMemberLimit(lobby);
+                        bool is_owner = (matchmaking->GetLobbyOwner(lobby) == settings->get_local_steam_id());
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby (%d/%d) %s", 
+                            member_count, member_limit,
+                            is_owner ? "[Owner]" : "");
+                        ImGui::SameLine();
+                        char lobby_id_str[32];
+                        snprintf(lobby_id_str, sizeof(lobby_id_str), "%llu", lobby.ConvertToUint64());
+                        if (ImGui::SmallButton("Copy Lobby ID")) {
+                            ImGui::SetClipboardText(lobby_id_str);
+                        }
+                    }
+                } else if (!connect_str.empty()) {
+                    // Connect string only (no formal lobby)
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Hosting Game");
+                }
+
+                if (!connect_str.empty()) {
+                    // Get exe filename for the full launch command
+                    std::string full_path = get_full_exe_path();
+                    std::string::size_type pos = full_path.find_last_of("/\\");
+                    std::string exe_name = (pos != std::string::npos) ? full_path.substr(pos + 1) : full_path;
+                    
+                    std::string launch_cmd = exe_name + " " + connect_str;
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Launch: %s", launch_cmd.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Copy##launch")) {
+                        ImGui::SetClipboardText(launch_cmd.c_str());
+                    }
+                }
+            }
         }
 
         ImGui::Spacing();
@@ -4459,6 +4504,56 @@ int Steam_Overlay::Bridge_GetLocalLobbyInfo(GSE_LocalLobbyInfo *out) const
     out->member_limit = matchmaking->GetLobbyMemberLimit(lobby);
     out->is_owner = (out->lobby_owner == settings->get_local_steam_id().ConvertToUint64()) ? 1 : 0;
 
+    // Also include connect string if set
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    if (steamFriends) {
+        std::string connect = steamFriends->get_friend_rich_presence_silent(settings->get_local_steam_id(), "connect");
+        if (!connect.empty()) {
+            strncpy(out->connect_string, connect.c_str(), GSE_CONNECT_STRING_SIZE - 1);
+            out->connect_string[GSE_CONNECT_STRING_SIZE - 1] = '\0';
+        }
+    }
+
+    // Include game exe filename
+    {
+        std::string full_path = get_full_exe_path();
+        std::string::size_type pos = full_path.find_last_of("/\\");
+        std::string name = (pos != std::string::npos) ? full_path.substr(pos + 1) : full_path;
+        strncpy(out->exe_name, name.c_str(), GSE_EXE_NAME_SIZE - 1);
+        out->exe_name[GSE_EXE_NAME_SIZE - 1] = '\0';
+    }
+
+    return 1;
+}
+
+int Steam_Overlay::Bridge_GetConnectString(char *out, int out_size) const
+{
+    if (!out || out_size <= 0) return 0;
+    out[0] = '\0';
+
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    if (!steamFriends) return 0;
+
+    std::string connect = steamFriends->get_friend_rich_presence_silent(settings->get_local_steam_id(), "connect");
+    if (connect.empty()) return 0;
+
+    strncpy(out, connect.c_str(), out_size - 1);
+    out[out_size - 1] = '\0';
+    return 1;
+}
+
+int Steam_Overlay::Bridge_GetExeName(char *out, int out_size) const
+{
+    if (!out || out_size <= 0) return 0;
+    out[0] = '\0';
+
+    std::string full_path = get_full_exe_path();
+    std::string::size_type pos = full_path.find_last_of("/\\");
+    std::string name = (pos != std::string::npos) ? full_path.substr(pos + 1) : full_path;
+    if (name.empty()) return 0;
+
+    strncpy(out, name.c_str(), out_size - 1);
+    out[out_size - 1] = '\0';
     return 1;
 }
 

@@ -221,6 +221,20 @@ __declspec(dllexport) int GSE_OverlayBridge_GetLocalLobbyInfo(GSE_LocalLobbyInfo
     return client->steam_overlay->Bridge_GetLocalLobbyInfo(out);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetConnectString(char *out, int out_size)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetConnectString(out, out_size);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetExeName(char *out, int out_size)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetExeName(out, out_size);
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetLanguage(void)
 {
     auto *client = get_steam_client();
