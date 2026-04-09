@@ -188,8 +188,9 @@ typedef struct GSE_Friend {
     char     name[128];
     uint8_t  is_online;
     uint8_t  is_joinable;
+    uint8_t  same_app;              /* 1 if friend is playing the same app */
     uint8_t  window_state;          /* bitmask: show, invite, join, etc. */
-    uint8_t  _pad[5];
+    uint8_t  _pad[4];
 } GSE_Friend;
 
 /* ── Function pointer typedefs (for GetProcAddress) ───────────────────── */
@@ -214,6 +215,7 @@ typedef float     (*pfn_GSE_OverlayBridge_GetSDRWhiteScale)(void);
 /* Friends */
 typedef int       (*pfn_GSE_OverlayBridge_GetFriendCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetFriends)(GSE_Friend *out, int max_count);
+typedef int       (*pfn_GSE_OverlayBridge_HasLobby)(void);  /* 1 if local user has a lobby/connect string */
 
 /* Settings read/write (key-value string pairs) */
 typedef int       (*pfn_GSE_OverlayBridge_GetOption)(int option_id);
@@ -270,6 +272,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetSDRWhiteScale    GetSDRWhiteScale;
     pfn_GSE_OverlayBridge_GetFriendCount      GetFriendCount;
     pfn_GSE_OverlayBridge_GetFriends          GetFriends;
+    pfn_GSE_OverlayBridge_HasLobby            HasLobby;
     pfn_GSE_OverlayBridge_GetOption           GetOption;
     pfn_GSE_OverlayBridge_SetOption           SetOption;
     pfn_GSE_OverlayBridge_TestAchievement     TestAchievement;
@@ -302,6 +305,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetSDRWhiteScale);
     LOAD(GetFriendCount);
     LOAD(GetFriends);
+    LOAD(HasLobby);
     LOAD(GetOption);
     LOAD(SetOption);
     LOAD(TestAchievement);

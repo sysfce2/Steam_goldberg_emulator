@@ -4038,6 +4038,8 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
 {
     std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
 
+    uint32 local_appid = settings->get_local_game_id().AppID();
+
     int written = 0;
     for (const auto &[frd, state] : friends) {
         if (written >= max_count) break;
@@ -4047,13 +4049,20 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
 
         o.steam_id = frd.id();
         bridge_safe_copy(o.name, sizeof(o.name), frd.name());
-        o.is_online = (state.window_state & window_state_show) ? 1 : 0; // approximate
+        o.is_online = 1; // Friends in this map are online (FriendConnect adds, FriendDisconnect removes)
         o.is_joinable = state.joinable ? 1 : 0;
+        o.same_app = (frd.appid() == local_appid) ? 1 : 0;
         o.window_state = state.window_state;
 
         ++written;
     }
     return written;
+}
+
+int Steam_Overlay::Bridge_HasLobby() const
+{
+    // Same logic as i_have_lobby in steam_run_callback_update_my_lobby()
+    return i_have_lobby ? 1 : 0;
 }
 
 void Steam_Overlay::Bridge_RequestSaveSettings()

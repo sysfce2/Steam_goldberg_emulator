@@ -183,6 +183,13 @@ __declspec(dllexport) int GSE_OverlayBridge_GetFriends(GSE_Friend *out, int max_
     return client->steam_overlay->Bridge_GetFriends(out, max_count);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_HasLobby(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_HasLobby();
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetOption(int option_id)
 {
     auto *client = get_steam_client();

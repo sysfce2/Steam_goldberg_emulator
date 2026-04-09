@@ -1530,11 +1530,8 @@ static void render_friends_list()
     std::vector<GSE_Friend> friends(friend_count > 256 ? 256 : friend_count);
     int count = s_bridge.GetFriends(friends.data(), (int)friends.size());
 
-    // Invite All button (matching native: shown when lobby exists)
-    // We check if any friend is joinable as a proxy for having a lobby
-    bool has_lobby = false;
-    for (int i = 0; i < count && !has_lobby; ++i)
-        if (friends[i].is_joinable) has_lobby = true;
+    // Check if local user has a lobby (for Invite All and individual Invite buttons)
+    bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
 
     if (has_lobby && s_bridge.InviteAllFriends) {
         if (ImGui::Button("Invite All##PopupInviteAllFriends")) {
@@ -1574,8 +1571,8 @@ static void render_friends_list()
                     ImGui::SetClipboardText(id_str);
                 }
 
-                // Invite (if we have a lobby)
-                if (has_lobby && s_bridge.FriendAction) {
+                // Invite (if we have a lobby AND friend is playing the same app)
+                if (has_lobby && f.same_app && s_bridge.FriendAction) {
                     if (ImGui::Button("Invite##PopupInviteToGame")) {
                         close = true;
                         s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);

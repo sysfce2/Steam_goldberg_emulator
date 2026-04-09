@@ -369,6 +369,7 @@ public:
     float Bridge_GetSDRWhiteScale() const;
     int  Bridge_GetFriendCount() const;
     int  Bridge_GetFriends(struct GSE_Friend *out, int max_count) const;
+    int  Bridge_HasLobby() const;
     void Bridge_RequestSaveSettings();
     void Bridge_MarkConnected();
     bool Bridge_IsConnected() const;
