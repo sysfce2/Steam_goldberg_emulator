@@ -2002,6 +2002,13 @@ void Steam_Overlay::overlay_render_proc()
 
     if (!Ready()) return;
 
+    // Deferred SCE texture cleanup - do this BEFORE any ImGui rendering
+    // to avoid deleting resources mid-frame (which crashes DX9)
+    if (sce_textures_pending_free) {
+        sce_textures_pending_free = false;
+        sce_textures_free_all();
+    }
+
     // Drain the deferred display-info refresh (set on Reset/Removing).
     // Done here — on the render thread but outside the hooked resize path — so
     // QueryDisplayConfig does not block ResizeBuffers / device-release calls.
@@ -2169,6 +2176,26 @@ void Steam_Overlay::render_main_window()
         // user clicked on "toggle user info"
         if (ImGui::Button(translationToggleUserInfo[current_language])) {
             show_user_info = !show_user_info;
+        }
+
+        ImGui::SameLine();
+        // user clicked on "chat" - shows friend picker to start conversation
+        {
+            // Check if any friend has unread messages (needs attention)
+            bool has_unread = false;
+            for (auto &[frd, state] : friends) {
+                if (state.window_state & window_state_need_attention) {
+                    has_unread = true;
+                    break;
+                }
+            }
+            if (has_unread)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+            if (ImGui::Button(translationChat[current_language])) {
+                show_chat_picker = !show_chat_picker;
+            }
+            if (has_unread)
+                ImGui::PopStyleColor();
         }
 
         ImGui::SameLine();
@@ -2529,6 +2556,48 @@ void Steam_Overlay::render_main_window()
             ImGui::EndChild();
         }
 
+        // Chat picker popup - select friend to start conversation
+        if (show_chat_picker) {
+            ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            if (ImGui::Begin("Select Friend to Chat##chat_picker", &show_chat_picker)) {
+                if (friends.empty()) {
+                    ImGui::TextDisabled("No friends online.");
+                } else {
+                    ImGui::BeginChild("##chat_picker_list", ImVec2(0, 0), true);
+                    for (auto &[frd, state] : friends) {
+                        ImGui::PushID((int)frd.id());
+                        
+                        // Avatar
+                        const float avatar_size = 24.0f;
+                        bool has_avatar = try_load_avatar(state, frd.id());
+                        if (has_avatar && state.avatar_resource && state.avatar_resource->GetResourceId() != 0) {
+                            ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
+                            ImGui::SameLine();
+                        }
+                        
+                        // Highlight if needs attention
+                        bool needs_attn = (state.window_state & window_state_need_attention);
+                        if (needs_attn)
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                        
+                        if (ImGui::Selectable(frd.name().c_str())) {
+                            state.window_state |= window_state_show;
+                            state.window_state &= ~window_state_need_attention;
+                            show_chat_picker = false;
+                        }
+                        
+                        if (needs_attn)
+                            ImGui::PopStyleColor();
+                        
+                        ImGui::PopID();
+                    }
+                    ImGui::EndChild();
+                }
+            }
+            ImGui::End();
+        }
+
         // user clicked on "show achievements" button
         if (show_achievements && achievements.size()) {
             const float noti_w = io.DisplaySize.x * Notification::width_percent;
@@ -2863,7 +2932,7 @@ void Steam_Overlay::render_main_window()
             Steam_User_Stats *user_stats = get_steam_client()->steam_user_stats;
             if (!user_stats->sce_data_populated || user_stats->sce_game_data.series.empty()) {
                 show_sce_browser = false;
-                sce_textures_free_all();
+                sce_textures_pending_free = true;  // defer to next frame start
             } else {
                 auto local_storage = get_steam_client()->local_storage;
 
@@ -3325,12 +3394,12 @@ void Steam_Overlay::render_main_window()
                         sce_preview_key.clear();
                 }
 
-                // Free textures when the window is closed
+                // Free textures when the window is closed (deferred to avoid DX9 crash)
                 if (!browser_open) {
                     show_sce_browser = false;
                     sce_preview_key.clear();
                     sce_preview_nav_keys.clear();
-                    sce_textures_free_all();
+                    sce_textures_pending_free = true;  // defer to next frame start
                 }
             }
         }

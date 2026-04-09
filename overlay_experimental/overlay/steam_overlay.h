@@ -150,6 +150,7 @@ class Steam_Overlay
     bool show_achievements = false;
     bool show_settings = false;
     bool show_sce_browser = false;
+    bool show_chat_picker = false;  // popup to select friend to start chat with
 
     // SCE asset download progress (set by NotifySceAssetsReady, read on render thread)
     struct SceAssetProgress {
@@ -172,6 +173,7 @@ class Steam_Overlay
     std::map<std::string, SceTexture> sce_textures{};
     std::string sce_preview_key{};              // tex_key of the asset currently shown in the preview popup
     std::vector<std::string> sce_preview_nav_keys{};  // ordered keys for same-type same-series nav
+    bool sce_textures_pending_free{false};      // deferred cleanup flag to avoid mid-frame Delete()
     void sce_textures_free_all()
     {
         for (auto &[k, t] : sce_textures)
