@@ -739,12 +739,13 @@ bool Networking::handle_low_level_udp(Common_Message *msg, IP_PORT ip_port)
 
 #define NUM_TCP_WAITING 128
 
-Networking::Networking(CSteamID id, uint32 appid, uint16 port, std::set<IP_PORT> *custom_broadcasts, bool disable_sockets)
+Networking::Networking(CSteamID id, uint32 appid, uint16 port, std::set<IP_PORT> *custom_broadcasts, bool disable_sockets, bool crossapp_messaging)
 {
     tcp_port = udp_port = port;
     own_ip = 0x7F000001;
     last_run = std::chrono::high_resolution_clock::now();
     this->appid = appid;
+    this->crossapp_messaging = crossapp_messaging;
 
     if (disable_sockets) {
         enabled = false;
@@ -1065,8 +1066,8 @@ void Networking::Run()
 
         if (conn.tcp_socket_incoming.received_data || conn.tcp_socket_outgoing.received_data) {
             if (!conn.connected) {
-                //reconnect the connection if it has the right appid
-                if (conn.appid == this->appid || conn.appid == LOBBY_CONNECT_APPID) {
+                //reconnect the connection if it has the right appid (or any appid if crossapp is enabled)
+                if (conn.appid == this->appid || conn.appid == LOBBY_CONNECT_APPID || crossapp_messaging) {
                     for (auto &c: connections) {
                         if (&c == &conn) continue;
                         if (c.appid != this->appid) continue;
@@ -1294,7 +1295,7 @@ void Networking::run_callbacks(Callback_Ids id, Common_Message *msg)
 void Networking::run_callback_user(CSteamID steam_id, bool online, uint32 appid)
 {
     //only give callbacks for right game accounts
-    if (steam_id.BIndividualAccount() && appid != this->appid && appid != LOBBY_CONNECT_APPID) return;
+    if (steam_id.BIndividualAccount() && appid != this->appid && appid != LOBBY_CONNECT_APPID && !crossapp_messaging) return;
 
     Common_Message msg{};
     msg.set_source_id(steam_id.ConvertToUint64());

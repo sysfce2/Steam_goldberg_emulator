@@ -266,6 +266,9 @@ public:
     //networking
     bool disable_networking = false;
 
+    // allow friend messages (chat, avatars) to reach friends on different appids
+    bool enable_crossapp_messaging = true;
+
     //gameserver source query
     bool disable_source_query = false;
 

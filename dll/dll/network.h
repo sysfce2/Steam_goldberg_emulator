@@ -108,6 +108,7 @@ class Networking
 
     std::vector<CSteamID> ids;
     uint32 appid;
+    bool crossapp_messaging;
     std::chrono::high_resolution_clock::time_point last_broadcast;
     std::vector<IP_PORT> custom_broadcasts;
 
@@ -134,7 +135,7 @@ class Networking
 
 
 public:
-    Networking(CSteamID id, uint32 appid, uint16 port, std::set<IP_PORT> *custom_broadcasts, bool disable_sockets);
+    Networking(CSteamID id, uint32 appid, uint16 port, std::set<IP_PORT> *custom_broadcasts, bool disable_sockets, bool crossapp_messaging = false);
     ~Networking();
     
     //NOTE: for all functions ips/ports are passed/returned in host byte order

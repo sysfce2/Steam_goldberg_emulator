@@ -1682,6 +1682,9 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->disable_networking = ini.GetBoolValue("main::connectivity", "disable_networking", settings_client->disable_networking);
     settings_server->disable_networking = ini.GetBoolValue("main::connectivity", "disable_networking", settings_server->disable_networking);
 
+    settings_client->enable_crossapp_messaging = ini.GetBoolValue("main::connectivity", "enable_crossapp_messaging", settings_client->enable_crossapp_messaging);
+    settings_server->enable_crossapp_messaging = ini.GetBoolValue("main::connectivity", "enable_crossapp_messaging", settings_server->enable_crossapp_messaging);
+
     settings_client->disable_sharing_stats_with_gameserver = ini.GetBoolValue("main::connectivity", "disable_sharing_stats_with_gameserver", settings_client->disable_sharing_stats_with_gameserver);
     settings_server->disable_sharing_stats_with_gameserver = ini.GetBoolValue("main::connectivity", "disable_sharing_stats_with_gameserver", settings_server->disable_sharing_stats_with_gameserver);
     

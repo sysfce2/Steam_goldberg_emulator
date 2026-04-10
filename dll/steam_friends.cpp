@@ -1495,7 +1495,7 @@ void Steam_Friends::Callback(Common_Message *msg)
             }
 
             msg_.set_allocated_friend_(f);
-            network->sendTo(&msg_, true, NULL, true);
+            network->sendTo(&msg_, true, NULL, settings->enable_crossapp_messaging);
         }
     }
 

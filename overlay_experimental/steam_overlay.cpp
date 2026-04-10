@@ -4233,7 +4233,7 @@ void Steam_Overlay::steam_run_callback_friends_actions()
                     msg.set_allocated_steam_messages(steam_messages);
                     msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
                     msg.set_dest_id(friend_id);
-                    network->sendTo(&msg, true, NULL, true);
+                    network->sendTo(&msg, true, NULL, settings->enable_crossapp_messaging);
 
                     friend_info->second.chat_history.append(get_steam_client()->settings_client->get_local_name()).append(": ").append(input).append("\n", 1);
                 }
