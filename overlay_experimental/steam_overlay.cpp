@@ -6,7 +6,6 @@
 // avoids confusing ImGui when another label has the same text "MyText"
 
 #include "overlay/steam_overlay.h"
-#include "InGameOverlay/ImGui/imgui_internal.h"
 
 #include <thread>
 #include <string>
@@ -566,8 +565,9 @@ void Steam_Overlay::create_fonts()
     font_notif = font_default = font;
     stats.font = font;
     
-    ImFontAtlasBuildMain(&fonts_atlas);
-    PRINT_DEBUG("created fonts atlas");
+    // With ImGui 1.92+ and ImGuiBackendFlags_RendererHasTextures, the backend
+    // builds the font atlas automatically — no need to call Build() manually.
+    PRINT_DEBUG("fonts added to atlas (backend will build automatically)");
 
     reset_LastError();
 }
