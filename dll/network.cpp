@@ -469,6 +469,7 @@ static void socket_timeouts(struct TCP_Socket &socket, double extra_time)
     }
 
     if (check_timedout(socket.last_heartbeat_received, HEARTBEAT_TIMEOUT + extra_time)) {
+        PRINT_DEBUG("[DISCONNECT-DIAG] HEARTBEAT_TIMEOUT: killing tcp socket %u (received_data=%d)", socket.sock, socket.received_data);
         kill_tcp_socket(socket);
         PRINT_DEBUG("TCP SOCKET HEARTBEAT TIMEOUT");
     }
@@ -647,6 +648,8 @@ struct Connection *Networking::new_connection(CSteamID search_id, uint32 appid)
 
     PRINT_DEBUG("ADDED ID %llu", (uint64)search_id.ConvertToUint64());
     connections.push_back(connection);
+    PRINT_DEBUG("[DISCONNECT-DIAG] new_connection: added user %llu appid %u, total_connections=%zu, vector_capacity=%zu",
+        (uint64)search_id.ConvertToUint64(), appid, connections.size(), connections.capacity());
     return &(connections[connections.size() - 1]);
 }
 
@@ -659,7 +662,7 @@ bool Networking::handle_announce(Common_Message *msg, IP_PORT ip_port)
         PRINT_DEBUG("new connection created: user %llu, appid %u", (uint64)msg->source_id(), msg->announce().appid());
     }
 
-    PRINT_DEBUG("Handle Announce: %u, " "%" PRIu64 ", %u, %u", conn->appid, msg->source_id(), msg->announce().appid(), msg->announce().type());
+    PRINT_DEBUG("Handle Announce: %u, " "%" PRIu64 ", %u, %u, total_connections=%zu", conn->appid, msg->source_id(), msg->announce().appid(), msg->announce().type(), connections.size());
     conn->tcp_ip_port = ip_port;
     conn->tcp_ip_port.port = htons(msg->announce().tcp_port());
     conn->appid = msg->announce().appid();
@@ -1015,6 +1018,10 @@ void Networking::Run()
             if (msg.source_id()) {
                 Connection *connection = find_connection((uint64)msg.source_id());
                 if (connection) {
+                    PRINT_DEBUG("[DISCONNECT-DIAG] TCP_ACCEPT: replacing incoming socket for user %llu (appid %u), old_sock=%u old_recv=%d, new_sock=%u",
+                        (uint64)msg.source_id(), connection->appid,
+                        connection->tcp_socket_incoming.sock, connection->tcp_socket_incoming.received_data,
+                        conn->sock);
                     kill_tcp_socket(connection->tcp_socket_incoming);
                     connection->tcp_socket_incoming = *conn;
                     conn = accepted.erase(conn);
@@ -1075,6 +1082,7 @@ void Networking::Run()
                             auto i = std::find(c.ids.begin(), c.ids.end(), steam_id);
                             if (i != c.ids.end()) {
                                 c.ids.erase(i);
+                                PRINT_DEBUG("[DISCONNECT-DIAG] DEDUP: firing DISCONNECT for user %llu (appid %u) because it was found in another connection (new conn appid %u, connected via reconnect)", (uint64)steam_id.ConvertToUint64(), c.appid, conn.appid);
                                 run_callback_user(steam_id, false, c.appid);
                                 PRINT_DEBUG("REMOVE OLD CONNECTION ID");
                             }
@@ -1084,6 +1092,10 @@ void Networking::Run()
                     for (auto &steam_id : conn.ids) run_callback_user(steam_id, true, conn.appid);
                 }
 
+                PRINT_DEBUG("[DISCONNECT-DIAG] CONNECTED_TRANSITION: conn for appid %u now connected=true, ids_count=%zu, out_sock=%u out_recv=%d, in_sock=%u in_recv=%d",
+                    conn.appid, conn.ids.size(),
+                    conn.tcp_socket_outgoing.sock, conn.tcp_socket_outgoing.received_data,
+                    conn.tcp_socket_incoming.sock, conn.tcp_socket_incoming.received_data);
                 conn.connected = true;
             }
         }
@@ -1118,7 +1130,15 @@ void Networking::Run()
         auto conn = std::begin(connections);
         while (conn != std::end(connections)) {
             if (check_timedout(conn->last_received, USER_TIMEOUT + time_extra)) {
-                if (conn->connected) for (auto &steam_id : conn->ids) run_callback_user(steam_id, false, conn->appid);
+                if (conn->connected) {
+                    for (auto &steam_id : conn->ids) {
+                        PRINT_DEBUG("[DISCONNECT-DIAG] USER_TIMEOUT: firing DISCONNECT for user %llu (appid %u), connected=%d, out_sock=%u out_recv=%d, in_sock=%u in_recv=%d",
+                            (uint64)steam_id.ConvertToUint64(), conn->appid, conn->connected,
+                            conn->tcp_socket_outgoing.sock, conn->tcp_socket_outgoing.received_data,
+                            conn->tcp_socket_incoming.sock, conn->tcp_socket_incoming.received_data);
+                        run_callback_user(steam_id, false, conn->appid);
+                    }
+                }
                 kill_tcp_socket(conn->tcp_socket_outgoing);
                 kill_tcp_socket(conn->tcp_socket_incoming);
                 conn = connections.erase(conn);
@@ -1129,9 +1149,27 @@ void Networking::Run()
         }
     }
 
+    // Periodic connection state dump for diagnostics
+    for (size_t idx = 0; idx < connections.size(); ++idx) {
+        auto &conn = connections[idx];
+        PRINT_DEBUG("[DISCONNECT-DIAG] STATE[%zu]: appid=%u connected=%d ids_count=%zu first_id=%llu out_sock=%u out_recv=%d in_sock=%u in_recv=%d",
+            idx, conn.appid, conn.connected, conn.ids.size(),
+            conn.ids.empty() ? 0ULL : (uint64)conn.ids[0].ConvertToUint64(),
+            conn.tcp_socket_outgoing.sock, conn.tcp_socket_outgoing.received_data,
+            conn.tcp_socket_incoming.sock, conn.tcp_socket_incoming.received_data);
+    }
+
     for (auto &conn: connections) {
         if (!(conn.tcp_socket_incoming.received_data || conn.tcp_socket_outgoing.received_data)) {
-            if (conn.connected) for (auto &steam_id : conn.ids) run_callback_user(steam_id, false, conn.appid);
+            if (conn.connected) {
+                for (auto &steam_id : conn.ids) {
+                    PRINT_DEBUG("[DISCONNECT-DIAG] NO_RECV_DATA: firing DISCONNECT for user %llu (appid %u), out_sock=%u in_sock=%u, total_connections=%zu",
+                        (uint64)steam_id.ConvertToUint64(), conn.appid,
+                        conn.tcp_socket_outgoing.sock, conn.tcp_socket_incoming.sock,
+                        connections.size());
+                    run_callback_user(steam_id, false, conn.appid);
+                }
+            }
             conn.connected = false;
         }
     }
@@ -1294,6 +1332,8 @@ void Networking::run_callbacks(Callback_Ids id, Common_Message *msg)
 
 void Networking::run_callback_user(CSteamID steam_id, bool online, uint32 appid)
 {
+    PRINT_DEBUG("[DISCONNECT-DIAG] run_callback_user: user %llu %s (appid %u, our_appid %u)",
+        (uint64)steam_id.ConvertToUint64(), online ? "CONNECT" : "DISCONNECT", appid, this->appid);
     //only give callbacks for right game accounts
     if (steam_id.BIndividualAccount() && appid != this->appid && appid != LOBBY_CONNECT_APPID && !crossapp_messaging) return;
 
