@@ -956,6 +956,10 @@ bool Steam_Overlay::submit_notification(
             // nothing
         break;
 
+        case notification_type::lobby_join_request:
+            obscure_game_input(true);
+        break;
+
         default:
             PRINT_DEBUG("error unhandled type %i", (int)type);
         break;
@@ -972,6 +976,39 @@ void Steam_Overlay::add_chat_message_notification(std::string const &message, st
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
 
     submit_notification(notification_type::message, message, frd);
+}
+
+void Steam_Overlay::poll_lobby_join_requests()
+{
+    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    const auto &pending = mm->GetPendingLobbyJoinRequests();
+
+    for (const auto &req : pending) {
+        auto key = std::make_pair(req.lobby_id.ConvertToUint64(), req.requester_id.ConvertToUint64());
+        if (notified_lobby_join_requests.count(key)) continue;
+
+        notified_lobby_join_requests.insert(key);
+
+        const char *name = steamFriends->GetFriendPersonaName(req.requester_id);
+        std::string msg = std::string(name ? name : "Unknown") + " wants to join your lobby";
+
+        int id = find_free_notification_id(notifications);
+        if (id == 0) continue;
+
+        Notification notif{};
+        notif.start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+        notif.steady_start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
+        notif.id = id;
+        notif.type = (uint8)notification_type::lobby_join_request;
+        notif.message = msg;
+        notif.join_request_lobby_id = req.lobby_id.ConvertToUint64();
+        notif.join_request_requester_id = req.requester_id.ConvertToUint64();
+
+        notifications.emplace_back(notif);
+        allow_renderer_frame_processing(true);
+        obscure_game_input(true);
+    }
 }
 
 void Steam_Overlay::show_test_achievement()
@@ -1259,6 +1296,9 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
     
     case notification_type::auto_accept_invite:
         return Notification::default_show_time;
+    
+    case notification_type::lobby_join_request:
+        return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
     }
 
     PRINT_DEBUG("ERROR unhandled type %i", (int)type);
@@ -1323,6 +1363,17 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
     }
     break;
     case notification_type::message: pos = settings->overlay_appearance.chat_msg_pos; break;
+    case notification_type::lobby_join_request: {
+        pos = settings->overlay_appearance.invite_pos;
+        const float ljr_msg_height = ImGui::CalcTextSize(
+            noti.message.c_str(),
+            noti.message.c_str() + noti.message.size(),
+            false,
+            noti_width - padding_all_sides - global_style.ItemSpacing.x
+        ).y;
+        noti_height = ljr_msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
+    }
+    break;
     default: PRINT_DEBUG("ERROR: unhandled notification type %i", (int)noti.type); break;
     }
     // add some y padding for niceness
@@ -1500,6 +1551,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                 // nothing
             break;
 
+            case notification_type::lobby_join_request:
+                // interactive: Accept/Decline buttons
+            break;
+
             default:
                 PRINT_DEBUG("error unhandled flags for type %i", (int)it->type);
             break;
@@ -1566,6 +1621,24 @@ void Steam_Overlay::build_notifications(float width, float height)
                 case notification_type::auto_accept_invite:
                     ImGui::TextWrapped("%s", it->message.c_str());
                 break;
+
+                case notification_type::lobby_join_request: {
+                    ImGui::TextWrapped("%s", it->message.c_str());
+                    if (ImGui::Button(translationJoin[current_language])) {
+                        Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                        mm->AcceptLobbyJoinRequest(it->join_request_lobby_id, it->join_request_requester_id);
+                        notified_lobby_join_requests.erase({it->join_request_lobby_id, it->join_request_requester_id});
+                        it->start_time = {};
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(translationRefuse[current_language])) {
+                        Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                        mm->DeclineLobbyJoinRequest(it->join_request_lobby_id, it->join_request_requester_id);
+                        notified_lobby_join_requests.erase({it->join_request_lobby_id, it->join_request_requester_id});
+                        it->start_time = {};
+                    }
+                }
+                break;
                 
                 default:
                     PRINT_DEBUG("error unhandled notification for type %i", (int)it->type);
@@ -1592,6 +1665,12 @@ void Steam_Overlay::build_notifications(float width, float height)
                 // we want to restore focus for these ones
                 case notification_type::invite:
                     obscure_game_input(false);
+                break;
+
+                case notification_type::lobby_join_request:
+                    obscure_game_input(false);
+                    // clean up tracking if expired without action
+                    notified_lobby_join_requests.erase({item.join_request_lobby_id, item.join_request_requester_id});
                 break;
 
                 // not effective
@@ -4474,6 +4553,7 @@ void Steam_Overlay::steam_run_callback()
             // ==============================================================
 
             steam_run_callback_friends_actions();
+            poll_lobby_join_requests();
         }
 
         overlay_mutex.unlock();
@@ -4762,6 +4842,10 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
                 o.ach_icon_h = 64;
             }
         }
+
+        // Lobby join request data
+        o.join_request_lobby_id = n.join_request_lobby_id;
+        o.join_request_requester_id = n.join_request_requester_id;
 
         ++written;
     }
@@ -5156,6 +5240,36 @@ void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
                 break;
             default: break;
             }
+            break;
+        }
+    }
+}
+
+void Steam_Overlay::Bridge_AcceptLobbyJoinRequest(int notification_id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    for (auto &n : notifications) {
+        if (n.id == notification_id && (notification_type)n.type == notification_type::lobby_join_request) {
+            Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+            mm->AcceptLobbyJoinRequest(n.join_request_lobby_id, n.join_request_requester_id);
+            notified_lobby_join_requests.erase({n.join_request_lobby_id, n.join_request_requester_id});
+            n.start_time = {};
+            n.expired = true;
+            break;
+        }
+    }
+}
+
+void Steam_Overlay::Bridge_DeclineLobbyJoinRequest(int notification_id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    for (auto &n : notifications) {
+        if (n.id == notification_id && (notification_type)n.type == notification_type::lobby_join_request) {
+            Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+            mm->DeclineLobbyJoinRequest(n.join_request_lobby_id, n.join_request_requester_id);
+            notified_lobby_join_requests.erase({n.join_request_lobby_id, n.join_request_requester_id});
+            n.start_time = {};
+            n.expired = true;
             break;
         }
     }

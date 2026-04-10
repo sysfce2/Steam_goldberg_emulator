@@ -173,6 +173,20 @@ __declspec(dllexport) void GSE_OverlayBridge_ExpireNotification(int id)
     client->steam_overlay->Bridge_ExpireNotification(id);
 }
 
+__declspec(dllexport) void GSE_OverlayBridge_AcceptLobbyJoinRequest(int notification_id)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_AcceptLobbyJoinRequest(notification_id);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_DeclineLobbyJoinRequest(int notification_id)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_DeclineLobbyJoinRequest(notification_id);
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetDisplayInfo(GSE_DisplayInfo *out, int max_count)
 {
     if (!out || max_count <= 0) return 0;

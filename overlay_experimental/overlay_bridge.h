@@ -40,6 +40,7 @@ enum GSE_NotifType {
     GSE_NOTIF_ACHIEVEMENT        = 2,
     GSE_NOTIF_ACHIEVEMENT_PROG   = 3,
     GSE_NOTIF_AUTO_ACCEPT_INVITE = 4,
+    GSE_NOTIF_LOBBY_JOIN_REQ     = 5,
 };
 
 enum GSE_RendererAPI {
@@ -130,6 +131,9 @@ typedef struct GSE_Notification {
     const uint8_t *ach_icon_pixels;
     int32_t  ach_icon_w;
     int32_t  ach_icon_h;
+    /* For lobby join request notifications: */
+    uint64_t join_request_lobby_id;
+    uint64_t join_request_requester_id;
 } GSE_Notification;
 
 typedef struct GSE_DisplayInfo {
@@ -278,6 +282,8 @@ typedef int       (*pfn_GSE_OverlayBridge_GetAchievementGroups)(GSE_AchievementG
 /* Notifications — returns count of active (non-expired) notifications */
 typedef int       (*pfn_GSE_OverlayBridge_GetNotifications)(GSE_Notification *out, int max_count);
 typedef void      (*pfn_GSE_OverlayBridge_ExpireNotification)(int id);
+typedef void      (*pfn_GSE_OverlayBridge_AcceptLobbyJoinRequest)(int notification_id);
+typedef void      (*pfn_GSE_OverlayBridge_DeclineLobbyJoinRequest)(int notification_id);
 
 /* Display / HDR info */
 typedef int       (*pfn_GSE_OverlayBridge_GetDisplayInfo)(GSE_DisplayInfo *out, int max_count);
@@ -362,6 +368,8 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetAchievementGroups GetAchievementGroups;
     pfn_GSE_OverlayBridge_GetNotifications    GetNotifications;
     pfn_GSE_OverlayBridge_ExpireNotification  ExpireNotification;
+    pfn_GSE_OverlayBridge_AcceptLobbyJoinRequest AcceptLobbyJoinRequest;
+    pfn_GSE_OverlayBridge_DeclineLobbyJoinRequest DeclineLobbyJoinRequest;
     pfn_GSE_OverlayBridge_GetDisplayInfo      GetDisplayInfo;
     pfn_GSE_OverlayBridge_GetSDRWhiteScale    GetSDRWhiteScale;
     pfn_GSE_OverlayBridge_GetFriendCount      GetFriendCount;
@@ -409,6 +417,8 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetAchievementGroups);
     LOAD(GetNotifications);
     LOAD(ExpireNotification);
+    LOAD(AcceptLobbyJoinRequest);
+    LOAD(DeclineLobbyJoinRequest);
     LOAD(GetDisplayInfo);
     LOAD(GetSDRWhiteScale);
     LOAD(GetFriendCount);

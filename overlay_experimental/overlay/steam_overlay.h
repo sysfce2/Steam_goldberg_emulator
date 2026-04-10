@@ -66,6 +66,7 @@ enum class notification_type
     achievement,
     achievement_progress,
     auto_accept_invite,
+    lobby_join_request,
 };
 
 struct Overlay_Achievement
@@ -99,6 +100,9 @@ struct Notification
     std::string message{};
     std::pair<const Friend, friend_window_state>* frd{};
     std::optional<Overlay_Achievement> ach{};
+    // For lobby_join_request notifications
+    uint64 join_request_lobby_id{};
+    uint64 join_request_requester_id{};
 };
 
 // notification coordinates { x, y }
@@ -211,6 +215,8 @@ class Steam_Overlay
     std::vector<Notification> notifications{};
     // used when the button "Invite all" is clicked
     std::atomic<bool> invite_all_friends_clicked = false;
+    // track lobby join requests we've already shown a notification for
+    std::set<std::pair<uint64, uint64>> notified_lobby_join_requests{};
 
     bool overlay_state_changed = false;
 
@@ -298,6 +304,7 @@ class Steam_Overlay
     void add_invite_notification(std::pair<const Friend, friend_window_state> &wnd_state);
     void post_achievement_notification(Overlay_Achievement &ach, bool for_progress);
     void add_chat_message_notification(std::string const& message, std::pair<const Friend, friend_window_state> *frd = nullptr);
+    void poll_lobby_join_requests();
     void show_test_achievement();
 
     bool open_overlay_hook(bool toggle);
@@ -403,6 +410,8 @@ public:
     void Bridge_SimulateAchievements();
     void Bridge_InviteAllFriends();
     void Bridge_FriendAction(uint64_t steam_id, int action);
+    void Bridge_AcceptLobbyJoinRequest(int notification_id);
+    void Bridge_DeclineLobbyJoinRequest(int notification_id);
     void Bridge_SetShowFps(bool v);
     void Bridge_SetShowFrametime(bool v);
     void Bridge_SetShowPlaytime(bool v);

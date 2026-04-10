@@ -282,6 +282,41 @@ Steam_Matchmaking::~Steam_Matchmaking()
     this->run_every_runcb->remove(&Steam_Matchmaking::steam_matchmaking_run_every_runcb, this);
 }
 
+void Steam_Matchmaking::AcceptLobbyJoinRequest(uint64 lobby_id, uint64 requester_id)
+{
+    PRINT_DEBUG("lobby=%llu requester=%llu", lobby_id, requester_id);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    auto it = std::find_if(pending_lobby_join_requests.begin(), pending_lobby_join_requests.end(),
+        [&](const Pending_Lobby_Join_Request &r) {
+            return r.lobby_id.ConvertToUint64() == lobby_id && r.requester_id.ConvertToUint64() == requester_id;
+        });
+    if (it == pending_lobby_join_requests.end()) return;
+
+    Lobby *lobby = get_lobby(CSteamID(lobby_id));
+    if (lobby && lobby->owner() == settings->get_local_steam_id().ConvertToUint64()) {
+        if (add_member_to_lobby(lobby, CSteamID(requester_id))) {
+            trigger_lobby_member_join_leave((uint64)lobby->room_id(), requester_id, false, true, 0.01);
+        }
+    }
+
+    pending_lobby_join_requests.erase(it);
+}
+
+void Steam_Matchmaking::DeclineLobbyJoinRequest(uint64 lobby_id, uint64 requester_id)
+{
+    PRINT_DEBUG("lobby=%llu requester=%llu", lobby_id, requester_id);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    auto it = std::find_if(pending_lobby_join_requests.begin(), pending_lobby_join_requests.end(),
+        [&](const Pending_Lobby_Join_Request &r) {
+            return r.lobby_id.ConvertToUint64() == lobby_id && r.requester_id.ConvertToUint64() == requester_id;
+        });
+    if (it != pending_lobby_join_requests.end()) {
+        pending_lobby_join_requests.erase(it);
+    }
+}
+
 
 // game server favorites storage
 // saves basic details about a multiplayer game server locally
@@ -740,6 +775,8 @@ bool Steam_Matchmaking::InviteUserToLobby( CSteamID steamIDLobby, CSteamID steam
     msg.set_allocated_friend_messages(friend_messages);
     msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
     msg.set_dest_id(steamIDInvitee.ConvertToUint64());
+    // Track this invite so when the JOIN arrives we auto-accept (no notification)
+    invited_users.insert({steamIDLobby.ConvertToUint64(), steamIDInvitee.ConvertToUint64()});
     return network->sendTo(&msg, true);
 }
 
@@ -1652,8 +1689,32 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
             if (lobby->owner() == settings->get_local_steam_id().ConvertToUint64()) {
                 if (msg->lobby_messages().type() == Lobby_Messages::JOIN) {
                     PRINT_DEBUG("LOBBY MESSAGE: JOIN, lobby=%llu from=%llu", (uint64)lobby->room_id(), (uint64)msg->source_id());
-                    if (add_member_to_lobby(lobby, (uint64)msg->source_id())) {
-                        trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), false, true, 0.01);
+                    CSteamID requester((uint64)msg->source_id());
+                    if (!get_lobby_member(lobby, requester)) {
+                        // If we explicitly invited this user, auto-accept them (no notification needed)
+                        auto invite_key = std::make_pair((uint64)lobby->room_id(), (uint64)msg->source_id());
+                        auto inv_it = invited_users.find(invite_key);
+                        if (inv_it != invited_users.end()) {
+                            invited_users.erase(inv_it);
+                            if (add_member_to_lobby(lobby, requester)) {
+                                trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), false, true, 0.01);
+                            }
+                            PRINT_DEBUG("Auto-accepted invited user %llu for lobby %llu", (uint64)msg->source_id(), (uint64)lobby->room_id());
+                        } else {
+                            // Unsolicited join — queue for overlay Accept/Decline notification
+                            auto existing = std::find_if(pending_lobby_join_requests.begin(), pending_lobby_join_requests.end(),
+                                [&](const Pending_Lobby_Join_Request &r) {
+                                    return r.lobby_id == CSteamID((uint64)lobby->room_id()) && r.requester_id == requester;
+                                });
+                            if (existing == pending_lobby_join_requests.end()) {
+                                Pending_Lobby_Join_Request req{};
+                                req.lobby_id = (uint64)lobby->room_id();
+                                req.requester_id = requester;
+                                req.requested = std::chrono::high_resolution_clock::now();
+                                pending_lobby_join_requests.push_back(req);
+                                PRINT_DEBUG("Queued lobby join request from %llu for lobby %llu", (uint64)msg->source_id(), (uint64)lobby->room_id());
+                            }
+                        }
                     }
                 }
 

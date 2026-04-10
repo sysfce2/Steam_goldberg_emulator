@@ -721,7 +721,7 @@ static void render_notifications(effect_runtime *runtime)
 
         // Get position preference
         int notif_pos = GSE_NOTIF_POS_BOT_RIGHT;  // default for achievements
-        if (n.type == GSE_NOTIF_INVITE)
+        if (n.type == GSE_NOTIF_INVITE || n.type == GSE_NOTIF_LOBBY_JOIN_REQ)
             notif_pos = GSE_NOTIF_POS_TOP_RIGHT;
         else if (s_bridge.GetOption)
             notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POSITION);
@@ -786,6 +786,10 @@ static void render_notifications(effect_runtime *runtime)
         case GSE_NOTIF_AUTO_ACCEPT_INVITE:
         case GSE_NOTIF_MESSAGE:
             flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            break;
+        case GSE_NOTIF_INVITE:
+        case GSE_NOTIF_LOBBY_JOIN_REQ:
+            // interactive: buttons
             break;
         default:
             break;
@@ -855,6 +859,18 @@ static void render_notifications(effect_runtime *runtime)
                     // Expire the notification on accept
                     if (s_bridge.ExpireNotification)
                         s_bridge.ExpireNotification(n.id);
+                }
+                break;
+            case GSE_NOTIF_LOBBY_JOIN_REQ:
+                ImGui::TextWrapped("%s", n.message);
+                if (ImGui::Button(translationJoin[s_current_language])) {
+                    if (s_bridge.AcceptLobbyJoinRequest)
+                        s_bridge.AcceptLobbyJoinRequest(n.id);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(translationRefuse[s_current_language])) {
+                    if (s_bridge.DeclineLobbyJoinRequest)
+                        s_bridge.DeclineLobbyJoinRequest(n.id);
                 }
                 break;
             case GSE_NOTIF_AUTO_ACCEPT_INVITE:
