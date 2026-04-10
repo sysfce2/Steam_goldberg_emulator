@@ -872,6 +872,11 @@ project "api_experimental"
     defines { -- added to all filters, later defines will be appended
         "EMU_OVERLAY", "ImTextureID=ImU64",
         "EMU_EXPERIMENTAL_BUILD",
+        -- these MUST match the PUBLIC defines in ingame_overlay's CMakeLists.txt
+        -- otherwise ImGuiIO struct layout will mismatch between premake-compiled imgui.cpp
+        -- and the cmake-compiled ingame_overlay.lib, causing an assertion crash
+        "IMGUI_DISABLE_OBSOLETE_FUNCTIONS",
+        "IMGUI_DISABLE_OBSOLETE_KEYIO",
     }
 
 
@@ -1005,6 +1010,9 @@ project "steamclient_experimental"
     defines { -- added to all filters, later defines will be appended
         "STEAMCLIENT_DLL", "EMU_OVERLAY", "ImTextureID=ImU64",
         "EMU_EXPERIMENTAL_BUILD",
+        -- these MUST match the PUBLIC defines in ingame_overlay's CMakeLists.txt
+        "IMGUI_DISABLE_OBSOLETE_FUNCTIONS",
+        "IMGUI_DISABLE_OBSOLETE_KEYIO",
     }
 
 
