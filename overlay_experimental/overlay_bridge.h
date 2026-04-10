@@ -212,6 +212,7 @@ typedef struct GSE_Friend {
     char     lobby_owner_name[128]; /* lobby owner's persona name (empty if unknown) */
     int32_t  lobby_member_count;    /* number of members in friend's lobby */
     int32_t  lobby_member_limit;    /* max members allowed in friend's lobby */
+    char     app_name[256];         /* resolved game name for friend's appid (may be empty) */
 } GSE_Friend;
 
 typedef struct GSE_LocalLobbyInfo {
