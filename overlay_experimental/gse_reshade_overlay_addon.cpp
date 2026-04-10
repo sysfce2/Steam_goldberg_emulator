@@ -2255,8 +2255,7 @@ static void render_chat_windows()
 /* ── Achievement list (separate window, matching native layout exactly) ── */
 
 static int  s_ach_sort_mode = 0;      // 0=Global %, 1=Schema Order, 2=Alphabetical
-static bool s_ach_group_by_dlc = false;
-static int  s_ach_current_tab = 1;    // 0=In Progress, 1=My Achievements, 2=Global Stats
+static int  s_ach_current_tab = 1;    // 0=In Progress, 1=My Achievements, 2=Groups, 3=Global Stats
 static char s_ach_search_buf[256] = {};
 
 static void render_achievement_list()
@@ -2337,7 +2336,8 @@ static void render_achievement_list()
             s_bridge.SimulateAchievements();
     }
 
-    // ── Tab bar: In Progress | My Achievements | Global Stats ──
+    // ── Tab bar: In Progress | My Achievements | [Groups] | Global Stats ──
+    bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
     if (ImGui::BeginTabBar("##ach_tabs")) {
         if (ImGui::BeginTabItem("In Progress##ach_tab0")) {
             s_ach_current_tab = 0;
@@ -2347,32 +2347,29 @@ static void render_achievement_list()
             s_ach_current_tab = 1;
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Global Stats##ach_tab2")) {
-            s_ach_current_tab = 2;
+        if (has_groups) {
+            if (ImGui::BeginTabItem("Groups##ach_tab2")) {
+                s_ach_current_tab = 2;
+                ImGui::EndTabItem();
+            }
+        }
+        if (ImGui::BeginTabItem("Global Stats##ach_tab3")) {
+            s_ach_current_tab = 3;
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }
+    // safety: if groups disappeared while on Groups tab, fall back
+    if (s_ach_current_tab == 2 && !has_groups) s_ach_current_tab = 1;
 
-    // ── Search + sort/group controls ──
-    bool has_groups = s_bridge.HasAchievementGroups && s_bridge.HasAchievementGroups() != 0;
-
-    // Global Stats tab: no sort/group controls, just search
-    bool show_sort_controls = (s_ach_current_tab != 2);
-
-    // measure button widths to size the search box dynamically
+    // ── Search + sort controls ──
+    // measure button width to size the search box dynamically
     const auto &style = ImGui::GetStyle();
     float btn_w = 0.0f;
     float spacing = style.ItemSpacing.x;
-    if (show_sort_controls) {
-        if (has_groups) {
-            const char *grp_lbl = s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
-            btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
-        }
-        const char *sort_labels[] = { "Sort: Global %##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
-        const char *srt_lbl = sort_labels[s_ach_sort_mode % 3];
-        btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
-    }
+    const char *sort_labels[] = { "Sort: Global %##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
+    const char *srt_lbl = sort_labels[s_ach_sort_mode % 3];
+    btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
     float avail = ImGui::GetContentRegionAvail().x;
     float search_w = avail - btn_w;
     if (search_w < ImGui::GetFontSize() * 6.0f) search_w = ImGui::GetFontSize() * 6.0f;
@@ -2380,17 +2377,9 @@ static void render_achievement_list()
     ImGui::SetNextItemWidth(search_w);
     ImGui::InputTextWithHint("##ach_search", "Search achievements...", s_ach_search_buf, sizeof(s_ach_search_buf));
 
-    if (show_sort_controls) {
-        ImGui::SameLine();
-        if (has_groups) {
-            if (ImGui::Button(s_ach_group_by_dlc ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
-                s_ach_group_by_dlc = !s_ach_group_by_dlc;
-            ImGui::SameLine();
-        }
-        const char *sort_labels[] = { "Sort: Global %##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
-        if (ImGui::Button(sort_labels[s_ach_sort_mode % 3]))
-            s_ach_sort_mode = (s_ach_sort_mode + 1) % 3;
-    }
+    ImGui::SameLine();
+    if (ImGui::Button(sort_labels[s_ach_sort_mode % 3]))
+        s_ach_sort_mode = (s_ach_sort_mode + 1) % 3;
 
     ImGui::Separator();
 
@@ -2424,33 +2413,36 @@ static void render_achievement_list()
         }
     };
 
-    // ── Comparator ──
+    // ── Helper: get best global % (steam → SH local → -1) ──
+    auto get_ach_pct = [&](const GSE_Achievement &a) -> float {
+        if (a.global_percent >= 0.0f) return a.global_percent;
+        if (a.sh_local_percent >= 0.0f) return a.sh_local_percent;
+        return -1.0f;
+    };
+
+    // ── Comparator (unified across all tabs) ──
     auto ach_compare = [&](int ai, int bi) -> bool {
         const auto &a = achs[ai];
         const auto &b = achs[bi];
-        if (s_ach_current_tab == 2) {
-            // Global Stats: sort purely by global % descending, hidden mixed in
-            float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
-            float pb = b.global_percent < 0 ? -1.0f : b.global_percent;
-            if (pa != pb) return pa > pb;
-        } else {
-            // hidden (locked) achievements always last
+        // hidden (locked) achievements last, except Global Stats tab
+        if (s_ach_current_tab != 3) {
             bool a_hidden = a.hidden && !a.achieved;
             bool b_hidden = b.hidden && !b.achieved;
             if (a_hidden != b_hidden) return !a_hidden;
             if (a_hidden) return false;
+        }
+        // My Achievements / Groups: achieved first by unlock time
+        if (s_ach_current_tab == 1 || s_ach_current_tab == 2) {
             if (a.achieved != b.achieved) return a.achieved > b.achieved;
             if (a.achieved) return a.unlock_time > b.unlock_time;
-            if (s_ach_sort_mode == 0) {
-                // Global %
-                float pa = a.global_percent < 0 ? -1.0f : a.global_percent;
-                float pb = b.global_percent < 0 ? -1.0f : b.global_percent;
-                if (pa != pb) return pa > pb;
-            } else if (s_ach_sort_mode == 2) {
-                // Alphabetical
-                int cmp = strcmp(a.title, b.title);
-                if (cmp != 0) return cmp < 0;
-            }
+        }
+        // sort mode
+        if (s_ach_sort_mode == 0) {
+            float pa = get_ach_pct(a), pb = get_ach_pct(b);
+            if (pa != pb) return pa > pb;
+        } else if (s_ach_sort_mode == 2) {
+            int cmp = strcmp(a.title, b.title);
+            if (cmp != 0) return cmp < 0;
         }
         return ai < bi;
     };
@@ -2613,7 +2605,7 @@ static void render_achievement_list()
     }
 
     // ── "My Achievements" tab: split into Unlocked/Locked sections ──
-    if (s_ach_current_tab == 1 && !s_ach_group_by_dlc) {
+    if (s_ach_current_tab == 1) {
         std::vector<int> unlocked, locked;
         for (int fi : filtered_idx) {
             if (achs[fi].achieved) unlocked.push_back(fi);
@@ -2642,8 +2634,8 @@ static void render_achievement_list()
         if (open_l) {
             for (int si : locked) render_ach_item(si);
         }
-    } else if (s_ach_group_by_dlc && has_groups && s_bridge.GetAchievementGroupCount && s_bridge.GetAchievementGroups) {
-        // === GROUPED RENDER (any tab) ===
+    } else if (s_ach_current_tab == 2 && has_groups && s_bridge.GetAchievementGroupCount && s_bridge.GetAchievementGroups) {
+        // === GROUPED RENDER (Groups tab) ===
         int group_count = s_bridge.GetAchievementGroupCount();
         std::vector<GSE_AchievementGroup> groups(group_count);
         group_count = s_bridge.GetAchievementGroups(groups.data(), group_count);

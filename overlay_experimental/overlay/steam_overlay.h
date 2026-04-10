@@ -189,7 +189,6 @@ class Steam_Overlay
     bool try_load_local_avatar();
 
     // achievement list display options
-    bool ach_group_by_sh{false};       // group achievements by SteamHunters DLC/update groups
     int  ach_sort_mode{0};             // 0=Global %, 1=Schema Order, 2=Alphabetical
     int  ach_current_tab{1};           // 0=In Progress, 1=My Achievements, 2=Global Stats
     char ach_search_buf[256]{};        // search filter for achievements

@@ -2825,7 +2825,10 @@ void Steam_Overlay::render_main_window()
                     }
                 }
 
-                // ---- Tab bar: In Progress | My Achievements | Global Stats ----
+                // ---- Tab bar: In Progress | My Achievements | [Groups] | Global Stats ----
+                Steam_User_Stats *steamUserStats_sh = get_steam_client()->steam_user_stats;
+                bool has_sh_groups = steamUserStats_sh->steamhunters_data_populated
+                                     && !steamUserStats_sh->steamhunters_achievement_groups.empty();
                 if (ImGui::BeginTabBar("##ach_tabs")) {
                     if (ImGui::BeginTabItem("In Progress##ach_tab0")) {
                         ach_current_tab = 0;
@@ -2835,34 +2838,29 @@ void Steam_Overlay::render_main_window()
                         ach_current_tab = 1;
                         ImGui::EndTabItem();
                     }
-                    if (ImGui::BeginTabItem("Global Stats##ach_tab2")) {
-                        ach_current_tab = 2;
+                    if (has_sh_groups) {
+                        if (ImGui::BeginTabItem("Groups##ach_tab2")) {
+                            ach_current_tab = 2;
+                            ImGui::EndTabItem();
+                        }
+                    }
+                    if (ImGui::BeginTabItem("Global Stats##ach_tab3")) {
+                        ach_current_tab = 3;
                         ImGui::EndTabItem();
                     }
                     ImGui::EndTabBar();
                 }
+                // safety: if groups disappeared while on Groups tab, fall back
+                if (ach_current_tab == 2 && !has_sh_groups) ach_current_tab = 1;
 
-                // ---- Search + sort/group controls ----
-                Steam_User_Stats *steamUserStats_sh = get_steam_client()->steam_user_stats;
-                bool has_sh_groups = steamUserStats_sh->steamhunters_data_populated
-                                     && !steamUserStats_sh->steamhunters_achievement_groups.empty();
-
-                // Global Stats tab: no sort/group controls, just search
-                bool show_sort_controls = (ach_current_tab != 2);
-
-                // measure button widths to size the search box dynamically
+                // ---- Search + sort controls ----
+                // measure button width to size the search box dynamically
                 const auto &style = ImGui::GetStyle();
                 float btn_w = 0.0f;
                 float spacing = style.ItemSpacing.x;
-                if (show_sort_controls) {
-                    if (has_sh_groups) {
-                        const char *grp_lbl = ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp";
-                        btn_w += ImGui::CalcTextSize(grp_lbl).x + style.FramePadding.x * 2.0f + spacing;
-                    }
-                    const char *sort_labels[] = { "Sort: Global %%##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
-                    const char *srt_lbl = sort_labels[ach_sort_mode % 3];
-                    btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
-                }
+                const char *sort_labels[] = { "Sort: Global %%##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
+                const char *srt_lbl = sort_labels[ach_sort_mode % 3];
+                btn_w += ImGui::CalcTextSize(srt_lbl).x + style.FramePadding.x * 2.0f + spacing;
                 float avail = ImGui::GetContentRegionAvail().x;
                 float search_w = avail - btn_w;
                 if (search_w < ImGui::GetFontSize() * 6.0f) search_w = ImGui::GetFontSize() * 6.0f;
@@ -2870,17 +2868,9 @@ void Steam_Overlay::render_main_window()
                 ImGui::SetNextItemWidth(search_w);
                 ImGui::InputTextWithHint("##ach_search", "Search achievements...", ach_search_buf, sizeof(ach_search_buf));
 
-                if (show_sort_controls) {
-                    ImGui::SameLine();
-                    if (has_sh_groups) {
-                        if (ImGui::Button(ach_group_by_sh ? "Ungroup##ach_grp" : "Group by DLC##ach_grp"))
-                            ach_group_by_sh = !ach_group_by_sh;
-                        ImGui::SameLine();
-                    }
-                    const char *sort_labels[] = { "Sort: Global %%##ach_srt", "Sort: Schema Order##ach_srt", "Sort: A-Z##ach_srt" };
-                    if (ImGui::Button(sort_labels[ach_sort_mode % 3]))
-                        ach_sort_mode = (ach_sort_mode + 1) % 3;
-                }
+                ImGui::SameLine();
+                if (ImGui::Button(sort_labels[ach_sort_mode % 3]))
+                    ach_sort_mode = (ach_sort_mode + 1) % 3;
 
                 ImGui::Separator();
 
@@ -2924,37 +2914,41 @@ void Steam_Overlay::render_main_window()
                 bool has_sh_data = steamUserStats_sh->steamhunters_data_populated
                                    && !steamUserStats_sh->steamhunters_achievement_data.empty();
 
-                // ---- comparator (unlocked-recent → locked → hidden; sort mode for locked) ----
+                // ---- helper: get best global % (steam → SH local → -1) ----
+                auto get_ach_pct = [&](const Overlay_Achievement &a) -> float {
+                    auto it = ach_global_percentages.find(a.name);
+                    if (it != ach_global_percentages.end() && it->second >= 0.0f) return it->second;
+                    if (has_sh_data) {
+                        auto sit = steamUserStats_sh->steamhunters_achievement_data.find(a.name);
+                        if (sit != steamUserStats_sh->steamhunters_achievement_data.end() && sit->second.localPercentage >= 0.0f)
+                            return sit->second.localPercentage;
+                    }
+                    return -1.0f;
+                };
+
+                // ---- comparator (unified across all tabs) ----
                 auto ach_compare = [&](size_t ai, size_t bi) -> bool {
                     const auto &a = achievements[ai];
                     const auto &b = achievements[bi];
-                    if (ach_current_tab == 2) {
-                        // Global Stats tab: sort purely by global % descending, hidden mixed in
-                        auto ita = ach_global_percentages.find(a.name);
-                        auto itb = ach_global_percentages.find(b.name);
-                        float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
-                        float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
-                        if (pa != pb) return pa > pb;
-                    } else {
-                        // hidden (locked) achievements always last
+                    // hidden (locked) achievements last, except Global Stats tab
+                    if (ach_current_tab != 3) {
                         bool a_hidden = a.hidden && !a.achieved;
                         bool b_hidden = b.hidden && !b.achieved;
                         if (a_hidden != b_hidden) return !a_hidden;
                         if (a_hidden) return false;
+                    }
+                    // My Achievements / Groups: achieved first by unlock time
+                    if (ach_current_tab == 1 || ach_current_tab == 2) {
                         if (a.achieved != b.achieved) return a.achieved > b.achieved;
                         if (a.achieved) return a.unlock_time > b.unlock_time;
-                        if (ach_sort_mode == 0) {
-                            // Global %
-                            auto ita = ach_global_percentages.find(a.name);
-                            auto itb = ach_global_percentages.find(b.name);
-                            float pa = (ita != ach_global_percentages.end()) ? ita->second : -1.0f;
-                            float pb = (itb != ach_global_percentages.end()) ? itb->second : -1.0f;
-                            if (pa != pb) return pa > pb;
-                        } else if (ach_sort_mode == 2) {
-                            // Alphabetical
-                            int cmp = strcmp(a.title, b.title);
-                            if (cmp != 0) return cmp < 0;
-                        }
+                    }
+                    // sort mode
+                    if (ach_sort_mode == 0) {
+                        float pa = get_ach_pct(a), pb = get_ach_pct(b);
+                        if (pa != pb) return pa > pb;
+                    } else if (ach_sort_mode == 2) {
+                        int cmp = strcmp(a.title, b.title);
+                        if (cmp != 0) return cmp < 0;
                     }
                     return ai < bi; // tie-break: schema order
                 };
@@ -3121,7 +3115,7 @@ void Steam_Overlay::render_main_window()
                 }
 
                 // ---- "My Achievements" tab: split into Unlocked/Locked sections ----
-                if (ach_current_tab == 1 && !ach_group_by_sh) {
+                if (ach_current_tab == 1) {
                     // Unlocked section
                     std::vector<size_t> unlocked, locked;
                     for (size_t fi : filtered_idx) {
@@ -3151,8 +3145,8 @@ void Steam_Overlay::render_main_window()
                     if (open_l) {
                         for (size_t si : locked) render_ach_item(achievements[si]);
                     }
-                } else if (ach_group_by_sh && has_sh_groups) {
-                    // === GROUPED RENDER (any tab) ===
+                } else if (ach_current_tab == 2 && has_sh_groups) {
+                    // === GROUPED RENDER (Groups tab) ===
                     std::unordered_set<size_t> rendered_set;
                     std::unordered_set<size_t> filtered_set(filtered_idx.begin(), filtered_idx.end());
 
