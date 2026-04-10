@@ -6,6 +6,7 @@
 // avoids confusing ImGui when another label has the same text "MyText"
 
 #include "overlay/steam_overlay.h"
+#include "InGameOverlay/ImGui/imgui_internal.h"
 
 #include <thread>
 #include <string>
@@ -565,8 +566,8 @@ void Steam_Overlay::create_fonts()
     font_notif = font_default = font;
     stats.font = font;
     
-    bool res = fonts_atlas.Build();
-    PRINT_DEBUG("created fonts atlas (result=%i)", (int)res);
+    ImFontAtlasBuildMain(&fonts_atlas);
+    PRINT_DEBUG("created fonts atlas");
 
     reset_LastError();
 }
@@ -1500,7 +1501,7 @@ void Steam_Overlay::build_notifications(float width, float height)
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
     std::queue<Friend> friend_actions_temp{};
 
-    ImGui::PushFont(font_notif);
+    ImGui::PushFont(font_notif, 0.0f);
     // Add window rounding
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, settings->overlay_appearance.notification_rounding);
    
@@ -2293,7 +2294,7 @@ void Steam_Overlay::render_main_window()
 
     ImGuiIO &io = ImGui::GetIO();
 
-    ImGui::PushFont(font_default);
+    ImGui::PushFont(font_default, 0.0f);
     uint32 style_color_stack = apply_global_style_color();
 
     ImGui::SetNextWindowPos({ 0, 0 });

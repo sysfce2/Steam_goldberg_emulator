@@ -68,7 +68,7 @@ void Steam_Overlay_Stats::render_stats(int current_language)
         update_playtime(now);
     }
 
-    ImGui::PushFont(font);
+    ImGui::PushFont(font, 0.0f);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, settings->overlay_appearance.notification_rounding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
