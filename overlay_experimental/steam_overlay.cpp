@@ -2947,7 +2947,7 @@ void Steam_Overlay::render_main_window()
                         float pa = get_ach_pct(a), pb = get_ach_pct(b);
                         if (pa != pb) return pa > pb;
                     } else if (ach_sort_mode == 2) {
-                        int cmp = strcmp(a.title, b.title);
+                        int cmp = a.title.compare(b.title);
                         if (cmp != 0) return cmp < 0;
                     }
                     return ai < bi; // tie-break: schema order
