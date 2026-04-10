@@ -148,6 +148,7 @@ class Steam_Overlay
     bool show_overlay = false;
     bool show_user_info = false;
     bool show_friends = false;
+    bool show_chat = false;
     bool show_achievements = false;
     bool show_settings = false;
     bool show_sce_browser = false;
@@ -269,7 +270,7 @@ class Steam_Overlay
     // Right click on friend
     void build_friend_context_menu(Friend const& frd, friend_window_state &state);
     // Double click on friend
-    void build_friend_window(Friend const& frd, friend_window_state &state);
+    void build_chat_window();
     std::chrono::milliseconds get_notification_duration(notification_type type);
     // Notifications like achievements, chat and invitations
     void set_next_notification_pos(std::pair<float, float> scrn_size, std::chrono::milliseconds elapsed, std::chrono::milliseconds duration, const Notification &noti, struct NotificationsCoords &coords);
@@ -296,7 +297,7 @@ class Steam_Overlay
     void add_auto_accept_invite_notification();
     void add_invite_notification(std::pair<const Friend, friend_window_state> &wnd_state);
     void post_achievement_notification(Overlay_Achievement &ach, bool for_progress);
-    void add_chat_message_notification(std::string const& message);
+    void add_chat_message_notification(std::string const& message, std::pair<const Friend, friend_window_state> *frd = nullptr);
     void show_test_achievement();
 
     bool open_overlay_hook(bool toggle);

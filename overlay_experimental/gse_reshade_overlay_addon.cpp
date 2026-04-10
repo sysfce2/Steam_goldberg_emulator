@@ -2096,16 +2096,18 @@ static void check_incoming_messages()
     for (int i = 0; i < count; ++i) {
         GSE_ChatState cs{};
         if (s_bridge.GetChatState(friends[i].steam_id, &cs) && cs.needs_attention) {
-            // Friend has unread message - add to tabs if not present
-            bool found = false;
-            for (auto &cw : s_open_chats) {
-                if (cw.steam_id == friends[i].steam_id) { found = true; break; }
-            }
-            if (!found) {
-                AddonChatWindow cw{};
-                cw.steam_id = friends[i].steam_id;
-                strncpy(cw.friend_name, friends[i].name, sizeof(cw.friend_name) - 1);
-                s_open_chats.push_back(cw);
+            // Friend has unread message - auto-add tab if chat window is open
+            if (s_show_chat) {
+                bool found = false;
+                for (auto &cw : s_open_chats) {
+                    if (cw.steam_id == friends[i].steam_id) { found = true; break; }
+                }
+                if (!found) {
+                    AddonChatWindow cw{};
+                    cw.steam_id = friends[i].steam_id;
+                    strncpy(cw.friend_name, friends[i].name, sizeof(cw.friend_name) - 1);
+                    s_open_chats.push_back(cw);
+                }
             }
         }
     }
@@ -2177,27 +2179,176 @@ static void render_chat_windows()
         // Clamp active index
         if (s_active_chat_idx < 0) s_active_chat_idx = 0;
         if (s_active_chat_idx >= (int)s_open_chats.size()) s_active_chat_idx = (int)s_open_chats.size() - 1;
-        // Tab bar for multiple chats
-        if (s_open_chats.size() > 1 && ImGui::BeginTabBar("##chat_tabs")) {
+
+        // Fetch friends list once for looking up friend info in chat headers
+        std::vector<GSE_Friend> chat_friends_cache;
+        if (s_bridge.GetFriendCount && s_bridge.GetFriends) {
+            int fc = s_bridge.GetFriendCount();
+            if (fc > 0) {
+                chat_friends_cache.resize(fc > 256 ? 256 : fc);
+                int cnt = s_bridge.GetFriends(chat_friends_cache.data(), (int)chat_friends_cache.size());
+                chat_friends_cache.resize(cnt);
+            }
+        }
+
+        // Tab bar for chats
+        if (ImGui::BeginTabBar("##chat_tabs")) {
             for (size_t i = 0; i < s_open_chats.size(); ++i) {
                 auto &chat = s_open_chats[i];
                 
                 // Check if this chat needs attention (unread)
                 GSE_ChatState cs{};
                 bool needs_attn = s_bridge.GetChatState(chat.steam_id, &cs) && cs.needs_attention;
-                
-                // Tab flags
-                ImGuiTabItemFlags tab_flags = 0;
-                if ((int)i == s_active_chat_idx)
-                    tab_flags |= ImGuiTabItemFlags_SetSelected;
+                bool got_state = s_bridge.GetChatState(chat.steam_id, &cs) != 0;
                 
                 // Color tab if needs attention
                 if (needs_attn)
                     ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0.6f, 0.4f, 0.1f, 1.0f));
                 
                 bool tab_open = true;
-                if (ImGui::BeginTabItem(chat.friend_name, &tab_open, tab_flags)) {
+                if (ImGui::BeginTabItem(chat.friend_name, &tab_open)) {
                     s_active_chat_idx = (int)i;
+
+                    // Clear attention when tab is active
+                    if (needs_attn && s_bridge.GetChatState)
+                        cs.needs_attention = 0; // local only, bridge clears on read
+
+                    // ---- 64px friend avatar + 3 info lines ----
+                    {
+                        const float avatar_size = 64.0f;
+                        const IconTexture *friend_avatar = get_or_upload_avatar(chat.steam_id);
+                        if (friend_avatar && friend_avatar->valid) {
+                            ImGui::Image(ImTextureRef(friend_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+                        } else {
+                            ImVec2 p = ImGui::GetCursorScreenPos();
+                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                            ImGui::Dummy(ImVec2(avatar_size, avatar_size));
+                        }
+                        ImGui::SameLine();
+
+                        ImVec2 text_start = ImGui::GetCursorPos();
+
+                        // Look up friend info for header lines
+                        const GSE_Friend *finfo = nullptr;
+                        for (auto &f : chat_friends_cache) {
+                            if (f.steam_id == chat.steam_id) { finfo = &f; break; }
+                        }
+
+                        // Line 1: Friend name (ID: steamid)
+                        ImGui::SetCursorPos(text_start);
+                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", chat.friend_name);
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
+                            (unsigned long long)chat.steam_id);
+
+                        // Line 2: Playing AppID
+                        if (finfo && finfo->appid != 0) {
+                            const char *game = finfo->app_name[0] ? finfo->app_name : nullptr;
+                            if (game)
+                                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game, finfo->appid);
+                            else
+                                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", finfo->appid);
+                        } else {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                        }
+
+                        // Line 3: Status
+                        if (finfo && finfo->in_lobby && finfo->lobby_id != 0) {
+                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu",
+                                (unsigned long long)finfo->lobby_id);
+                        } else if (finfo && finfo->same_app) {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                        } else if (finfo && finfo->appid != 0) {
+                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "In another game");
+                        } else {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                        }
+                    }
+                    ImGui::Separator();
+
+                    // Invite accept/refuse
+                    if (got_state && cs.has_pending_invite) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending invite from this friend!");
+                        ImGui::SameLine();
+                        if (ImGui::Button("Accept##accept_invite")) {
+                            if (s_bridge.FriendAction)
+                                s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_ACCEPT_INVITE);
+                            chat.scroll_to_bottom = true;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Refuse##refuse_invite")) {
+                            if (s_bridge.FriendAction)
+                                s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_REFUSE_INVITE);
+                            chat.scroll_to_bottom = true;
+                        }
+                    }
+
+                    // Chat history area
+                    float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
+                    char history_id[32];
+                    snprintf(history_id, sizeof(history_id), "##chat_history_%d", (int)i);
+                    ImGui::BeginChild(history_id, ImVec2(0, -footer_height), true);
+
+                    if (got_state && cs.chat_history[0]) {
+                        char *history = cs.chat_history;
+                        char *line = history;
+                        while (*line) {
+                            char *end = strchr(line, '\n');
+                            if (end) *end = '\0';
+
+                            bool is_self = (strncmp(line, "You: ", 5) == 0);
+                            bool is_invite_line = (strstr(line, "[INVITE]") != nullptr);
+                            bool is_invite_accepted = (strstr(line, "[INVITE ACCEPTED]") != nullptr);
+                            bool is_invite_refused = (strstr(line, "[INVITE REFUSED]") != nullptr);
+
+                            if (is_invite_accepted)
+                                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", line);
+                            else if (is_invite_refused)
+                                ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "%s", line);
+                            else if (is_invite_line)
+                                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", line);
+                            else if (is_self)
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                            else
+                                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+
+                            if (!end) break;
+                            *end = '\n';
+                            line = end + 1;
+                        }
+                    } else {
+                        ImGui::TextDisabled("No messages yet.");
+                    }
+
+                    // Auto-scroll
+                    if (chat.scroll_to_bottom || (got_state && cs.needs_attention)) {
+                        ImGui::SetScrollHereY(1.0f);
+                        chat.scroll_to_bottom = false;
+                    }
+
+                    ImGui::EndChild();
+
+                    // Input bar
+                    float send_btn_w = ImGui::CalcTextSize("Send").x + ImGui::GetStyle().FramePadding.x * 2 + 8;
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send_btn_w - 8);
+
+                    bool send_msg = false;
+                    char input_id[32];
+                    snprintf(input_id, sizeof(input_id), "##chat_input_%d", (int)i);
+                    if (ImGui::InputText(input_id, chat.input_buf, sizeof(chat.input_buf),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        send_msg = true;
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Send") || send_msg) {
+                        if (chat.input_buf[0]) {
+                            s_bridge.SendChatMessage(chat.steam_id, chat.input_buf);
+                            chat.input_buf[0] = '\0';
+                            chat.scroll_to_bottom = true;
+                        }
+                    }
+
                     ImGui::EndTabItem();
                 }
                 
@@ -2214,110 +2365,6 @@ static void render_chat_windows()
                 }
             }
             ImGui::EndTabBar();
-        }
-        
-        // Render active chat content
-        if (!s_open_chats.empty() && s_active_chat_idx >= 0 && s_active_chat_idx < (int)s_open_chats.size()) {
-            auto &chat = s_open_chats[s_active_chat_idx];
-            
-            GSE_ChatState cs{};
-            bool got_state = s_bridge.GetChatState(chat.steam_id, &cs) != 0;
-            
-            float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
-            const float avatar_size = 32.0f;
-            
-            // Friend avatar + name header (single display, like native overlay)
-            const IconTexture *friend_avatar = get_or_upload_avatar(chat.steam_id);
-            if (friend_avatar && friend_avatar->valid) {
-                ImGui::Image(ImTextureRef(friend_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
-                ImGui::SameLine();
-            }
-            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", chat.friend_name);
-            ImGui::Separator();
-            
-            // Chat history area
-            ImGui::BeginChild("##chat_history", ImVec2(0, -footer_height), true);
-            
-            if (got_state && cs.chat_history[0]) {
-                // Split chat history by newlines and display messages
-                char *history = cs.chat_history;
-                char *line = history;
-                while (*line) {
-                    char *end = strchr(line, '\n');
-                    if (end) *end = '\0';
-                    
-                    // Check message type and display with appropriate style
-                    bool is_self = (strncmp(line, "You: ", 5) == 0);
-                    bool is_invite = (strstr(line, "[INVITE]") != nullptr);
-                    bool is_invite_accepted = (strstr(line, "[INVITE ACCEPTED]") != nullptr);
-                    bool is_invite_refused = (strstr(line, "[INVITE REFUSED]") != nullptr);
-                    
-                    if (is_invite_accepted) {
-                        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", line);
-                    } else if (is_invite_refused) {
-                        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "%s", line);
-                    } else if (is_invite) {
-                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", line);
-                    } else if (is_self) {
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
-                    } else {
-                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
-                    }
-                    
-                    if (!end) break;
-                    *end = '\n';
-                    line = end + 1;
-                }
-            } else {
-                ImGui::TextDisabled("No messages yet.");
-            }
-            
-            // Auto-scroll
-            if (chat.scroll_to_bottom || (got_state && cs.needs_attention)) {
-                ImGui::SetScrollHereY(1.0f);
-                chat.scroll_to_bottom = false;
-            }
-            
-            ImGui::EndChild();
-            
-            // Input bar
-            float send_btn_w = ImGui::CalcTextSize("Send").x + ImGui::GetStyle().FramePadding.x * 2 + 8;
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send_btn_w - 8);
-            
-            bool send_msg = false;
-            char input_id[32];
-            snprintf(input_id, sizeof(input_id), "##chat_input_%d", s_active_chat_idx);
-            if (ImGui::InputText(input_id, chat.input_buf, sizeof(chat.input_buf),
-                    ImGuiInputTextFlags_EnterReturnsTrue)) {
-                send_msg = true;
-            }
-            
-            ImGui::SameLine();
-            if (ImGui::Button("Send") || send_msg) {
-                if (chat.input_buf[0]) {
-                    s_bridge.SendChatMessage(chat.steam_id, chat.input_buf);
-                    chat.input_buf[0] = '\0';
-                    chat.scroll_to_bottom = true;
-                }
-            }
-            
-            // Pending invite notice with Accept/Refuse buttons
-            if (got_state && cs.has_pending_invite) {
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending invite from this friend!");
-                ImGui::SameLine();
-                if (ImGui::Button("Accept##accept_invite")) {
-                    if (s_bridge.FriendAction)
-                        s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_ACCEPT_INVITE);
-                    chat.scroll_to_bottom = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Refuse##refuse_invite")) {
-                    if (s_bridge.FriendAction)
-                        s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_REFUSE_INVITE);
-                    chat.scroll_to_bottom = true;
-                }
-            }
         }
     }
     ImGui::End();

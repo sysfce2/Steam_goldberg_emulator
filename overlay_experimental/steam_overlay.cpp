@@ -964,14 +964,14 @@ bool Steam_Overlay::submit_notification(
     return true;
 }
 
-void Steam_Overlay::add_chat_message_notification(std::string const &message)
+void Steam_Overlay::add_chat_message_notification(std::string const &message, std::pair<const Friend, friend_window_state> *frd)
 {
     if (settings->disable_overlay_friend_notification) return;
 
     PRINT_DEBUG("'%s'", message.c_str());
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
 
-    submit_notification(notification_type::message, message);
+    submit_notification(notification_type::message, message, frd);
 }
 
 void Steam_Overlay::show_test_achievement()
@@ -1071,128 +1071,172 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
     }
 }
 
-void Steam_Overlay::build_friend_window(Friend const& frd, friend_window_state& state)
+void Steam_Overlay::build_chat_window()
 {
-    if (!(state.window_state & window_state_show))
+    if (!show_chat) return;
+
+    // Collect friends with open chat tabs
+    struct ChatTab {
+        const Friend *frd;
+        friend_window_state *state;
+    };
+    std::vector<ChatTab> open_tabs;
+    for (auto &[frd, state] : friends) {
+        if (state.window_state & window_state_show)
+            open_tabs.push_back({&frd, &state});
+    }
+
+    if (open_tabs.empty()) {
+        show_chat = false;
         return;
-
-    bool show = true;
-    bool send_chat_msg = false;
-
-    float width = ImGui::CalcTextSize("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").x;
-    
-    if (state.window_state & window_state_need_attention && ImGui::IsWindowFocused()) {
-        state.window_state &= ~window_state_need_attention;
     }
-    ImGui::SetNextWindowSizeConstraints(ImVec2{ width, ImGui::GetFontSize()*8 + ImGui::GetFrameHeightWithSpacing()*4 },
-        ImVec2{ std::numeric_limits<float>::max() , std::numeric_limits<float>::max() });
 
+    ImGuiIO &io = ImGui::GetIO();
+    float min_w = io.DisplaySize.x * 0.25f;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(min_w, ImGui::GetFontSize() * 16), ImVec2(8192, 8192));
+    ImGui::SetNextWindowSize(ImVec2(450, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(1.0f);
-    // Window id is after the ###, the window title is the friend name
-    std::string friend_window_id = std::move("###" + std::to_string(state.id));
-    if (ImGui::Begin((state.window_title + friend_window_id).c_str(), &show)) {
-        if (state.window_state & window_state_need_attention && ImGui::IsWindowFocused()) {
-            state.window_state &= ~window_state_need_attention;
-        }
 
-        // Show friend's avatar at the top of the chat window
-        const float avatar_size = 32.0f;
-        bool has_avatar = try_load_avatar(const_cast<friend_window_state&>(state), frd.id());
-        if (has_avatar && state.avatar_resource && state.avatar_resource->GetResourceId() != 0) {
-            ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
-            ImGui::Separator();
-        }
+    if (ImGui::Begin("Chat##gse_chat_tabbed", &show_chat, ImGuiWindowFlags_NoCollapse)) {
+        if (ImGui::BeginTabBar("##chat_tabs")) {
+            for (auto &tab : open_tabs) {
+                auto &frd = *tab.frd;
+                auto &state = *tab.state;
+                bool needs_attn = (state.window_state & window_state_need_attention) != 0;
 
-        // Fill this with the chat box and maybe the invitation
-        if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
-            bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
-            ImGui::LabelText("##label", translationInvitedYouToJoinTheGame[current_language], frd.name().c_str(), frd.appid());
-            ImGui::PopStyleColor();
-            if (same_app) {
-                ImGui::SameLine();
-                if (ImGui::Button(translationAccept[current_language])) {
-                    state.window_state |= window_state_join;
-                    this->has_friend_action.push(frd);
-                    // Add accepted status to chat history
-                    state.chat_history.append("[INVITE ACCEPTED] You accepted the invite\n");
+                if (needs_attn)
+                    ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0.6f, 0.4f, 0.1f, 1.0f));
+
+                bool tab_open = true;
+                std::string tab_label = frd.name() + "###chat_tab_" + std::to_string(frd.id());
+
+                if (ImGui::BeginTabItem(tab_label.c_str(), &tab_open)) {
+                    // Clear attention when tab is active
+                    if (needs_attn) state.window_state &= ~window_state_need_attention;
+
+                    // ---- 64px friend avatar + 3 info lines ----
+                    {
+                        const float avatar_size = 64.0f;
+                        bool has_avatar = try_load_avatar(state, frd.id());
+                        if (has_avatar && state.avatar_resource && state.avatar_resource->GetResourceId() != 0) {
+                            ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
+                        } else {
+                            ImVec2 p = ImGui::GetCursorScreenPos();
+                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                            ImGui::Dummy(ImVec2(avatar_size, avatar_size));
+                        }
+                        ImGui::SameLine();
+
+                        ImVec2 text_start = ImGui::GetCursorPos();
+                        uint32 local_appid = settings->get_local_game_id().AppID();
+
+                        // Line 1: Friend name (ID: steamid)
+                        ImGui::SetCursorPos(text_start);
+                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", frd.id());
+
+                        // Line 2: Playing AppID
+                        if (frd.appid() != 0) {
+                            auto it = steam_preowned_app_ids.find(frd.appid());
+                            std::string app_name = (it != steam_preowned_app_ids.end()) ? it->second : std::to_string(frd.appid());
+                            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", app_name.c_str(), frd.appid());
+                        } else {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                        }
+
+                        // Line 3: Status
+                        bool same_app = (local_appid == frd.appid());
+                        if (frd.lobby_id() != 0) {
+                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu", frd.lobby_id());
+                        } else if (same_app) {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                        } else if (frd.appid() != 0) {
+                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "In another game");
+                        } else {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                        }
+                    }
+                    ImGui::Separator();
+
+                    // Invite accept/refuse
+                    if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+                        bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                        ImGui::LabelText("##label", translationInvitedYouToJoinTheGame[current_language], frd.name().c_str(), frd.appid());
+                        ImGui::PopStyleColor();
+                        if (same_app) {
+                            ImGui::SameLine();
+                            if (ImGui::Button(translationAccept[current_language])) {
+                                state.window_state |= window_state_join;
+                                this->has_friend_action.push(frd);
+                                state.chat_history.append("[INVITE ACCEPTED] You accepted the invite\n");
+                            }
+                            ImGui::SameLine();
+                            if (ImGui::Button(translationRefuse[current_language])) {
+                                state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                                state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                            }
+                        } else {
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(different game)");
+                            ImGui::SameLine();
+                            if (ImGui::Button(translationRefuse[current_language])) {
+                                state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                                state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                            }
+                        }
+                    }
+
+                    // Chat history
+                    float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
+                    ImGui::InputTextMultiline("##chat_history", &state.chat_history[0], state.chat_history.length(),
+                        { -1.0f, -footer_height }, ImGuiInputTextFlags_ReadOnly);
+
+                    // Input bar: [____chat line______] [send]
+                    float wnd_width = ImGui::GetContentRegionAvail().x;
+                    ImGuiStyle &style = ImGui::GetStyle();
+                    wnd_width -= ImGui::CalcTextSize(translationSend[current_language]).x + style.FramePadding.x * 2 + style.ItemSpacing.x + 1;
+
+                    uint64_t frd_id = frd.id();
+                    ImGui::PushID((const char *)&frd_id, (const char *)&frd_id + sizeof(frd_id));
+                    ImGui::PushItemWidth(wnd_width);
+
+                    bool send_chat_msg = false;
+                    if (ImGui::InputText("##chat_line", state.chat_input, max_chat_len, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        send_chat_msg = true;
+                        ImGui::SetKeyboardFocusHere(-1);
+                    }
+
+                    ImGui::PopItemWidth();
+                    ImGui::PopID();
+
+                    ImGui::SameLine();
+                    if (ImGui::Button(translationSend[current_language])) {
+                        send_chat_msg = true;
+                    }
+
+                    if (send_chat_msg) {
+                        if (!(state.window_state & window_state_send_message)) {
+                            has_friend_action.push(frd);
+                            state.window_state |= window_state_send_message;
+                        }
+                    }
+
+                    ImGui::EndTabItem();
                 }
 
-                ImGui::SameLine();
-                if (ImGui::Button(translationRefuse[current_language])) {
-                    state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
-                    // Add refused status to chat history
-                    state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
-                }
-            } else {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(different game)");
-                ImGui::SameLine();
-                if (ImGui::Button(translationRefuse[current_language])) {
-                    state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
-                    state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                if (needs_attn)
+                    ImGui::PopStyleColor();
+
+                // Close tab
+                if (!tab_open) {
+                    state.window_state &= ~window_state_show;
                 }
             }
-        }
-
-        ImGui::InputTextMultiline("##chat_history", &state.chat_history[0], state.chat_history.length(), { -1.0f, -2.0f * ImGui::GetFontSize() }, ImGuiInputTextFlags_ReadOnly);
-        // TODO: Fix the layout of the chat line + send button.
-        // It should be like this: chat input should fill the window size minus send button size (button size is fixed)
-        // |------------------------------|
-        // | /--------------------------\ |
-        // | |                          | |
-        // | |       chat history       | |
-        // | |                          | |
-        // | \--------------------------/ |
-        // | [____chat line______] [send] |
-        // |------------------------------|
-        //
-        // And it is like this
-        // |------------------------------|
-        // | /--------------------------\ |
-        // | |                          | |
-        // | |       chat history       | |
-        // | |                          | |
-        // | \--------------------------/ |
-        // | [__chat line__] [send]       |
-        // |------------------------------|
-        float wnd_width = ImGui::GetContentRegionAvail().x;
-        ImGuiStyle &style = ImGui::GetStyle();
-        wnd_width -= ImGui::CalcTextSize(translationSend[current_language]).x + style.FramePadding.x * 2 + style.ItemSpacing.x + 1;
-
-        uint64_t frd_id = frd.id();
-        ImGui::PushID((const char *)&frd_id, (const char *)&frd_id + sizeof(frd_id));
-        ImGui::PushItemWidth(wnd_width);
-
-        if (ImGui::InputText("##chat_line", state.chat_input, max_chat_len, ImGuiInputTextFlags_EnterReturnsTrue)) {
-            send_chat_msg = true;
-            ImGui::SetKeyboardFocusHere(-1);
-        }
-        
-        ImGui::PopItemWidth();
-        ImGui::PopID();
-
-        ImGui::SameLine();
-
-        if (ImGui::Button(translationSend[current_language])) {
-            send_chat_msg = true;
-        }
-
-        if (send_chat_msg) {
-            if (!(state.window_state & window_state_send_message)) {
-                has_friend_action.push(frd);
-                state.window_state |= window_state_send_message;
-            }
+            ImGui::EndTabBar();
         }
     }
-    
-    // User closed the friend window
-    if (!show) {
-        state.window_state &= ~window_state_show;
-    }
-
     ImGui::End();
 }
 
@@ -1441,8 +1485,15 @@ void Steam_Overlay::build_notifications(float width, float height)
             case notification_type::achievement_progress:
             case notification_type::achievement:
             case notification_type::auto_accept_invite:
-            case notification_type::message:
                 extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            break;
+
+            case notification_type::message:
+                // If we have a friend pointer, make the notification interactive for "Open Chat" button
+                if (it->frd)
+                    extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+                else
+                    extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
             break;
 
             case notification_type::invite:
@@ -1503,6 +1554,13 @@ void Steam_Overlay::build_notifications(float width, float height)
 
                 case notification_type::message:
                     ImGui::TextWrapped("%s", it->message.c_str());
+                    if (it->frd) {
+                        if (ImGui::Button("Open Chat")) {
+                            it->frd->second.window_state |= window_state_show;
+                            show_chat = true;
+                            it->start_time = {}; // dismiss notification
+                        }
+                    }
                 break;
 
                 case notification_type::auto_accept_invite:
@@ -1997,15 +2055,11 @@ void Steam_Overlay::overlay_render_proc()
     // If the addon stops calling (unloaded/disabled), the heartbeat goes stale
     // and the native overlay automatically resumes after the timeout.
     if (Bridge_IsConnected()) {
-        // Even in bridge mode, render friend chat windows if any are open
-        // (ReShade addon doesn't have chat UI, so we provide it via native rendering)
+        // Even in bridge mode, render the tabbed chat window if any chats are open
+        // (provides native chat UI alongside ReShade addon)
         std::lock_guard lock(overlay_mutex);
         if (Ready()) {
-            for (auto &[frd, state] : friends) {
-                if (state.window_state & window_state_show) {
-                    build_friend_window(frd, state);
-                }
-            }
+            build_chat_window();
         }
         return;
     }
@@ -2680,6 +2734,7 @@ void Steam_Overlay::render_main_window()
                         if (ImGui::BeginPopupContextItem("##ctx_friend")) {
                             if (ImGui::MenuItem(translationChat[current_language])) {
                                 state.window_state |= window_state_show;
+                                show_chat = true;
                             }
                             bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
                             if (same_app && i_have_lobby) {
@@ -2706,7 +2761,6 @@ void Steam_Overlay::render_main_window()
                         }
 
                         ImGui::PopID();
-                        build_friend_window(frd, state);
                     };
 
                     // ---- Render grouped friend list ----
@@ -2745,6 +2799,9 @@ void Steam_Overlay::render_main_window()
             }
             ImGui::End();
         }
+
+        // Chat window (tabbed, separate from friends list)
+        build_chat_window();
 
         // user clicked on "show achievements" button
         if (show_achievements && achievements.size()) {
@@ -4438,11 +4495,17 @@ void Steam_Overlay::networking_msg_received(Common_Message *msg)
             Steam_Messages const& steam_message = msg->steam_messages();
             // Change color to cyan for friend
             friend_info->second.chat_history.append(friend_info->first.name() + ": " + steam_message.message()).append("\n", 1);
+
+            // Auto-open the friend's chat tab if the chat window is already visible
+            if (show_chat) {
+                friend_info->second.window_state |= window_state_show;
+            }
+
             if (!(friend_info->second.window_state & window_state_show)) {
                 friend_info->second.window_state |= window_state_need_attention;
             }
 
-            add_chat_message_notification(friend_info->first.name() + ": " + steam_message.message());
+            add_chat_message_notification(friend_info->first.name() + ": " + steam_message.message(), &(*friend_info));
             notify_sound_user_invite(friend_info->second);
         }
     }
