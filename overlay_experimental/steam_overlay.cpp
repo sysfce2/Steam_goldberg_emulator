@@ -2537,14 +2537,15 @@ void Steam_Overlay::render_main_window()
                 }
             }
 
-            // ---- Partition friends into In Game / Online ----
+            // ---- Partition friends into In Game (same app) / Online (different app) ----
             struct FriendEntry {
                 const Friend *frd;
                 friend_window_state *state;
             };
             std::vector<FriendEntry> in_game_friends, online_friends;
+            uint32 local_appid = settings->get_local_game_id().AppID();
             for (auto &[frd, state] : friends) {
-                if (frd.appid() != 0)
+                if (frd.appid() == local_appid)
                     in_game_friends.push_back({&frd, &state});
                 else
                     online_friends.push_back({&frd, &state});

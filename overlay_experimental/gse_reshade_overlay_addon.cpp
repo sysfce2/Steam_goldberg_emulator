@@ -1886,10 +1886,10 @@ static void render_friends_list()
         }
     }
 
-    // ---- Partition friends into In Game / Online ----
+    // ---- Partition friends into In Game (same app) / Online (different app) ----
     std::vector<int> in_game_idx, online_idx;
     for (int i = 0; i < count; ++i) {
-        if (friends[i].appid != 0)
+        if (friends[i].same_app)
             in_game_idx.push_back(i);
         else
             online_idx.push_back(i);
