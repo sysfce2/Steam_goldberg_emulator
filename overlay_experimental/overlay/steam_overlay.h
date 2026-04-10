@@ -151,7 +151,6 @@ class Steam_Overlay
     bool show_achievements = false;
     bool show_settings = false;
     bool show_sce_browser = false;
-    bool show_chat_picker = false;  // popup to select friend to start chat with
 
     // SCE asset download progress (set by NotifySceAssetsReady, read on render thread)
     struct SceAssetProgress {

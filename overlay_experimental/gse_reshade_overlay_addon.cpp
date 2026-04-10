@@ -1157,23 +1157,6 @@ static void render_main_overlay(effect_runtime *runtime)
             ImGui::PopStyleColor();
     }
 
-    // Chat button - show unread indicator if any chat needs attention
-    ImGui::SameLine();
-    {
-        bool has_unread = false;
-        for (auto &cw : s_open_chats) {
-            GSE_ChatState cs{};
-            if (s_bridge.GetChatState && s_bridge.GetChatState(cw.steam_id, &cs) && cs.needs_attention)
-                has_unread = true;
-        }
-        if (has_unread)
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
-        if (ImGui::Button(translationChat[s_current_language]))
-            s_show_chat = !s_show_chat;
-        if (has_unread)
-            ImGui::PopStyleColor();
-    }
-
     ImGui::SameLine();
     if (ImGui::Button(translationShowAchievements[s_current_language]))
         s_show_achievements = !s_show_achievements;
@@ -1344,6 +1327,102 @@ static void render_main_overlay(effect_runtime *runtime)
         ImGui::SetNextWindowSizeConstraints(ImVec2(min_w, ImGui::GetFontSize() * 16), ImVec2(8192, 8192));
         ImGui::SetNextWindowBgAlpha(1.0f);
         if (ImGui::Begin(translationFriends[s_current_language], &s_show_friends)) {
+            // ---- Local user header: 64px avatar + 3 info lines ----
+            {
+                const float avatar_size = 64.0f;
+                const IconTexture *local_avatar = get_or_upload_local_avatar();
+                if (local_avatar && local_avatar->valid) {
+                    ImGui::Image(ImTextureRef(local_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+                } else {
+                    ImVec2 p = ImGui::GetCursorScreenPos();
+                    ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                    ImGui::Dummy(ImVec2(avatar_size, avatar_size));
+                }
+                ImGui::SameLine();
+
+                ImVec2 text_start = ImGui::GetCursorPos();
+
+                // Line 1: Username (ID: steamid)
+                ImGui::SetCursorPos(text_start);
+                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", state.username);
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
+                    (unsigned long long)state.steam_id);
+
+                // Line 2: Playing AppID
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", state.app_id);
+
+                // Line 3: Status - In Game / In Lobby / In Server
+                bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
+                GSE_LocalLobbyInfo lobby_info{};
+                bool got_lobby_info = has_lobby && s_bridge.GetLocalLobbyInfo && s_bridge.GetLocalLobbyInfo(&lobby_info);
+
+                GSE_GameServerInfo gs_info{};
+                bool in_server = s_bridge.GetGameServerInfo && s_bridge.GetGameServerInfo(&gs_info) && gs_info.active;
+
+                if (got_lobby_info) {
+                    // Find lobby owner name from friends
+                    std::string owner_name;
+                    if (lobby_info.is_owner) {
+                        owner_name = state.username;
+                    } else if (s_bridge.GetFriendCount && s_bridge.GetFriends) {
+                        int fc = s_bridge.GetFriendCount();
+                        if (fc > 0) {
+                            std::vector<GSE_Friend> fl(fc > 256 ? 256 : fc);
+                            int cnt = s_bridge.GetFriends(fl.data(), (int)fl.size());
+                            for (int i = 0; i < cnt; ++i) {
+                                if (fl[i].steam_id == lobby_info.lobby_owner) {
+                                    owner_name = fl[i].name;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!owner_name.empty())
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                            (unsigned long long)lobby_info.lobby_id, lobby_info.member_count, lobby_info.member_limit, owner_name.c_str());
+                    else
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                            (unsigned long long)lobby_info.lobby_id, lobby_info.member_count, lobby_info.member_limit);
+                } else if (in_server) {
+                    if (gs_info.server_name[0] != '\0')
+                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "In Server - %s", gs_info.server_name);
+                    else
+                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "In Server");
+                } else {
+                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                }
+            }
+
+            // ---- Dynamic action buttons ----
+            {
+                bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
+                if (has_lobby && s_bridge.InviteAllFriends) {
+                    char invite_all_btn[128];
+                    snprintf(invite_all_btn, sizeof(invite_all_btn), "%s##PopupInviteAllFriends_fl", translationInviteAll[s_current_language]);
+                    if (ImGui::Button(invite_all_btn)) {
+                        s_bridge.InviteAllFriends();
+                    }
+                    ImGui::SameLine();
+                }
+                GSE_LocalLobbyInfo lobby_info{};
+                bool got_lobby = has_lobby && s_bridge.GetLocalLobbyInfo && s_bridge.GetLocalLobbyInfo(&lobby_info);
+                if (got_lobby) {
+                    if (ImGui::Button("Copy Lobby ID##fl")) {
+                        char lobby_str[32];
+                        snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)lobby_info.lobby_id);
+                        ImGui::SetClipboardText(lobby_str);
+                    }
+                    ImGui::SameLine();
+                }
+                if (ImGui::Button(translationCopyId[s_current_language])) {
+                    char id_str[32];
+                    snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)state.steam_id);
+                    ImGui::SetClipboardText(id_str);
+                }
+            }
+            ImGui::Separator();
+
             render_friends_list();
         }
         ImGui::End();
@@ -1868,45 +1947,8 @@ static void render_friends_list()
     std::vector<GSE_Friend> friends(friend_count > 256 ? 256 : friend_count);
     int count = s_bridge.GetFriends(friends.data(), (int)friends.size());
 
-    // Check if local user has a lobby (for Invite All and individual Invite buttons)
+    // Check if local user has a lobby (for individual Invite buttons)
     bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
-
-    // Show local user's lobby info if in a lobby (only if we own it)
-    if (has_lobby && s_bridge.GetLocalLobbyInfo) {
-        GSE_LocalLobbyInfo lobby_info{};
-        if (s_bridge.GetLocalLobbyInfo(&lobby_info) && lobby_info.is_owner) {
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Your Lobby: %llu (%d/%d) [Owner]",
-                (unsigned long long)lobby_info.lobby_id,
-                lobby_info.member_count, lobby_info.member_limit);
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Copy ID##copy_local_lobby")) {
-                char lobby_str[32];
-                snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)lobby_info.lobby_id);
-                ImGui::SetClipboardText(lobby_str);
-            }
-            if (lobby_info.connect_string[0] != '\0') {
-                char launch_cmd[GSE_EXE_NAME_SIZE + GSE_CONNECT_STRING_SIZE + 2] = {};
-                if (lobby_info.exe_name[0] != '\0') {
-                    snprintf(launch_cmd, sizeof(launch_cmd), "%s %s", lobby_info.exe_name, lobby_info.connect_string);
-                } else {
-                    snprintf(launch_cmd, sizeof(launch_cmd), "%s", lobby_info.connect_string);
-                }
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Launch: %s", launch_cmd);
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Copy##copy_launch_fl")) {
-                    ImGui::SetClipboardText(launch_cmd);
-                }
-            }
-        }
-    }
-
-    if (has_lobby && s_bridge.InviteAllFriends) {
-        char invite_all_btn[128];
-        snprintf(invite_all_btn, sizeof(invite_all_btn), "%s##PopupInviteAllFriends", translationInviteAll[s_current_language]);
-        if (ImGui::Button(invite_all_btn)) {
-            s_bridge.InviteAllFriends();
-        }
-    }
 
     // ---- Partition friends into In Game (same app) / Online (different app) ----
     std::vector<int> in_game_idx, online_idx;
