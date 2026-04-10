@@ -2573,8 +2573,14 @@ void Steam_Overlay::render_main_window()
             auto render_friend_row = [&](const Friend &frd, friend_window_state &state) {
                 ImGui::PushID(state.id - base_friend_window_id + base_friend_item_id);
 
-                // Avatar (small, compact)
-                const float avatar_size = ImGui::GetTextLineHeight() * 1.5f; // ~1.5 lines tall
+                // Invisible selectable spanning the full row for right-click target
+                const float avatar_size = 32.0f;
+                float row_height = (std::max)(avatar_size, ImGui::GetTextLineHeight());
+                ImVec2 cursor_before = ImGui::GetCursorPos();
+                ImGui::Selectable("##friend_row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(0, row_height));
+                ImGui::SetCursorPos(cursor_before);
+
+                // Avatar
                 bool has_avatar = try_load_avatar(state, frd.id());
                 if (has_avatar && state.avatar_resource && state.avatar_resource->GetResourceId() != 0) {
                     ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
@@ -2585,7 +2591,10 @@ void Steam_Overlay::render_main_window()
                 }
                 ImGui::SameLine();
 
-                // Name + game name on same line
+                // Name + game name on same line (vertically centered with avatar)
+                float text_y = (avatar_size - ImGui::GetTextLineHeight()) * 0.5f;
+                ImVec2 text_cursor = ImGui::GetCursorPos();
+                ImGui::SetCursorPosY(text_cursor.y + text_y);
                 bool needs_attn = (state.window_state & window_state_need_attention);
                 if (needs_attn)
                     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", frd.name().c_str());

@@ -1900,8 +1900,13 @@ static void render_friends_list()
         auto &f = friends[idx];
         ImGui::PushID(idx);
 
-        // Avatar (small, compact)
-        const float avatar_size = ImGui::GetTextLineHeight() * 1.5f;
+        // Avatar (32px, matching local user avatar)
+        const float avatar_size = 32.0f;
+        float row_height = (std::max)(avatar_size, ImGui::GetTextLineHeight());
+        ImVec2 cursor_before = ImGui::GetCursorPos();
+        ImGui::Selectable("##friend_row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(0, row_height));
+        ImGui::SetCursorPos(cursor_before);
+
         const IconTexture *avatar = get_or_upload_avatar(f.steam_id);
         if (avatar && avatar->valid) {
             ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
@@ -1912,7 +1917,10 @@ static void render_friends_list()
         }
         ImGui::SameLine();
 
-        // Name + game name on same line
+        // Name + game name on same line (vertically centered with avatar)
+        float text_y = (avatar_size - ImGui::GetTextLineHeight()) * 0.5f;
+        ImVec2 text_cursor = ImGui::GetCursorPos();
+        ImGui::SetCursorPosY(text_cursor.y + text_y);
         bool needs_attn = (f.window_state & 0x08); // window_state_need_attention
         if (needs_attn)
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", f.name);
