@@ -147,6 +147,7 @@ class Steam_Overlay
     
     bool show_overlay = false;
     bool show_user_info = false;
+    bool show_friends = false;
     bool show_achievements = false;
     bool show_settings = false;
     bool show_sce_browser = false;

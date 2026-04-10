@@ -85,6 +85,7 @@ static bool s_show_main_overlay = false;
 static bool s_show_achievements = false;
 static bool s_show_settings     = false;
 static bool s_show_user_info    = false;
+static bool s_show_friends      = false;
 static bool s_show_sce_browser  = false;
 static bool s_show_chat         = false;
 static int  s_active_chat_idx   = 0;  // currently selected chat tab
@@ -1139,6 +1140,23 @@ static void render_main_overlay(effect_runtime *runtime)
     if (ImGui::Button(translationToggleUserInfo[s_current_language]))
         s_show_user_info = !s_show_user_info;
 
+    // Friends button - show unread indicator if any friend needs attention
+    ImGui::SameLine();
+    {
+        bool has_unread = false;
+        for (auto &cw : s_open_chats) {
+            GSE_ChatState cs{};
+            if (s_bridge.GetChatState && s_bridge.GetChatState(cw.steam_id, &cs) && cs.needs_attention)
+                has_unread = true;
+        }
+        if (has_unread)
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+        if (ImGui::Button(translationFriends[s_current_language]))
+            s_show_friends = !s_show_friends;
+        if (has_unread)
+            ImGui::PopStyleColor();
+    }
+
     // Chat button - show unread indicator if any chat needs attention
     ImGui::SameLine();
     {
@@ -1317,15 +1335,19 @@ static void render_main_overlay(effect_runtime *runtime)
     }
     ImGui::Separator();
 
-    // ── Friends Section (matching native: label + Invite All button + ListBox) ──
-    ImGui::Spacing();
-    ImGui::Spacing();
-    ImGui::LabelText("##label", "%s", translationFriends[s_current_language]);
-
-    render_friends_list();
-
     ImGui::End();
     ImGui::PopStyleColor(style_colors);
+
+    // ── Friends Window (separate Begin(), matching native) ──
+    if (s_show_friends) {
+        const float min_w = io.DisplaySize.x * 0.25f;
+        ImGui::SetNextWindowSizeConstraints(ImVec2(min_w, ImGui::GetFontSize() * 16), ImVec2(8192, 8192));
+        ImGui::SetNextWindowBgAlpha(1.0f);
+        if (ImGui::Begin(translationFriends[s_current_language], &s_show_friends)) {
+            render_friends_list();
+        }
+        ImGui::End();
+    }
 
     // ── Settings Window (separate Begin(), matching native) ──
     if (s_show_settings) {
