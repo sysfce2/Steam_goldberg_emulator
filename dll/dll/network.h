@@ -146,7 +146,8 @@ public:
     void Run();
 
     // send to a specific user, set_dest_id() must be called
-    bool sendTo(Common_Message *msg, bool reliable, Connection *conn = NULL);
+    // any_appid=true bypasses the appid filter when finding the connection (for cross-app messages)
+    bool sendTo(Common_Message *msg, bool reliable, Connection *conn = NULL, bool any_appid = false);
     
     // send to all users whose account type is Individual, no need to call set_dest_id(), this is done automatically
     bool sendToAllIndividuals(Common_Message *msg, bool reliable);

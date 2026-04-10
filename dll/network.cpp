@@ -1195,7 +1195,7 @@ uint16 Networking::getPort(CSteamID id)
     return 0;
 }
 
-bool Networking::sendTo(Common_Message *msg, bool reliable, Connection *conn)
+bool Networking::sendTo(Common_Message *msg, bool reliable, Connection *conn, bool any_appid)
 {
     if (!enabled) return false;
 
@@ -1214,7 +1214,7 @@ bool Networking::sendTo(Common_Message *msg, bool reliable, Connection *conn)
     }
 
     if (!conn) {
-        conn = find_connection(dest_id, this->appid);
+        conn = find_connection(dest_id, any_appid ? 0 : this->appid);
     }
 
     if (!ret && conn) {
