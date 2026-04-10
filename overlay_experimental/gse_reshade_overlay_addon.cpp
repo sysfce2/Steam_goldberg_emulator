@@ -1951,7 +1951,7 @@ static void render_friends_list()
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);
                 }
             }
-            if (f.is_joinable && f.lobby_id != 0 && s_bridge.FriendAction) {
+            if (f.same_app && f.is_joinable && f.lobby_id != 0 && s_bridge.FriendAction) {
                 if (ImGui::MenuItem(translationJoin[s_current_language])) {
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
                 }

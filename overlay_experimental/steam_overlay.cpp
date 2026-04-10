@@ -1107,22 +1107,33 @@ void Steam_Overlay::build_friend_window(Friend const& frd, friend_window_state& 
 
         // Fill this with the chat box and maybe the invitation
         if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+            bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
             ImGui::LabelText("##label", translationInvitedYouToJoinTheGame[current_language], frd.name().c_str(), frd.appid());
             ImGui::PopStyleColor();
-            ImGui::SameLine();
-            if (ImGui::Button(translationAccept[current_language])) {
-                state.window_state |= window_state_join;
-                this->has_friend_action.push(frd);
-                // Add accepted status to chat history
-                state.chat_history.append("[INVITE ACCEPTED] You accepted the invite\n");
-            }
+            if (same_app) {
+                ImGui::SameLine();
+                if (ImGui::Button(translationAccept[current_language])) {
+                    state.window_state |= window_state_join;
+                    this->has_friend_action.push(frd);
+                    // Add accepted status to chat history
+                    state.chat_history.append("[INVITE ACCEPTED] You accepted the invite\n");
+                }
 
-            ImGui::SameLine();
-            if (ImGui::Button(translationRefuse[current_language])) {
-                state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
-                // Add refused status to chat history
-                state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                ImGui::SameLine();
+                if (ImGui::Button(translationRefuse[current_language])) {
+                    state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                    // Add refused status to chat history
+                    state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                }
+            } else {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(different game)");
+                ImGui::SameLine();
+                if (ImGui::Button(translationRefuse[current_language])) {
+                    state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                    state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                }
             }
         }
 
@@ -2591,13 +2602,14 @@ void Steam_Overlay::render_main_window()
                     if (ImGui::MenuItem(translationChat[current_language])) {
                         state.window_state |= window_state_show;
                     }
-                    if (i_have_lobby && settings->get_local_game_id().AppID() == frd.appid()) {
+                    bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
+                    if (same_app && i_have_lobby) {
                         if (ImGui::MenuItem(translationInvite[current_language])) {
                             state.window_state |= window_state_invite;
                             has_friend_action.push(frd);
                         }
                     }
-                    if (state.joinable && frd.lobby_id() != 0) {
+                    if (same_app && state.joinable && frd.lobby_id() != 0) {
                         if (ImGui::MenuItem(translationJoin[current_language])) {
                             state.window_state |= window_state_join;
                             has_friend_action.push(frd);
@@ -4016,6 +4028,9 @@ void Steam_Overlay::SetLobbyInvite(Friend friendId, uint64 lobbyId)
     auto i = friends.find(friendId);
     if (i != friends.end())
     {
+        // Block lobby invites from cross-app friends
+        if (settings->get_local_game_id().AppID() != friendId.appid()) return;
+
         auto& frd = i->second;
         frd.lobbyId = lobbyId;
         frd.window_state |= window_state_lobby_invite;
@@ -4040,6 +4055,9 @@ void Steam_Overlay::SetRichInvite(Friend friendId, const char* connect_str)
     auto i = friends.find(friendId);
     if (i != friends.end())
     {
+        // Block rich invites from cross-app friends
+        if (settings->get_local_game_id().AppID() != friendId.appid()) return;
+
         auto& frd = i->second;
         strncpy(frd.connect, connect_str, k_cchMaxRichPresenceValueLength - 1);
         frd.window_state |= window_state_rich_invite;
@@ -4243,46 +4261,53 @@ void Steam_Overlay::steam_run_callback_friends_actions()
             }
             // The user clicked on "Invite" (but invite all wasn't clicked)
             if (friend_info->second.window_state & window_state_invite) {
-                invite_friend(friend_id, steamFriends, steamMatchmaking);
-                
+                // Only allow invite for same-app friends
+                if (settings->get_local_game_id().AppID() == friend_info->first.appid()) {
+                    invite_friend(friend_id, steamFriends, steamMatchmaking);
+                }
                 friend_info->second.window_state &= ~window_state_invite;
             }
             // The user clicked on "Join"
             if (friend_info->second.window_state & window_state_join) {
-                std::string connect = steamFriends->get_friend_rich_presence_silent(friend_id, "connect");
-                // The user got a lobby invite and accepted it
-                if (friend_info->second.window_state & window_state_lobby_invite) {
-                    GameLobbyJoinRequested_t data;
-                    data.m_steamIDLobby.SetFromUint64(friend_info->second.lobbyId);
-                    data.m_steamIDFriend.SetFromUint64(friend_id);
-                    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
-
-                    friend_info->second.window_state &= ~window_state_lobby_invite;
+                // Only allow join for same-app friends
+                if (settings->get_local_game_id().AppID() != friend_info->first.appid()) {
+                    friend_info->second.window_state &= ~(window_state_join | window_state_lobby_invite | window_state_rich_invite);
                 } else {
-                    // The user got a rich presence invite and accepted it
-                    if (friend_info->second.window_state & window_state_rich_invite) {
-                        GameRichPresenceJoinRequested_t data = {};
-                        data.m_steamIDFriend.SetFromUint64(friend_id);
-                        strncpy(data.m_rgchConnect, friend_info->second.connect, k_cchMaxRichPresenceValueLength - 1);
-                        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
-                        
-                        friend_info->second.window_state &= ~window_state_rich_invite;
-                    } else if (connect.length() > 0) {
-                        GameRichPresenceJoinRequested_t data = {};
-                        data.m_steamIDFriend.SetFromUint64(friend_id);
-                        strncpy(data.m_rgchConnect, connect.c_str(), k_cchMaxRichPresenceValueLength - 1);
-                        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
-                    }
-
-                    //Not sure about this but it fixes sonic racing transformed invites
-                    FriendGameInfo_t friend_game_info = {};
-                    steamFriends->GetFriendGamePlayed(friend_id, &friend_game_info);
-                    uint64 lobby_id = friend_game_info.m_steamIDLobby.ConvertToUint64();
-                    if (lobby_id) {
+                    std::string connect = steamFriends->get_friend_rich_presence_silent(friend_id, "connect");
+                    // The user got a lobby invite and accepted it
+                    if (friend_info->second.window_state & window_state_lobby_invite) {
                         GameLobbyJoinRequested_t data;
-                        data.m_steamIDLobby.SetFromUint64(lobby_id);
+                        data.m_steamIDLobby.SetFromUint64(friend_info->second.lobbyId);
                         data.m_steamIDFriend.SetFromUint64(friend_id);
                         callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+
+                        friend_info->second.window_state &= ~window_state_lobby_invite;
+                    } else {
+                        // The user got a rich presence invite and accepted it
+                        if (friend_info->second.window_state & window_state_rich_invite) {
+                            GameRichPresenceJoinRequested_t data = {};
+                            data.m_steamIDFriend.SetFromUint64(friend_id);
+                            strncpy(data.m_rgchConnect, friend_info->second.connect, k_cchMaxRichPresenceValueLength - 1);
+                            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+                            
+                            friend_info->second.window_state &= ~window_state_rich_invite;
+                        } else if (connect.length() > 0) {
+                            GameRichPresenceJoinRequested_t data = {};
+                            data.m_steamIDFriend.SetFromUint64(friend_id);
+                            strncpy(data.m_rgchConnect, connect.c_str(), k_cchMaxRichPresenceValueLength - 1);
+                            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+                        }
+
+                        //Not sure about this but it fixes sonic racing transformed invites
+                        FriendGameInfo_t friend_game_info = {};
+                        steamFriends->GetFriendGamePlayed(friend_id, &friend_game_info);
+                        uint64 lobby_id = friend_game_info.m_steamIDLobby.ConvertToUint64();
+                        if (lobby_id) {
+                            GameLobbyJoinRequested_t data;
+                            data.m_steamIDLobby.SetFromUint64(lobby_id);
+                            data.m_steamIDFriend.SetFromUint64(friend_id);
+                            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+                        }
                     }
                 }
                 
