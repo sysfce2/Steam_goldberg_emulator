@@ -365,7 +365,7 @@ void Steam_Matchmaking::HandleJoinResponse(Common_Message *msg)
         Steam_Friends *steamFriends = get_steam_client()->steam_friends;
         const char *name = steamFriends->GetFriendPersonaName(CSteamID(owner_id));
         std::string owner_name = name ? name : "Unknown";
-        overlay->add_lobby_join_request_response_notification(lobby_id, owner_name, accepted);
+        overlay->add_lobby_join_request_response_notification(lobby_id, owner_name, accepted, owner_id);
     }
 }
 
@@ -402,7 +402,7 @@ void Steam_Matchmaking::HandleKickMessage(Common_Message *msg)
         Steam_Friends *steamFriends = get_steam_client()->steam_friends;
         const char *name = steamFriends->GetFriendPersonaName(CSteamID(kicker_id));
         std::string kicker_name = name ? name : "Unknown";
-        overlay->add_lobby_kicked_notification(lobby_id, kicker_name);
+        overlay->add_lobby_kicked_notification(lobby_id, kicker_name, kicker_id);
     }
 }
 

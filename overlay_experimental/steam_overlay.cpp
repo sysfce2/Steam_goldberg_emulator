@@ -938,6 +938,7 @@ bool Steam_Overlay::submit_notification(
     notif.type = (uint8)type;
     notif.message = msg;
     notif.frd = frd;
+    if (frd) notif.source_friend_id = frd->first.id();
     if (ach) notif.ach = *ach;
     
     notifications.emplace_back(notif);
@@ -1009,6 +1010,7 @@ void Steam_Overlay::poll_lobby_join_requests()
         notif.message = msg;
         notif.join_request_lobby_id = req.lobby_id.ConvertToUint64();
         notif.join_request_requester_id = req.requester_id.ConvertToUint64();
+        notif.source_friend_id = req.requester_id.ConvertToUint64();
 
         notifications.emplace_back(notif);
         allow_renderer_frame_processing(true);
@@ -1016,7 +1018,7 @@ void Steam_Overlay::poll_lobby_join_requests()
     }
 }
 
-void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted)
+void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted, uint64 source_id)
 {
     PRINT_DEBUG("lobby=%llu owner=%s accepted=%d", lobby_id, owner_name.c_str(), (int)accepted);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -1032,12 +1034,13 @@ void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id
     notif.id = id;
     notif.type = (uint8)notification_type::lobby_join_request_response;
     notif.message = msg;
+    notif.source_friend_id = source_id;
 
     notifications.emplace_back(notif);
     allow_renderer_frame_processing(true);
 }
 
-void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name)
+void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name, uint64 source_id)
 {
     PRINT_DEBUG("lobby=%llu kicker=%s", lobby_id, kicker_name.c_str());
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
@@ -1053,6 +1056,7 @@ void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::st
     notif.id = id;
     notif.type = (uint8)notification_type::lobby_kicked;
     notif.message = msg;
+    notif.source_friend_id = source_id;
 
     notifications.emplace_back(notif);
     allow_renderer_frame_processing(true);
@@ -1578,6 +1582,81 @@ void Steam_Overlay::build_notifications(float width, float height)
     ImGui::PushFont(font_notif, 0.0f);
     // Add window rounding
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, settings->overlay_appearance.notification_rounding);
+
+    // Helper: render 48px avatar + 3-line friend info for a notification
+    auto render_notif_friend_header = [&](uint64 friend_id) {
+        if (!friend_id) return;
+
+        // Look up friend in the friends map
+        const Friend *frd_ptr = nullptr;
+        friend_window_state *frd_state = nullptr;
+        for (auto &[f, s] : friends) {
+            if (f.id() == friend_id) {
+                frd_ptr = &f;
+                frd_state = &s;
+                break;
+            }
+        }
+        if (!frd_ptr) return;
+
+        const float avatar_size = 48.0f;
+
+        // Avatar
+        bool has_avatar = try_load_avatar(*frd_state, frd_ptr->id());
+        if (has_avatar && frd_state->avatar_resource && frd_state->avatar_resource->GetResourceId() != 0) {
+            ImGui::Image(frd_state->avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
+        } else {
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+            ImGui::Dummy(ImVec2(avatar_size, avatar_size));
+        }
+        ImGui::SameLine();
+
+        ImVec2 text_start = ImGui::GetCursorPos();
+        uint32 local_appid = settings->get_local_game_id().AppID();
+
+        // Line 1: Name (ID: steamid)
+        ImGui::SetCursorPos(text_start);
+        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd_ptr->name().c_str());
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd_ptr->id());
+
+        // Line 2: Playing AppName (AppID XXXX)
+        if (frd_ptr->appid() != 0) {
+            auto it2 = steam_preowned_app_ids.find(frd_ptr->appid());
+            std::string game = (it2 != steam_preowned_app_ids.end()) ? it2->second : std::to_string(frd_ptr->appid());
+            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game.c_str(), frd_ptr->appid());
+        } else {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+        }
+
+        // Line 3: Lobby info
+        if (frd_ptr->lobby_id() != 0) {
+            Steam_Matchmaking *mm_n = get_steam_client()->steam_matchmaking;
+            if (mm_n) {
+                CSteamID frd_lobby((uint64)frd_ptr->lobby_id());
+                int mc = mm_n->GetNumLobbyMembers(frd_lobby);
+                int ml = mm_n->GetLobbyMemberLimit(frd_lobby);
+                CSteamID owner = mm_n->GetLobbyOwner(frd_lobby);
+                std::string owner_name;
+                for (auto &[f2, s2] : friends) {
+                    if (f2.id() == owner.ConvertToUint64()) { owner_name = f2.name(); break; }
+                }
+                if (owner_name.empty()) {
+                    if (owner == settings->get_local_steam_id())
+                        owner_name = settings->get_local_name();
+                    else if (owner.ConvertToUint64() == frd_ptr->id())
+                        owner_name = frd_ptr->name();
+                    else
+                        owner_name = std::to_string(owner.ConvertToUint64());
+                }
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                    (unsigned long long)frd_ptr->lobby_id(), mc, ml, owner_name.c_str());
+            }
+        }
+
+        ImGui::Separator();
+    };
    
     NotificationsCoords coords{};
     for (auto it = notifications.begin(); it != notifications.end(); ++it) {
@@ -1679,6 +1758,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                 break;
 
                 case notification_type::invite: {
+                    render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
                     if (ImGui::Button(translationJoin[current_language])) {
                         it->frd->second.window_state |= window_state_join;
@@ -1691,6 +1771,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                 break;
 
                 case notification_type::message:
+                    render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
                     if (it->frd) {
                         if (ImGui::Button("Open Chat")) {
@@ -1706,6 +1787,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                 break;
 
                 case notification_type::lobby_join_request: {
+                    render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
                     if (ImGui::Button(translationJoin[current_language])) {
                         Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
@@ -1724,10 +1806,12 @@ void Steam_Overlay::build_notifications(float width, float height)
                 break;
 
                 case notification_type::lobby_join_request_response:
+                    render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
                 break;
 
                 case notification_type::lobby_kicked:
+                    render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
                 break;
                 
@@ -5009,6 +5093,8 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
         // Source friend for invite/message notifications
         if (n.frd) {
             o.source_friend_id = n.frd->first.id();
+        } else if (n.source_friend_id) {
+            o.source_friend_id = n.source_friend_id;
         }
 
         ++written;

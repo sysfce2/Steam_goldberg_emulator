@@ -688,6 +688,70 @@ static void render_notifications(effect_runtime *runtime)
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, NOTIF_ROUNDING);
 
+    // Pre-fetch friends list for avatar + info rendering in friend-related notifications
+    std::vector<GSE_Friend> notif_friends;
+    if (s_bridge.GetFriendCount && s_bridge.GetFriends) {
+        int fc = s_bridge.GetFriendCount();
+        if (fc > 0) {
+            notif_friends.resize(fc > 256 ? 256 : fc);
+            int cnt = s_bridge.GetFriends(notif_friends.data(), (int)notif_friends.size());
+            notif_friends.resize(cnt);
+        }
+    }
+
+    // Helper: render 48px avatar + 3-line friend info for a notification
+    auto render_notif_friend_header = [&](uint64_t friend_id) {
+        if (!friend_id) return;
+
+        const GSE_Friend *finfo = nullptr;
+        for (auto &f : notif_friends) {
+            if (f.steam_id == friend_id) { finfo = &f; break; }
+        }
+        if (!finfo) return;
+
+        const float avatar_size = 48.0f;
+
+        const IconTexture *avatar = get_or_upload_avatar(friend_id);
+        if (avatar && avatar->valid) {
+            ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
+        } else {
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+            ImGui::Dummy(ImVec2(avatar_size, avatar_size));
+        }
+        ImGui::SameLine();
+
+        ImVec2 text_start = ImGui::GetCursorPos();
+
+        // Line 1: Name (ID: steamid)
+        ImGui::SetCursorPos(text_start);
+        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", finfo->name);
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)finfo->steam_id);
+
+        // Line 2: Playing AppName (AppID XXXX)
+        if (finfo->appid != 0) {
+            if (finfo->app_name[0])
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", finfo->app_name, finfo->appid);
+            else
+                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", finfo->appid);
+        } else {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+        }
+
+        // Line 3: Lobby info
+        if (finfo->in_lobby && finfo->lobby_id != 0) {
+            if (finfo->lobby_owner_name[0])
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                    (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit, finfo->lobby_owner_name);
+            else
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                    (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit);
+        }
+
+        ImGui::Separator();
+    };
+
     NotifCoords coords{};
 
     for (int i = 0; i < count; ++i) {
@@ -878,6 +942,7 @@ static void render_notifications(effect_runtime *runtime)
                 break;
             }
             case GSE_NOTIF_INVITE:
+                render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
                 if (ImGui::Button(translationJoin[s_current_language])) {
                     // Accept the invite via FriendAction (action=5)
@@ -888,6 +953,7 @@ static void render_notifications(effect_runtime *runtime)
                 }
                 break;
             case GSE_NOTIF_LOBBY_JOIN_REQ:
+                render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
                 if (ImGui::Button(translationJoin[s_current_language])) {
                     if (s_bridge.AcceptLobbyJoinRequest)
@@ -900,15 +966,18 @@ static void render_notifications(effect_runtime *runtime)
                 }
                 break;
             case GSE_NOTIF_LOBBY_JOIN_RESP:
+                render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
                 break;
             case GSE_NOTIF_LOBBY_KICKED:
+                render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
                 break;
             case GSE_NOTIF_AUTO_ACCEPT_INVITE:
                 ImGui::TextWrapped("%s", n.message);
                 break;
             case GSE_NOTIF_MESSAGE:
+                render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
                 if (n.source_friend_id && s_bridge.OpenChat) {
                     if (ImGui::Button("Open Chat")) {

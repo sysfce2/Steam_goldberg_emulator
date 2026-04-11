@@ -105,6 +105,8 @@ struct Notification
     // For lobby_join_request notifications
     uint64 join_request_lobby_id{};
     uint64 join_request_requester_id{};
+    // Source friend ID for notifications that involve a specific friend
+    uint64 source_friend_id{};
 };
 
 // notification coordinates { x, y }
@@ -363,9 +365,9 @@ public:
 
     void AddAchievementNotification(const std::string &ach_name, nlohmann::json const& ach, bool for_progress);
 
-    void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted);
+    void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted, uint64 source_id = 0);
 
-    void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name);
+    void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name, uint64 source_id = 0);
 
     void SortAchievementsByGlobalPercent(const std::map<std::string, float> &percentages);
 
@@ -471,9 +473,9 @@ public:
 
     void AddAchievementNotification(const std::string &ach_name, nlohmann::json const& ach, bool for_progress) {}
 
-    void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted) {}
+    void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted, uint64 source_id = 0) {}
 
-    void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name) {}
+    void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name, uint64 source_id = 0) {}
 };
 
 #endif // EMU_OVERLAY
