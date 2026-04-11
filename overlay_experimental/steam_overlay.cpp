@@ -961,6 +961,10 @@ bool Steam_Overlay::submit_notification(
             obscure_game_input(true);
         break;
 
+        case notification_type::lobby_join_request_response:
+            // non-interactive, no input stealing
+        break;
+
         default:
             PRINT_DEBUG("error unhandled type %i", (int)type);
         break;
@@ -992,7 +996,7 @@ void Steam_Overlay::poll_lobby_join_requests()
         notified_lobby_join_requests.insert(key);
 
         const char *name = steamFriends->GetFriendPersonaName(req.requester_id);
-        std::string msg = std::string(name ? name : "Unknown") + " wants to join your lobby";
+        std::string msg = std::string("Auto join request from ") + (name ? name : "Unknown") + "\nLobby: " + std::to_string(req.lobby_id.ConvertToUint64());
 
         int id = find_free_notification_id(notifications);
         if (id == 0) continue;
@@ -1010,6 +1014,27 @@ void Steam_Overlay::poll_lobby_join_requests()
         allow_renderer_frame_processing(true);
         obscure_game_input(true);
     }
+}
+
+void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted)
+{
+    PRINT_DEBUG("lobby=%llu owner=%s accepted=%d", lobby_id, owner_name.c_str(), (int)accepted);
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+
+    std::string msg = std::string("Your join request was ") + (accepted ? "accepted" : "denied") + " by " + owner_name + "\nLobby: " + std::to_string(lobby_id);
+
+    int id = find_free_notification_id(notifications);
+    if (id == 0) return;
+
+    Notification notif{};
+    notif.start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+    notif.steady_start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
+    notif.id = id;
+    notif.type = (uint8)notification_type::lobby_join_request_response;
+    notif.message = msg;
+
+    notifications.emplace_back(notif);
+    allow_renderer_frame_processing(true);
 }
 
 void Steam_Overlay::show_test_achievement()
@@ -1300,6 +1325,9 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
     
     case notification_type::lobby_join_request:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
+    
+    case notification_type::lobby_join_request_response:
+        return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
     }
 
     PRINT_DEBUG("ERROR unhandled type %i", (int)type);
@@ -1373,6 +1401,17 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
         noti_height = ljr_msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
+    }
+    break;
+    case notification_type::lobby_join_request_response: {
+        pos = settings->overlay_appearance.invite_pos;
+        const float ljrr_msg_height = ImGui::CalcTextSize(
+            noti.message.c_str(),
+            noti.message.c_str() + noti.message.size(),
+            false,
+            noti_width - padding_all_sides - global_style.ItemSpacing.x
+        ).y;
+        noti_height = ljrr_msg_height + global_style.WindowPadding.y;
     }
     break;
     default: PRINT_DEBUG("ERROR: unhandled notification type %i", (int)noti.type); break;
@@ -1556,6 +1595,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                 // interactive: Accept/Decline buttons
             break;
 
+            case notification_type::lobby_join_request_response:
+                extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            break;
+
             default:
                 PRINT_DEBUG("error unhandled flags for type %i", (int)it->type);
             break;
@@ -1640,6 +1683,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                     }
                 }
                 break;
+
+                case notification_type::lobby_join_request_response:
+                    ImGui::TextWrapped("%s", it->message.c_str());
+                break;
                 
                 default:
                     PRINT_DEBUG("error unhandled notification for type %i", (int)it->type);
@@ -1679,6 +1726,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                 case notification_type::achievement:
                 case notification_type::auto_accept_invite:
                 case notification_type::message:
+                case notification_type::lobby_join_request_response:
                     // nothing
                 break;
 
@@ -4848,6 +4896,11 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
         o.join_request_lobby_id = n.join_request_lobby_id;
         o.join_request_requester_id = n.join_request_requester_id;
 
+        // Source friend for invite/message notifications
+        if (n.frd) {
+            o.source_friend_id = n.frd->first.id();
+        }
+
         ++written;
     }
 
@@ -4855,7 +4908,14 @@ int Steam_Overlay::Bridge_GetNotifications(GSE_Notification *out, int max_count)
     // would pile up forever. Clean them up here.
     notifications.erase(
         std::remove_if(notifications.begin(), notifications.end(),
-            [](const Notification &item) { return item.expired; }),
+            [this](const Notification &item) {
+                if (!item.expired) return false;
+                // Clean up lobby join request tracking (same as native expiry)
+                if ((notification_type)item.type == notification_type::lobby_join_request) {
+                    notified_lobby_join_requests.erase({item.join_request_lobby_id, item.join_request_requester_id});
+                }
+                return true;
+            }),
         notifications.end());
 
     return written;
@@ -4866,6 +4926,10 @@ void Steam_Overlay::Bridge_ExpireNotification(int id)
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     for (auto &n : notifications) {
         if (n.id == id && !n.expired) {
+            // Clean up lobby join request tracking on expiry
+            if ((notification_type)n.type == notification_type::lobby_join_request) {
+                notified_lobby_join_requests.erase({n.join_request_lobby_id, n.join_request_requester_id});
+            }
             n.expired = true;
             allow_renderer_frame_processing(false);
             break;

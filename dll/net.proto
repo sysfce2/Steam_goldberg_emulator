@@ -62,12 +62,14 @@ message Lobby_Messages {
         CHANGE_OWNER = 2;
         MEMBER_DATA = 3;
         CHAT_MESSAGE = 4;
+        JOIN_RESPONSE = 5;
     }
 
     Types type = 2;
     uint64 idata = 3;
     bytes bdata = 4;
     map<string, bytes> map = 5;
+    bool join_accepted = 6;
 }
 
 message Low_Level {

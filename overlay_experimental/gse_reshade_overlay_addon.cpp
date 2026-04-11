@@ -719,12 +719,27 @@ static void render_notifications(effect_runtime *runtime)
                             n.ach_max_progress > 0;
         if (has_progress) notif_h += font_size + ImGui::GetStyle().WindowPadding.y;
 
-        // Get position preference
-        int notif_pos = GSE_NOTIF_POS_BOT_RIGHT;  // default for achievements
-        if (n.type == GSE_NOTIF_INVITE || n.type == GSE_NOTIF_LOBBY_JOIN_REQ)
-            notif_pos = GSE_NOTIF_POS_TOP_RIGHT;
-        else if (s_bridge.GetOption)
-            notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POSITION);
+        // Get position preference (per-type, matching native overlay)
+        int notif_pos = GSE_NOTIF_POS_TOP_RIGHT; // fallback default
+        if (s_bridge.GetOption) {
+            switch (n.type) {
+            case GSE_NOTIF_ACHIEVEMENT:
+            case GSE_NOTIF_ACHIEVEMENT_PROG:
+                notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POS_ACHIEVEMENT);
+                break;
+            case GSE_NOTIF_INVITE:
+            case GSE_NOTIF_LOBBY_JOIN_REQ:
+            case GSE_NOTIF_LOBBY_JOIN_RESP:
+                notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POS_INVITE);
+                break;
+            case GSE_NOTIF_MESSAGE:
+                notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POS_CHAT);
+                break;
+            default:
+                notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POSITION);
+                break;
+            }
+        }
 
         // Position calculation matching native overlay
         float slide = factor;
@@ -784,8 +799,15 @@ static void render_notifications(effect_runtime *runtime)
         case GSE_NOTIF_ACHIEVEMENT:
         case GSE_NOTIF_ACHIEVEMENT_PROG:
         case GSE_NOTIF_AUTO_ACCEPT_INVITE:
-        case GSE_NOTIF_MESSAGE:
+        case GSE_NOTIF_LOBBY_JOIN_RESP:
             flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            break;
+        case GSE_NOTIF_MESSAGE:
+            // Interactive if there's a source friend (Open Chat button), otherwise passive
+            if (n.source_friend_id)
+                flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+            else
+                flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
             break;
         case GSE_NOTIF_INVITE:
         case GSE_NOTIF_LOBBY_JOIN_REQ:
@@ -856,7 +878,9 @@ static void render_notifications(effect_runtime *runtime)
             case GSE_NOTIF_INVITE:
                 ImGui::TextWrapped("%s", n.message);
                 if (ImGui::Button(translationJoin[s_current_language])) {
-                    // Expire the notification on accept
+                    // Accept the invite via FriendAction (action=5)
+                    if (s_bridge.FriendAction && n.source_friend_id)
+                        s_bridge.FriendAction(n.source_friend_id, 5);
                     if (s_bridge.ExpireNotification)
                         s_bridge.ExpireNotification(n.id);
                 }
@@ -873,8 +897,21 @@ static void render_notifications(effect_runtime *runtime)
                         s_bridge.DeclineLobbyJoinRequest(n.id);
                 }
                 break;
+            case GSE_NOTIF_LOBBY_JOIN_RESP:
+                ImGui::TextWrapped("%s", n.message);
+                break;
             case GSE_NOTIF_AUTO_ACCEPT_INVITE:
                 ImGui::TextWrapped("%s", n.message);
+                break;
+            case GSE_NOTIF_MESSAGE:
+                ImGui::TextWrapped("%s", n.message);
+                if (n.source_friend_id && s_bridge.OpenChat) {
+                    if (ImGui::Button("Open Chat")) {
+                        s_bridge.OpenChat(n.source_friend_id);
+                        if (s_bridge.ExpireNotification)
+                            s_bridge.ExpireNotification(n.id);
+                    }
+                }
                 break;
             default:
                 ImGui::TextWrapped("%s", n.message);

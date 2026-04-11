@@ -129,6 +129,9 @@ public ISteamMatchmaking
     void RunCallbacks();
     void Callback(Common_Message *msg);
 
+    void SendJoinResponse(uint64 lobby_id, uint64 requester_id, bool accepted);
+    void HandleJoinResponse(Common_Message *msg);
+
     static void steam_matchmaking_callback(void *object, Common_Message *msg);
     static void steam_matchmaking_run_every_runcb(void *object);
 

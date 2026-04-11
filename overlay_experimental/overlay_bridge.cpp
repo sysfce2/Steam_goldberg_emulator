@@ -42,6 +42,22 @@ static void safe_copy(char *dst, size_t dst_sz, const std::string &src)
     safe_copy(dst, dst_sz, src.c_str());
 }
 
+/* ── helper: map Overlay_Appearance::NotificationPosition → GSE_NotifPosition ── */
+static int bridge_map_notif_pos(int pos)
+{
+    // Overlay_Appearance::NotificationPosition: top_left=0, top_center=1, top_right=2, bot_left=3, bot_center=4, bot_right=5
+    // GSE_NotifPosition:                        TOP_LEFT=0, TOP_RIGHT=1, BOT_LEFT=2, BOT_RIGHT=3, TOP_CENTER=4, BOT_CENTER=5
+    switch (pos) {
+    case 0: return GSE_NOTIF_POS_TOP_LEFT;
+    case 1: return GSE_NOTIF_POS_TOP_CENTER;
+    case 2: return GSE_NOTIF_POS_TOP_RIGHT;
+    case 3: return GSE_NOTIF_POS_BOT_LEFT;
+    case 4: return GSE_NOTIF_POS_BOT_CENTER;
+    case 5: return GSE_NOTIF_POS_BOT_RIGHT;
+    default: return GSE_NOTIF_POS_TOP_RIGHT;
+    }
+}
+
 /* ── Exported bridge functions ────────────────────────────────────────── */
 
 extern "C" {
@@ -288,6 +304,9 @@ __declspec(dllexport) int GSE_OverlayBridge_GetOption(int option_id)
     case GSE_OPT_SHOW_FPS:                     return s->overlay_always_show_fps;
     case GSE_OPT_SHOW_FRAMETIME:               return s->overlay_always_show_frametime;
     case GSE_OPT_SHOW_PLAYTIME:                return s->overlay_always_show_playtime;
+    case GSE_OPT_NOTIF_POS_ACHIEVEMENT:        return bridge_map_notif_pos(s->overlay_appearance.ach_earned_pos);
+    case GSE_OPT_NOTIF_POS_INVITE:             return bridge_map_notif_pos(s->overlay_appearance.invite_pos);
+    case GSE_OPT_NOTIF_POS_CHAT:               return bridge_map_notif_pos(s->overlay_appearance.chat_msg_pos);
     default: return 0;
     }
 }

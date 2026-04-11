@@ -41,6 +41,7 @@ enum GSE_NotifType {
     GSE_NOTIF_ACHIEVEMENT_PROG   = 3,
     GSE_NOTIF_AUTO_ACCEPT_INVITE = 4,
     GSE_NOTIF_LOBBY_JOIN_REQ     = 5,
+    GSE_NOTIF_LOBBY_JOIN_RESP    = 6,
 };
 
 enum GSE_RendererAPI {
@@ -134,6 +135,8 @@ typedef struct GSE_Notification {
     /* For lobby join request notifications: */
     uint64_t join_request_lobby_id;
     uint64_t join_request_requester_id;
+    /* For invite/message notifications — the friend who sent it: */
+    uint64_t source_friend_id;
 } GSE_Notification;
 
 typedef struct GSE_DisplayInfo {
@@ -354,6 +357,9 @@ typedef int       (*pfn_GSE_OverlayBridge_GetLocalAvatar)(GSE_AvatarData *out); 
 #define GSE_OPT_SHOW_FPS                    13  /* bool */
 #define GSE_OPT_SHOW_FRAMETIME              14  /* bool */
 #define GSE_OPT_SHOW_PLAYTIME               15  /* bool */
+#define GSE_OPT_NOTIF_POS_ACHIEVEMENT       16  /* GSE_NotifPosition — per-type override for achievement notifications */
+#define GSE_OPT_NOTIF_POS_INVITE            17  /* GSE_NotifPosition — per-type override for invite/lobby join notifications */
+#define GSE_OPT_NOTIF_POS_CHAT              18  /* GSE_NotifPosition — per-type override for chat message notifications */
 
 /* ── Convenience: load all bridge functions from a module ─────────────── */
 

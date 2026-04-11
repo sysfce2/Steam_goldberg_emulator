@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_matchmaking.h"
+#include "dll/dll.h"
 
 #define SEND_LOBBY_RATE 5.0
 
@@ -297,6 +298,7 @@ void Steam_Matchmaking::AcceptLobbyJoinRequest(uint64 lobby_id, uint64 requester
     if (lobby && lobby->owner() == settings->get_local_steam_id().ConvertToUint64()) {
         if (add_member_to_lobby(lobby, CSteamID(requester_id))) {
             trigger_lobby_member_join_leave((uint64)lobby->room_id(), requester_id, false, true, 0.01);
+            SendJoinResponse(lobby_id, requester_id, true);
         }
     }
 
@@ -313,7 +315,57 @@ void Steam_Matchmaking::DeclineLobbyJoinRequest(uint64 lobby_id, uint64 requeste
             return r.lobby_id.ConvertToUint64() == lobby_id && r.requester_id.ConvertToUint64() == requester_id;
         });
     if (it != pending_lobby_join_requests.end()) {
+        SendJoinResponse(lobby_id, requester_id, false);
         pending_lobby_join_requests.erase(it);
+    }
+}
+
+void Steam_Matchmaking::SendJoinResponse(uint64 lobby_id, uint64 requester_id, bool accepted)
+{
+    PRINT_DEBUG("lobby=%llu requester=%llu accepted=%d", lobby_id, requester_id, (int)accepted);
+    Lobby_Messages *message = new Lobby_Messages();
+    message->set_type(Lobby_Messages::JOIN_RESPONSE);
+    message->set_id(lobby_id);
+    message->set_join_accepted(accepted);
+
+    Common_Message msg{};
+    msg.set_allocated_lobby_messages(message);
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(requester_id);
+    network->sendTo(&msg, true);
+}
+
+void Steam_Matchmaking::HandleJoinResponse(Common_Message *msg)
+{
+    uint64 lobby_id = msg->lobby_messages().id();
+    bool accepted = msg->lobby_messages().join_accepted();
+    uint64 owner_id = (uint64)msg->source_id();
+    PRINT_DEBUG("lobby=%llu accepted=%d from=%llu", lobby_id, (int)accepted, owner_id);
+
+    if (!accepted) {
+        // Find and resolve the pending join with a denial
+        auto g = std::find_if(pending_joins.begin(), pending_joins.end(),
+            [&](const Pending_Joins &pj) { return pj.lobby_id.ConvertToUint64() == lobby_id; });
+        if (g != pending_joins.end()) {
+            LobbyEnter_t data{};
+            data.m_ulSteamIDLobby = lobby_id;
+            data.m_rgfChatPermissions = 0;
+            data.m_bLocked = false;
+            data.m_EChatRoomEnterResponse = k_EChatRoomEnterResponseNotAllowed;
+            callback_results->addCallResult(g->api_id, data.k_iCallback, &data, sizeof(data));
+            callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+            pending_joins.erase(g);
+        }
+    }
+    // If accepted, the normal pending_joins logic will resolve when it sees us as a member
+
+    // Notify overlay about the response
+    Steam_Overlay *overlay = get_steam_client()->steam_overlay;
+    if (overlay) {
+        Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+        const char *name = steamFriends->GetFriendPersonaName(CSteamID(owner_id));
+        std::string owner_name = name ? name : "Unknown";
+        overlay->add_lobby_join_request_response_notification(lobby_id, owner_name, accepted);
     }
 }
 
@@ -1683,6 +1735,12 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
 
     if (msg->has_lobby_messages()) {
         PRINT_DEBUG("LOBBY MESSAGE %u " "%" PRIu64 "", msg->lobby_messages().type(), msg->lobby_messages().id());
+
+        // JOIN_RESPONSE is sent directly to the requester, not through lobby ownership
+        if (msg->lobby_messages().type() == Lobby_Messages::JOIN_RESPONSE) {
+            HandleJoinResponse(msg);
+        }
+
         Lobby *lobby = get_lobby((uint64)msg->lobby_messages().id());
         if (lobby && !lobby->deleted()) {
             bool we_are_in_lobby = !!get_lobby_member(lobby, settings->get_local_steam_id());
