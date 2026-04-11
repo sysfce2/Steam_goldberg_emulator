@@ -229,6 +229,7 @@ class Steam_Overlay
     bool overlay_state_changed = false;
 
     std::atomic<bool> i_have_lobby = false;
+    std::atomic<bool> i_have_game_server = false;
 
     // some stuff has to be initialized once the renderer hook is ready
     std::atomic<bool> late_init_imgui = false;

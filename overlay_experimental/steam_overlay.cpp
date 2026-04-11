@@ -4770,12 +4770,38 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
 {
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     Steam_Friends* steamFriends = get_steam_client()->steam_friends;
+
+    // Detect lobby state transitions
+    bool had_lobby = i_have_lobby;
     if (std::string(steamFriends->get_friend_rich_presence_silent(settings->get_local_steam_id(), "connect")).length() > 0) {
         i_have_lobby = true;
     } else if (settings->get_lobby().IsValid()) {
         i_have_lobby = true;
     } else {
         i_have_lobby = false;
+    }
+    if (!had_lobby && i_have_lobby) {
+        CSteamID lobby = settings->get_lobby();
+        std::string msg = "Lobby created";
+        if (lobby.IsValid()) msg += " (" + std::to_string(lobby.ConvertToUint64()) + ")";
+        submit_notification(notification_type::message, msg);
+    } else if (had_lobby && !i_have_lobby) {
+        submit_notification(notification_type::message, "Lobby closed");
+    }
+
+    // Detect game server state transitions
+    bool had_server = i_have_game_server;
+    Steam_GameServer *gs = get_steam_client()->steam_gameserver;
+    bool have_server = gs && gs->BLoggedOn();
+    i_have_game_server = have_server;
+    if (!had_server && have_server) {
+        const auto &sd = gs->get_server_data();
+        std::string sname = sd.server_name();
+        std::string msg = "Game server started";
+        if (!sname.empty()) msg += " (" + sname + ")";
+        submit_notification(notification_type::message, msg);
+    } else if (had_server && !have_server) {
+        submit_notification(notification_type::message, "Game server stopped");
     }
 }
 
