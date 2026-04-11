@@ -154,15 +154,15 @@ static void get_broadcast_info(uint16 port)
         ip_port->port = port;
 
         // Get adapter's own IP and netmask for subnet info
-        struct ifreq ifr_addr = i_faces[i];
-        if (ioctl(sock, SIOCGIFADDR, &ifr_addr) >= 0) {
-            struct sockaddr_in *sa = (struct sockaddr_in *)&ifr_addr.ifr_addr;
+        struct ifreq ifr_a = i_faces[i];
+        if (ioctl(sock, SIOCGIFADDR, &ifr_a) >= 0) {
+            struct sockaddr_in *sa = (struct sockaddr_in *)&ifr_a.ifr_addr;
             uint32 iface_ip = ntohl(sa->sin_addr.s_addr);
             adapter_own_ips[number_broadcasts] = iface_ip;
 
-            struct ifreq ifr_mask = i_faces[i];
-            if (ioctl(sock, SIOCGIFNETMASK, &ifr_mask) >= 0) {
-                struct sockaddr_in *sm = (struct sockaddr_in *)&ifr_mask.ifr_addr;
+            struct ifreq ifr_m = i_faces[i];
+            if (ioctl(sock, SIOCGIFNETMASK, &ifr_m) >= 0) {
+                struct sockaddr_in *sm = (struct sockaddr_in *)&ifr_m.ifr_addr;
                 uint32 mask = ntohl(sm->sin_addr.s_addr);
                 // Count prefix bits
                 uint8_t prefix = 0;
