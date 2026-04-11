@@ -730,6 +730,7 @@ static void render_notifications(effect_runtime *runtime)
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)finfo->steam_id);
 
         // Line 2: Playing AppName (AppID XXXX)
+        ImGui::SetCursorPosX(text_start.x);
         if (finfo->appid != 0) {
             if (finfo->app_name[0])
                 ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", finfo->app_name, finfo->appid);
@@ -740,6 +741,7 @@ static void render_notifications(effect_runtime *runtime)
         }
 
         // Line 3: Lobby info
+        ImGui::SetCursorPosX(text_start.x);
         if (finfo->in_lobby && finfo->lobby_id != 0) {
             if (finfo->lobby_owner_name[0])
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
@@ -1483,12 +1485,14 @@ static void render_main_overlay(effect_runtime *runtime)
                     (unsigned long long)state.steam_id);
 
                 // Line 2: Playing AppName (AppID XXXX)
+                ImGui::SetCursorPosX(text_start.x);
                 if (state.app_name[0])
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", state.app_name, state.app_id);
                 else
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", state.app_id);
 
                 // Line 3: Status - In Game / In Lobby / In Server
+                ImGui::SetCursorPosX(text_start.x);
                 bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
                 GSE_LocalLobbyInfo lobby_info{};
                 bool got_lobby_info = has_lobby && s_bridge.GetLocalLobbyInfo && s_bridge.GetLocalLobbyInfo(&lobby_info);
@@ -2113,6 +2117,9 @@ static void render_friends_list()
         float row_height = (std::max)(avatar_size, line_h * 3.0f);
         ImVec2 cursor_before = ImGui::GetCursorPos();
         ImGui::Selectable("##friend_row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(0, row_height));
+        // Capture right-click on the full selectable row for context menu
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+            ImGui::OpenPopup("##ctx_friend");
         ImGui::SetCursorPos(cursor_before);
 
         // Avatar
@@ -2139,6 +2146,7 @@ static void render_friends_list()
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)f.steam_id);
 
         // Line 2: Playing AppName (AppID XXXX)
+        ImGui::SetCursorPosX(text_start.x);
         if (f.appid != 0) {
             if (f.app_name[0])
                 ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", f.app_name, f.appid);
@@ -2150,6 +2158,7 @@ static void render_friends_list()
 
         // Line 3: Lobby info (if friend has a lobby)
         if (f.in_lobby && f.lobby_id != 0) {
+            ImGui::SetCursorPosX(text_start.x);
             if (f.lobby_owner_name[0])
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
                     (unsigned long long)f.lobby_id, f.lobby_member_count, f.lobby_member_limit, f.lobby_owner_name);
@@ -2158,8 +2167,8 @@ static void render_friends_list()
                     (unsigned long long)f.lobby_id, f.lobby_member_count, f.lobby_member_limit);
         }
 
-        // Right-click context menu
-        if (ImGui::BeginPopupContextItem("##ctx_friend")) {
+        // Right-click context menu (opened from selectable above)
+        if (ImGui::BeginPopup("##ctx_friend")) {
             if (ImGui::MenuItem(translationChat[s_current_language])) {
                 // Open chat
                 int found_idx = -1;
@@ -2411,6 +2420,7 @@ static void render_chat_windows()
                             (unsigned long long)chat.steam_id);
 
                         // Line 2: Playing AppID
+                        ImGui::SetCursorPosX(text_start.x);
                         if (finfo && finfo->appid != 0) {
                             const char *game = finfo->app_name[0] ? finfo->app_name : nullptr;
                             if (game)
@@ -2422,6 +2432,7 @@ static void render_chat_windows()
                         }
 
                         // Line 3: Status
+                        ImGui::SetCursorPosX(text_start.x);
                         if (finfo && finfo->in_lobby && finfo->lobby_id != 0) {
                             if (finfo->lobby_owner_name[0])
                                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",

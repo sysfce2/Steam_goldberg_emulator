@@ -1225,6 +1225,7 @@ void Steam_Overlay::build_chat_window()
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", frd.id());
 
                         // Line 2: Playing AppID
+                        ImGui::SetCursorPosX(text_start.x);
                         if (frd.appid() != 0) {
                             auto it = steam_preowned_app_ids.find(frd.appid());
                             std::string app_name = (it != steam_preowned_app_ids.end()) ? it->second : std::to_string(frd.appid());
@@ -1234,6 +1235,7 @@ void Steam_Overlay::build_chat_window()
                         }
 
                         // Line 3: Status
+                        ImGui::SetCursorPosX(text_start.x);
                         bool same_app = (local_appid == frd.appid());
                         if (frd.lobby_id() != 0) {
                             ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu", frd.lobby_id());
@@ -1630,6 +1632,7 @@ void Steam_Overlay::build_notifications(float width, float height)
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd_ptr->id());
 
         // Line 2: Playing AppName (AppID XXXX)
+        ImGui::SetCursorPosX(text_start.x);
         if (frd_ptr->appid() != 0) {
             auto it2 = steam_preowned_app_ids.find(frd_ptr->appid());
             std::string game = (it2 != steam_preowned_app_ids.end()) ? it2->second : std::to_string(frd_ptr->appid());
@@ -1639,6 +1642,7 @@ void Steam_Overlay::build_notifications(float width, float height)
         }
 
         // Line 3: Lobby info
+        ImGui::SetCursorPosX(text_start.x);
         if (frd_ptr->lobby_id() != 0) {
             Steam_Matchmaking *mm_n = get_steam_client()->steam_matchmaking;
             if (mm_n) {
@@ -2868,10 +2872,12 @@ void Steam_Overlay::render_main_window()
                         settings->get_local_steam_id().ConvertToUint64());
 
                     // Line 2: Playing AppName (AppID XXXX)
+                    ImGui::SetCursorPosX(text_start.x);
                     std::string app_name = resolve_app_name(local_appid);
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", app_name.c_str(), local_appid);
 
                     // Line 3: In Lobby / In Server / In Game
+                    ImGui::SetCursorPosX(text_start.x);
                     CSteamID lobby = settings->get_lobby();
                     bool in_lobby = lobby.IsValid();
                     Steam_GameServer *gs = get_steam_client()->steam_gameserver;
@@ -2977,6 +2983,9 @@ void Steam_Overlay::render_main_window()
                         float row_height = (std::max)(avatar_size, line_h * 3.0f);
                         ImVec2 cursor_before = ImGui::GetCursorPos();
                         ImGui::Selectable("##friend_row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(0, row_height));
+                        // Capture right-click on the full selectable row for context menu
+                        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                            ImGui::OpenPopup("##ctx_friend");
                         ImGui::SetCursorPos(cursor_before);
 
                         // Avatar
@@ -3003,6 +3012,7 @@ void Steam_Overlay::render_main_window()
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd.id());
 
                         // Line 2: Playing AppName (AppID XXXX)
+                        ImGui::SetCursorPosX(text_start.x);
                         if (frd.appid() != 0) {
                             std::string game = resolve_app_name(frd.appid());
                             ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game.c_str(), frd.appid());
@@ -3012,6 +3022,7 @@ void Steam_Overlay::render_main_window()
 
                         // Line 3: Lobby info (if friend has a lobby)
                         if (frd.lobby_id() != 0) {
+                            ImGui::SetCursorPosX(text_start.x);
                             Steam_Matchmaking *mm_frd = get_steam_client()->steam_matchmaking;
                             if (mm_frd) {
                                 CSteamID frd_lobby((uint64)frd.lobby_id());
@@ -3035,8 +3046,8 @@ void Steam_Overlay::render_main_window()
                             }
                         }
 
-                        // Right-click context menu
-                        if (ImGui::BeginPopupContextItem("##ctx_friend")) {
+                        // Right-click context menu (opened from selectable above)
+                        if (ImGui::BeginPopup("##ctx_friend")) {
                             if (ImGui::MenuItem(translationChat[current_language])) {
                                 state.window_state |= window_state_show;
                                 show_chat = true;
