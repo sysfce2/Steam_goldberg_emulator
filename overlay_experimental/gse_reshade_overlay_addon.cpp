@@ -730,6 +730,7 @@ static void render_notifications(effect_runtime *runtime)
             case GSE_NOTIF_INVITE:
             case GSE_NOTIF_LOBBY_JOIN_REQ:
             case GSE_NOTIF_LOBBY_JOIN_RESP:
+            case GSE_NOTIF_LOBBY_KICKED:
                 notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POS_INVITE);
                 break;
             case GSE_NOTIF_MESSAGE:
@@ -800,6 +801,7 @@ static void render_notifications(effect_runtime *runtime)
         case GSE_NOTIF_ACHIEVEMENT_PROG:
         case GSE_NOTIF_AUTO_ACCEPT_INVITE:
         case GSE_NOTIF_LOBBY_JOIN_RESP:
+        case GSE_NOTIF_LOBBY_KICKED:
             flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
             break;
         case GSE_NOTIF_MESSAGE:
@@ -898,6 +900,9 @@ static void render_notifications(effect_runtime *runtime)
                 }
                 break;
             case GSE_NOTIF_LOBBY_JOIN_RESP:
+                ImGui::TextWrapped("%s", n.message);
+                break;
+            case GSE_NOTIF_LOBBY_KICKED:
                 ImGui::TextWrapped("%s", n.message);
                 break;
             case GSE_NOTIF_AUTO_ACCEPT_INVITE:
@@ -1467,6 +1472,13 @@ static void render_main_overlay(effect_runtime *runtime)
                         ImGui::SetClipboardText(lobby_str);
                     }
                     ImGui::SameLine();
+                    // "Remove All from Lobby" — owner only, more than 1 member
+                    if (lobby_info.is_owner && lobby_info.member_count > 1 && s_bridge.KickAllLobbyMembers) {
+                        if (ImGui::Button("Remove All from Lobby##fl")) {
+                            s_bridge.KickAllLobbyMembers();
+                        }
+                        ImGui::SameLine();
+                    }
                 }
                 if (ImGui::Button(translationCopyId[s_current_language])) {
                     char id_str[32];
@@ -2091,6 +2103,16 @@ static void render_friends_list()
                     char lobby_str[32];
                     snprintf(lobby_str, sizeof(lobby_str), "%llu", (unsigned long long)f.lobby_id);
                     ImGui::SetClipboardText(lobby_str);
+                }
+            }
+            // Kick from lobby (only if friend is in our lobby and we're the owner)
+            if (f.in_my_lobby && s_bridge.FriendAction && s_bridge.GetLocalLobbyInfo) {
+                GSE_LocalLobbyInfo linfo{};
+                if (s_bridge.GetLocalLobbyInfo(&linfo) && linfo.is_owner) {
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Kick from Lobby")) {
+                        s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_KICK);
+                    }
                 }
             }
             ImGui::EndPopup();

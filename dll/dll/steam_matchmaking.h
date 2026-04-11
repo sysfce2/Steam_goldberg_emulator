@@ -131,6 +131,8 @@ public ISteamMatchmaking
 
     void SendJoinResponse(uint64 lobby_id, uint64 requester_id, bool accepted);
     void HandleJoinResponse(Common_Message *msg);
+    void SendKickMessage(uint64 lobby_id, uint64 member_id);
+    void HandleKickMessage(Common_Message *msg);
 
     static void steam_matchmaking_callback(void *object, Common_Message *msg);
     static void steam_matchmaking_run_every_runcb(void *object);
@@ -143,6 +145,10 @@ public:
     void AcceptLobbyJoinRequest(uint64 lobby_id, uint64 requester_id);
     void DeclineLobbyJoinRequest(uint64 lobby_id, uint64 requester_id);
     const std::vector<struct Pending_Lobby_Join_Request>& GetPendingLobbyJoinRequests() const { return pending_lobby_join_requests; }
+
+    // Kick members from lobby (called by overlay, owner only)
+    void KickLobbyMember(uint64 lobby_id, uint64 member_id);
+    void KickAllLobbyMembers(uint64 lobby_id);
 
     // game server favorites storage
     // saves basic details about a multiplayer game server locally

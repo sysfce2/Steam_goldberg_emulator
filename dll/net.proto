@@ -63,6 +63,7 @@ message Lobby_Messages {
         MEMBER_DATA = 3;
         CHAT_MESSAGE = 4;
         JOIN_RESPONSE = 5;
+        KICK = 6;
     }
 
     Types type = 2;

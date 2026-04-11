@@ -68,6 +68,7 @@ enum class notification_type
     auto_accept_invite,
     lobby_join_request,
     lobby_join_request_response,
+    lobby_kicked,
 };
 
 struct Overlay_Achievement
@@ -364,6 +365,8 @@ public:
 
     void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted);
 
+    void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name);
+
     void SortAchievementsByGlobalPercent(const std::map<std::string, float> &percentages);
 
     // Called by Steam_User_Stats after SteamHunters data arrives asynchronously
@@ -413,6 +416,7 @@ public:
     void Bridge_SimulateAchievements();
     void Bridge_InviteAllFriends();
     void Bridge_FriendAction(uint64_t steam_id, int action);
+    void Bridge_KickAllLobbyMembers();
     void Bridge_AcceptLobbyJoinRequest(int notification_id);
     void Bridge_DeclineLobbyJoinRequest(int notification_id);
     void Bridge_SetShowFps(bool v);
@@ -468,6 +472,8 @@ public:
     void AddAchievementNotification(const std::string &ach_name, nlohmann::json const& ach, bool for_progress) {}
 
     void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted) {}
+
+    void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name) {}
 };
 
 #endif // EMU_OVERLAY

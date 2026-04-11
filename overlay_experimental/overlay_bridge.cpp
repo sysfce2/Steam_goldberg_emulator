@@ -380,6 +380,13 @@ __declspec(dllexport) void GSE_OverlayBridge_FriendAction(uint64_t steam_id, int
     client->steam_overlay->Bridge_FriendAction(steam_id, action);
 }
 
+__declspec(dllexport) void GSE_OverlayBridge_KickAllLobbyMembers(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_KickAllLobbyMembers();
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetSceStatus(GSE_SceStatus *out)
 {
     if (!out) return 0;

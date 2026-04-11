@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 9
+#define GSE_BRIDGE_ABI_VERSION 10
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -42,6 +42,7 @@ enum GSE_NotifType {
     GSE_NOTIF_AUTO_ACCEPT_INVITE = 4,
     GSE_NOTIF_LOBBY_JOIN_REQ     = 5,
     GSE_NOTIF_LOBBY_JOIN_RESP    = 6,
+    GSE_NOTIF_LOBBY_KICKED       = 7,
 };
 
 enum GSE_RendererAPI {
@@ -212,7 +213,8 @@ typedef struct GSE_Friend {
     uint8_t  same_app;              /* 1 if friend is playing the same app */
     uint8_t  window_state;          /* bitmask: show, invite, join, etc. */
     uint8_t  in_lobby;              /* 1 if friend is currently in a lobby */
-    uint8_t  _pad[3];
+    uint8_t  in_my_lobby;           /* 1 if friend is in the local user's lobby */
+    uint8_t  _pad[2];
     uint32_t appid;                 /* friend's current app/game ID */
     uint64_t lobby_id;              /* friend's current lobby ID (0 if none) */
     char     connect_string[GSE_CONNECT_STRING_SIZE]; /* friend's connect string (may be empty) */
@@ -314,6 +316,7 @@ typedef void      (*pfn_GSE_OverlayBridge_ResetAchievements)(void);
 typedef void      (*pfn_GSE_OverlayBridge_SimulateAchievements)(void);
 typedef void      (*pfn_GSE_OverlayBridge_InviteAllFriends)(void);
 typedef void      (*pfn_GSE_OverlayBridge_FriendAction)(uint64_t steam_id, int action);
+typedef void      (*pfn_GSE_OverlayBridge_KickAllLobbyMembers)(void);
 
 /* SCE (Steam Card Exchange) */
 typedef int       (*pfn_GSE_OverlayBridge_GetSceStatus)(GSE_SceStatus *out);
@@ -340,6 +343,7 @@ typedef int       (*pfn_GSE_OverlayBridge_GetLocalAvatar)(GSE_AvatarData *out); 
 #define GSE_FRIEND_ACTION_CHAT           4
 #define GSE_FRIEND_ACTION_ACCEPT_INVITE  5
 #define GSE_FRIEND_ACTION_REFUSE_INVITE  6
+#define GSE_FRIEND_ACTION_KICK           7
 
 /* Option IDs for Get/SetOption */
 #define GSE_OPT_FRIEND_NOTIF_ENABLE          1  /* bool */
@@ -393,6 +397,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_SimulateAchievements SimulateAchievements;
     pfn_GSE_OverlayBridge_InviteAllFriends    InviteAllFriends;
     pfn_GSE_OverlayBridge_FriendAction        FriendAction;
+    pfn_GSE_OverlayBridge_KickAllLobbyMembers KickAllLobbyMembers;
     pfn_GSE_OverlayBridge_GetSceStatus        GetSceStatus;
     pfn_GSE_OverlayBridge_RequestSceDownload  RequestSceDownload;
     pfn_GSE_OverlayBridge_GetSceSeriesCount   GetSceSeriesCount;
@@ -442,6 +447,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(SimulateAchievements);
     LOAD(InviteAllFriends);
     LOAD(FriendAction);
+    LOAD(KickAllLobbyMembers);
     LOAD(GetSceStatus);
     LOAD(RequestSceDownload);
     LOAD(GetSceSeriesCount);

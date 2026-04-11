@@ -1037,6 +1037,27 @@ void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id
     allow_renderer_frame_processing(true);
 }
 
+void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name)
+{
+    PRINT_DEBUG("lobby=%llu kicker=%s", lobby_id, kicker_name.c_str());
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+
+    std::string msg = std::string("You were removed from lobby by ") + kicker_name + "\nLobby: " + std::to_string(lobby_id);
+
+    int id = find_free_notification_id(notifications);
+    if (id == 0) return;
+
+    Notification notif{};
+    notif.start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+    notif.steady_start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
+    notif.id = id;
+    notif.type = (uint8)notification_type::lobby_kicked;
+    notif.message = msg;
+
+    notifications.emplace_back(notif);
+    allow_renderer_frame_processing(true);
+}
+
 void Steam_Overlay::show_test_achievement()
 {
     PRINT_DEBUG_ENTRY();
@@ -1328,6 +1349,9 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
     
     case notification_type::lobby_join_request_response:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
+    
+    case notification_type::lobby_kicked:
+        return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
     }
 
     PRINT_DEBUG("ERROR unhandled type %i", (int)type);
@@ -1412,6 +1436,17 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
         noti_height = ljrr_msg_height + global_style.WindowPadding.y;
+    }
+    break;
+    case notification_type::lobby_kicked: {
+        pos = settings->overlay_appearance.invite_pos;
+        const float lk_msg_height = ImGui::CalcTextSize(
+            noti.message.c_str(),
+            noti.message.c_str() + noti.message.size(),
+            false,
+            noti_width - padding_all_sides - global_style.ItemSpacing.x
+        ).y;
+        noti_height = lk_msg_height + global_style.WindowPadding.y;
     }
     break;
     default: PRINT_DEBUG("ERROR: unhandled notification type %i", (int)noti.type); break;
@@ -1599,6 +1634,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                 extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
             break;
 
+            case notification_type::lobby_kicked:
+                extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            break;
+
             default:
                 PRINT_DEBUG("error unhandled flags for type %i", (int)it->type);
             break;
@@ -1687,6 +1726,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                 case notification_type::lobby_join_request_response:
                     ImGui::TextWrapped("%s", it->message.c_str());
                 break;
+
+                case notification_type::lobby_kicked:
+                    ImGui::TextWrapped("%s", it->message.c_str());
+                break;
                 
                 default:
                     PRINT_DEBUG("error unhandled notification for type %i", (int)it->type);
@@ -1727,6 +1770,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                 case notification_type::auto_accept_invite:
                 case notification_type::message:
                 case notification_type::lobby_join_request_response:
+                case notification_type::lobby_kicked:
                     // nothing
                 break;
 
@@ -2791,6 +2835,16 @@ void Steam_Overlay::render_main_window()
                             ImGui::SetClipboardText(std::to_string(lobby.ConvertToUint64()).c_str());
                         }
                         ImGui::SameLine();
+                        // "Remove All from Lobby" — owner only
+                        Steam_Matchmaking *mm_btns = get_steam_client()->steam_matchmaking;
+                        if (mm_btns && mm_btns->GetLobbyOwner(lobby) == settings->get_local_steam_id()) {
+                            if (mm_btns->GetNumLobbyMembers(lobby) > 1) {
+                                if (ImGui::Button("Remove All from Lobby##fl")) {
+                                    mm_btns->KickAllLobbyMembers(lobby.ConvertToUint64());
+                                }
+                                ImGui::SameLine();
+                            }
+                        }
                     }
                     if (ImGui::Button(translationCopyId[current_language])) {
                         ImGui::SetClipboardText(std::to_string(settings->get_local_steam_id().ConvertToUint64()).c_str());
@@ -2883,6 +2937,20 @@ void Steam_Overlay::render_main_window()
                             if (frd.lobby_id() != 0) {
                                 if (ImGui::MenuItem("Copy Lobby ID")) {
                                     ImGui::SetClipboardText(std::to_string(frd.lobby_id()).c_str());
+                                }
+                            }
+                            // Kick from lobby (only if friend is in our lobby and we're the owner)
+                            {
+                                CSteamID my_lobby = settings->get_lobby();
+                                if (my_lobby.IsValid() && frd.lobby_id() == my_lobby.ConvertToUint64()) {
+                                    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                                    CSteamID owner = mm->GetLobbyOwner(my_lobby);
+                                    if (owner == settings->get_local_steam_id()) {
+                                        ImGui::Separator();
+                                        if (ImGui::MenuItem("Kick from Lobby")) {
+                                            mm->KickLobbyMember(my_lobby.ConvertToUint64(), frd.id());
+                                        }
+                                    }
                                 }
                             }
                             ImGui::EndPopup();
@@ -4997,6 +5065,10 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
         o.lobby_id = frd.lobby_id();
         o.in_lobby = (frd.lobby_id() != 0) ? 1 : 0;
 
+        // Check if this friend is in the local user's lobby
+        CSteamID my_lobby = settings->get_lobby();
+        o.in_my_lobby = (my_lobby.IsValid() && frd.lobby_id() == my_lobby.ConvertToUint64()) ? 1 : 0;
+
         // Resolve appid → game name
         if (o.appid != 0) {
             auto it = steam_preowned_app_ids.find(o.appid);
@@ -5303,6 +5375,15 @@ void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
                     state.chat_history.append("[INVITE REFUSED] You declined the invite\n");
                 }
                 break;
+            case 7: // kick from lobby
+                {
+                    CSteamID my_lobby = settings->get_lobby();
+                    if (my_lobby.IsValid() && frd.lobby_id() == my_lobby.ConvertToUint64()) {
+                        Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                        mm->KickLobbyMember(my_lobby.ConvertToUint64(), steam_id);
+                    }
+                }
+                break;
             default: break;
             }
             break;
@@ -5338,6 +5419,18 @@ void Steam_Overlay::Bridge_DeclineLobbyJoinRequest(int notification_id)
             break;
         }
     }
+}
+
+void Steam_Overlay::Bridge_KickAllLobbyMembers()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+
+    CSteamID my_lobby = settings->get_lobby();
+    if (!my_lobby.IsValid()) return;
+
+    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+    mm->KickAllLobbyMembers(my_lobby.ConvertToUint64());
 }
 
 void Steam_Overlay::Bridge_SetShowFps(bool v)

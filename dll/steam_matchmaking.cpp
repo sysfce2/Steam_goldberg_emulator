@@ -369,6 +369,81 @@ void Steam_Matchmaking::HandleJoinResponse(Common_Message *msg)
     }
 }
 
+void Steam_Matchmaking::SendKickMessage(uint64 lobby_id, uint64 member_id)
+{
+    PRINT_DEBUG("lobby=%llu member=%llu", lobby_id, member_id);
+    Lobby_Messages *message = new Lobby_Messages();
+    message->set_type(Lobby_Messages::KICK);
+    message->set_id(lobby_id);
+
+    Common_Message msg{};
+    msg.set_allocated_lobby_messages(message);
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    msg.set_dest_id(member_id);
+    network->sendTo(&msg, true);
+}
+
+void Steam_Matchmaking::HandleKickMessage(Common_Message *msg)
+{
+    uint64 lobby_id = msg->lobby_messages().id();
+    uint64 kicker_id = (uint64)msg->source_id();
+    PRINT_DEBUG("kicked from lobby=%llu by=%llu", lobby_id, kicker_id);
+
+    Lobby *lobby = get_lobby(CSteamID(lobby_id));
+    if (lobby) {
+        on_self_enter_leave_lobby(lobby->room_id(), lobby->type(), true);
+        self_lobby_member_data.erase(lobby->room_id());
+        leave_lobby(lobby, settings->get_local_steam_id());
+    }
+
+    // Notify overlay
+    Steam_Overlay *overlay = get_steam_client()->steam_overlay;
+    if (overlay) {
+        Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+        const char *name = steamFriends->GetFriendPersonaName(CSteamID(kicker_id));
+        std::string kicker_name = name ? name : "Unknown";
+        overlay->add_lobby_kicked_notification(lobby_id, kicker_name);
+    }
+}
+
+void Steam_Matchmaking::KickLobbyMember(uint64 lobby_id, uint64 member_id)
+{
+    PRINT_DEBUG("lobby=%llu member=%llu", lobby_id, member_id);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    Lobby *lobby = get_lobby(CSteamID(lobby_id));
+    if (!lobby) return;
+    if (lobby->owner() != settings->get_local_steam_id().ConvertToUint64()) return;
+    if (member_id == settings->get_local_steam_id().ConvertToUint64()) return;
+
+    if (leave_lobby(lobby, CSteamID(member_id))) {
+        SendKickMessage(lobby_id, member_id);
+        trigger_lobby_member_join_leave(lobby_id, member_id, true, true, 0.01);
+    }
+}
+
+void Steam_Matchmaking::KickAllLobbyMembers(uint64 lobby_id)
+{
+    PRINT_DEBUG("lobby=%llu", lobby_id);
+    std::lock_guard<std::recursive_mutex> lock(global_mutex);
+
+    Lobby *lobby = get_lobby(CSteamID(lobby_id));
+    if (!lobby) return;
+    if (lobby->owner() != settings->get_local_steam_id().ConvertToUint64()) return;
+
+    std::vector<uint64> to_kick;
+    for (auto &m : lobby->members()) {
+        if (m.id() != settings->get_local_steam_id().ConvertToUint64())
+            to_kick.push_back(m.id());
+    }
+    for (uint64 mid : to_kick) {
+        if (leave_lobby(lobby, CSteamID(mid))) {
+            SendKickMessage(lobby_id, mid);
+            trigger_lobby_member_join_leave(lobby_id, mid, true, true, 0.01);
+        }
+    }
+}
+
 
 // game server favorites storage
 // saves basic details about a multiplayer game server locally
@@ -1739,6 +1814,11 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
         // JOIN_RESPONSE is sent directly to the requester, not through lobby ownership
         if (msg->lobby_messages().type() == Lobby_Messages::JOIN_RESPONSE) {
             HandleJoinResponse(msg);
+        }
+
+        // KICK is sent directly to the kicked user
+        if (msg->lobby_messages().type() == Lobby_Messages::KICK) {
+            HandleKickMessage(msg);
         }
 
         Lobby *lobby = get_lobby((uint64)msg->lobby_messages().id());
