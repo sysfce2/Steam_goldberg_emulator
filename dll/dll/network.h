@@ -94,6 +94,8 @@ struct Connection {
     std::vector<CSteamID> ids{};
     uint32 appid{};
     std::chrono::high_resolution_clock::time_point last_received{};
+    uint32 known_ips[16]{};   // all IPs seen from this peer (host byte order)
+    int known_ip_count = 0;
 };
 
 class Networking
@@ -167,6 +169,7 @@ public:
     void rmCallback(Callback_Ids id, CSteamID steam_id, void (*message_callback)(void *object, Common_Message *msg), void *object);
 
     uint32 getIP(CSteamID id);
+    int getIPs(CSteamID id, uint32 *out, int max_count);
     uint16 getPort(CSteamID id);
     uint32 getOwnIP();
 

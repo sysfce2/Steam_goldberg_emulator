@@ -2531,15 +2531,19 @@ void Steam_Overlay::render_main_window()
                 settings->get_local_steam_id().ConvertToUint64(),
                 settings->get_local_game_id().AppID());
             
-            // Show local IP address
+            // Show local IP addresses (one per adapter)
             if (network) {
-                uint32 local_ip = network->getOwnIP();
-                if (local_ip != 0) {
+                Networking::AdapterInfo local_adapters[16];
+                int local_adapter_count = network->getAdapters(local_adapters, 16);
+                for (int ai = 0; ai < local_adapter_count; ++ai) {
+                    if (local_adapters[ai].ip == 0) continue;
                     char ip_buf[24];
-                    format_ip_address(local_ip, ip_buf, sizeof(ip_buf));
-                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "IP: %s", ip_buf);
+                    format_ip_address(local_adapters[ai].ip, ip_buf, sizeof(ip_buf));
+                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "%s: %s", local_adapters[ai].name, ip_buf);
                     ImGui::SameLine();
-                    if (ImGui::SmallButton("Copy IP##local")) {
+                    char btn_id[64];
+                    snprintf(btn_id, sizeof(btn_id), "Copy##lip%d", ai);
+                    if (ImGui::SmallButton(btn_id)) {
                         ImGui::SetClipboardText(ip_buf);
                     }
                 }
@@ -3058,12 +3062,14 @@ void Steam_Overlay::render_main_window()
                             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
                         ImGui::SameLine();
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd.id());
-                        // Show detected IP if available
+                        // Show detected IPs if available
                         if (network) {
-                            uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
-                            if (frd_ip != 0) {
+                            uint32 frd_ips[16];
+                            int frd_ip_count = network->getIPs(CSteamID((uint64)frd.id()), frd_ips, 16);
+                            for (int ipi = 0; ipi < frd_ip_count; ++ipi) {
+                                if (frd_ips[ipi] == 0) continue;
                                 char ip_buf[24];
-                                format_ip_address(frd_ip, ip_buf, sizeof(ip_buf));
+                                format_ip_address(frd_ips[ipi], ip_buf, sizeof(ip_buf));
                                 ImGui::SameLine();
                                 ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", ip_buf);
                             }
@@ -3127,12 +3133,25 @@ void Steam_Overlay::render_main_window()
                                 ImGui::SetClipboardText(std::to_string(frd.id()).c_str());
                             }
                             if (network) {
-                                uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
-                                if (frd_ip != 0) {
+                                uint32 frd_ips[16];
+                                int frd_ip_count = network->getIPs(CSteamID((uint64)frd.id()), frd_ips, 16);
+                                if (frd_ip_count == 1 && frd_ips[0] != 0) {
                                     char ip_buf[24];
-                                    format_ip_address(frd_ip, ip_buf, sizeof(ip_buf));
+                                    format_ip_address(frd_ips[0], ip_buf, sizeof(ip_buf));
                                     if (ImGui::MenuItem("Copy IP")) {
                                         ImGui::SetClipboardText(ip_buf);
+                                    }
+                                } else if (frd_ip_count > 1) {
+                                    if (ImGui::BeginMenu("Copy IP")) {
+                                        for (int ipi = 0; ipi < frd_ip_count; ++ipi) {
+                                            if (frd_ips[ipi] == 0) continue;
+                                            char ip_buf[24];
+                                            format_ip_address(frd_ips[ipi], ip_buf, sizeof(ip_buf));
+                                            if (ImGui::MenuItem(ip_buf)) {
+                                                ImGui::SetClipboardText(ip_buf);
+                                            }
+                                        }
+                                        ImGui::EndMenu();
                                     }
                                 }
                             }
@@ -5405,10 +5424,22 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
             }
         }
 
-        // Get friend's detected IP address from the networking layer
+        // Get friend's detected IP addresses from the networking layer
         if (network) {
-            uint32 friend_ip = network->getIP(CSteamID((uint64)frd.id()));
-            format_ip_address(friend_ip, o.ip_str, sizeof(o.ip_str));
+            uint32 frd_ips[16];
+            int frd_ip_count = network->getIPs(CSteamID((uint64)frd.id()), frd_ips, 16);
+            o.ip_str[0] = '\0';
+            size_t pos = 0;
+            for (int k = 0; k < frd_ip_count && pos < sizeof(o.ip_str) - 20; ++k) {
+                if (frd_ips[k] == 0) continue;
+                if (pos > 0) { o.ip_str[pos++] = ','; o.ip_str[pos++] = ' '; }
+                char tmp[24];
+                format_ip_address(frd_ips[k], tmp, sizeof(tmp));
+                size_t len = strlen(tmp);
+                memcpy(o.ip_str + pos, tmp, len);
+                pos += len;
+            }
+            o.ip_str[pos] = '\0';
         }
 
         ++written;
@@ -5941,10 +5972,22 @@ int Steam_Overlay::Bridge_GetLocalIP(char *out, int max_len) const
     if (!out || max_len <= 0) return 0;
     out[0] = '\0';
     if (!network) return 0;
-    uint32 ip = network->getOwnIP();
-    if (ip == 0) return 0;
-    format_ip_address(ip, out, (size_t)max_len);
-    return (out[0] != '\0') ? 1 : 0;
+    Networking::AdapterInfo adapters[16];
+    int count = network->getAdapters(adapters, 16);
+    size_t pos = 0;
+    int written = 0;
+    for (int i = 0; i < count && pos < (size_t)max_len - 20; ++i) {
+        if (adapters[i].ip == 0) continue;
+        if (pos > 0) { out[pos++] = ','; out[pos++] = ' '; }
+        char tmp[24];
+        format_ip_address(adapters[i].ip, tmp, sizeof(tmp));
+        size_t len = strlen(tmp);
+        memcpy(out + pos, tmp, len);
+        pos += len;
+        ++written;
+    }
+    out[pos] = '\0';
+    return written;
 }
 
 int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) const
@@ -6004,29 +6047,32 @@ int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) 
             u.is_self = 1;
         }
 
-        // Add friends whose IP falls in this adapter's subnet
+        // Add friends — check ALL known IPs per friend, not just the primary one
         for (const auto &[frd, state] : friends) {
             if (o.user_count >= GSE_NET_MAX_USERS_PER_ADAPTER) break;
-            uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
-            if (frd_ip != 0 && ip_in_subnet(frd_ip, a)) {
-                auto &u = o.users[o.user_count++];
-                u.steam_id = (uint64)frd.id();
-                strncpy(u.name, frd.name().c_str(), sizeof(u.name) - 1);
-                format_ip_address(frd_ip, u.ip_str, sizeof(u.ip_str));
-                u.is_self = 0;
-                assigned.insert((uint64)frd.id());
+            uint32 frd_ips[16];
+            int frd_ip_count = network->getIPs(CSteamID((uint64)frd.id()), frd_ips, 16);
+            for (int k = 0; k < frd_ip_count; ++k) {
+                if (frd_ips[k] != 0 && ip_in_subnet(frd_ips[k], a)) {
+                    auto &u = o.users[o.user_count++];
+                    u.steam_id = (uint64)frd.id();
+                    strncpy(u.name, frd.name().c_str(), sizeof(u.name) - 1);
+                    format_ip_address(frd_ips[k], u.ip_str, sizeof(u.ip_str));
+                    u.is_self = 0;
+                    assigned.insert((uint64)frd.id());
+                    break; // one entry per friend per adapter
+                }
             }
         }
     }
 
-    // Add an "Other" adapter for friends whose IP doesn't match any adapter subnet
+    // Add an "Other" adapter for friends with no IP matching any adapter subnet
     int result_count = adapter_count;
     bool need_other = false;
     for (const auto &[frd, state] : friends) {
-        uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
-        if (frd_ip != 0 && assigned.find((uint64)frd.id()) == assigned.end()) {
-            need_other = true;
-            break;
+        if (assigned.find((uint64)frd.id()) == assigned.end()) {
+            uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
+            if (frd_ip != 0) { need_other = true; break; }
         }
     }
     if (need_other && result_count < max_adapters) {
@@ -6038,8 +6084,9 @@ int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) 
 
         for (const auto &[frd, state] : friends) {
             if (o.user_count >= GSE_NET_MAX_USERS_PER_ADAPTER) break;
+            if (assigned.find((uint64)frd.id()) != assigned.end()) continue;
             uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
-            if (frd_ip != 0 && assigned.find((uint64)frd.id()) == assigned.end()) {
+            if (frd_ip != 0) {
                 auto &u = o.users[o.user_count++];
                 u.steam_id = (uint64)frd.id();
                 strncpy(u.name, frd.name().c_str(), sizeof(u.name) - 1);

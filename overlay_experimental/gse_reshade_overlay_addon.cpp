@@ -1573,9 +1573,9 @@ static void render_main_overlay(effect_runtime *runtime)
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
                     (unsigned long long)state.steam_id);
-                // Show local IP if available
+                // Show local IPs if available
                 if (s_bridge.GetLocalIP) {
-                    char local_ip[24] = {};
+                    char local_ip[256] = {};
                     if (s_bridge.GetLocalIP(local_ip, sizeof(local_ip)) && local_ip[0]) {
                         ImGui::SameLine();
                         ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", local_ip);
@@ -1666,11 +1666,31 @@ static void render_main_overlay(effect_runtime *runtime)
                     ImGui::SetClipboardText(id_str);
                 }
                 if (s_bridge.GetLocalIP) {
-                    char local_ip[24] = {};
+                    char local_ip[256] = {};
                     if (s_bridge.GetLocalIP(local_ip, sizeof(local_ip)) && local_ip[0]) {
-                        ImGui::SameLine();
-                        if (ImGui::Button("Copy IP##local")) {
-                            ImGui::SetClipboardText(local_ip);
+                        // Check if multiple IPs (contains comma)
+                        if (strchr(local_ip, ',')) {
+                            ImGui::SameLine();
+                            if (ImGui::BeginMenu("Copy IP##local")) {
+                                char tmp[256];
+                                strncpy(tmp, local_ip, sizeof(tmp) - 1);
+                                tmp[sizeof(tmp) - 1] = '\0';
+                                char *ctx = nullptr;
+                                char *tok = strtok_s(tmp, ",", &ctx);
+                                while (tok) {
+                                    while (*tok == ' ') ++tok;
+                                    if (ImGui::MenuItem(tok)) {
+                                        ImGui::SetClipboardText(tok);
+                                    }
+                                    tok = strtok_s(nullptr, ",", &ctx);
+                                }
+                                ImGui::EndMenu();
+                            }
+                        } else {
+                            ImGui::SameLine();
+                            if (ImGui::Button("Copy IP##local")) {
+                                ImGui::SetClipboardText(local_ip);
+                            }
                         }
                     }
                 }
@@ -2379,8 +2399,28 @@ static void render_friends_list()
                 ImGui::SetClipboardText(id_str);
             }
             if (f.ip_str[0]) {
-                if (ImGui::MenuItem("Copy IP")) {
-                    ImGui::SetClipboardText(f.ip_str);
+                // Check if there are multiple IPs (contains comma)
+                if (strchr(f.ip_str, ',')) {
+                    if (ImGui::BeginMenu("Copy IP")) {
+                        // Parse comma-separated IPs
+                        char tmp[256];
+                        strncpy(tmp, f.ip_str, sizeof(tmp) - 1);
+                        tmp[sizeof(tmp) - 1] = '\0';
+                        char *ctx = nullptr;
+                        char *tok = strtok_s(tmp, ",", &ctx);
+                        while (tok) {
+                            while (*tok == ' ') ++tok; // trim leading space
+                            if (ImGui::MenuItem(tok)) {
+                                ImGui::SetClipboardText(tok);
+                            }
+                            tok = strtok_s(nullptr, ",", &ctx);
+                        }
+                        ImGui::EndMenu();
+                    }
+                } else {
+                    if (ImGui::MenuItem("Copy IP")) {
+                        ImGui::SetClipboardText(f.ip_str);
+                    }
                 }
             }
             if (f.lobby_id != 0) {

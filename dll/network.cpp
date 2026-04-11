@@ -709,6 +709,20 @@ bool Networking::handle_announce(Common_Message *msg, IP_PORT ip_port)
     conn->tcp_ip_port.port = htons(msg->announce().tcp_port());
     conn->appid = msg->announce().appid();
 
+    // Track all unique IPs seen from this peer (host byte order)
+    {
+        uint32 ip_host = ntohl(ip_port.ip);
+        if (ip_host != 0) {
+            bool found = false;
+            for (int i = 0; i < conn->known_ip_count; ++i) {
+                if (conn->known_ips[i] == ip_host) { found = true; break; }
+            }
+            if (!found && conn->known_ip_count < 16) {
+                conn->known_ips[conn->known_ip_count++] = ip_host;
+            }
+        }
+    }
+
     for (int i = 0; i < msg->announce().ids_size(); ++i) {
         add_id_connection(conn, (uint64) msg->announce().ids(i));
     }
@@ -1264,6 +1278,18 @@ uint32 Networking::getIP(CSteamID id)
     }
 
     return 0;
+}
+
+int Networking::getIPs(CSteamID id, uint32 *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+    Connection *conn = find_connection(id, this->appid);
+    if (!conn) return 0;
+    int count = (std::min)(max_count, conn->known_ip_count);
+    for (int i = 0; i < count; ++i) {
+        out[i] = conn->known_ips[i];  // already host byte order
+    }
+    return count;
 }
 
 uint16 Networking::getPort(CSteamID id)

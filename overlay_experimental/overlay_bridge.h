@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 14
+#define GSE_BRIDGE_ABI_VERSION 15
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -223,7 +223,7 @@ typedef struct GSE_Friend {
     int32_t  lobby_member_count;    /* number of members in friend's lobby */
     int32_t  lobby_member_limit;    /* max members allowed in friend's lobby */
     char     app_name[256];         /* resolved game name for friend's appid (may be empty) */
-    char     ip_str[24];            /* detected IP address as dotted-quad string (empty if unknown) */
+    char     ip_str[256];            /* detected IP addresses, comma-separated (empty if unknown) */
 } GSE_Friend;
 
 typedef struct GSE_LocalLobbyInfo {
