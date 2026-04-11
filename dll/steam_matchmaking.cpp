@@ -391,7 +391,7 @@ void Steam_Matchmaking::HandleKickMessage(Common_Message *msg)
 
     Lobby *lobby = get_lobby(CSteamID(lobby_id));
     if (lobby) {
-        on_self_enter_leave_lobby(lobby->room_id(), lobby->type(), true);
+        on_self_enter_leave_lobby(CSteamID((uint64)lobby->room_id()), lobby->type(), true);
         self_lobby_member_data.erase(lobby->room_id());
         leave_lobby(lobby, settings->get_local_steam_id());
     }

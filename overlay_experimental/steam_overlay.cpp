@@ -1379,6 +1379,11 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
         noti_width - padding_all_sides - global_style.ItemSpacing.x
     ).y;
     float noti_height = msg_height;
+
+    // Extra height for friend avatar + 3-line header (invite, message, join request, response, kicked)
+    const float friend_header_height = (noti.source_friend_id != 0)
+        ? std::max(48.0f, ImGui::GetTextLineHeight() * 3.0f) + global_style.ItemSpacing.y + 1.0f /* separator */
+        : 0.0f;
     
     // get the required position
     Overlay_Appearance::NotificationPosition pos = Overlay_Appearance::default_pos;
@@ -1416,10 +1421,13 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
-        noti_height = msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
+        noti_height = friend_header_height + msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
     }
     break;
-    case notification_type::message: pos = settings->overlay_appearance.chat_msg_pos; break;
+    case notification_type::message:
+        pos = settings->overlay_appearance.chat_msg_pos;
+        noti_height += friend_header_height;
+    break;
     case notification_type::lobby_join_request: {
         pos = settings->overlay_appearance.invite_pos;
         const float ljr_msg_height = ImGui::CalcTextSize(
@@ -1428,7 +1436,7 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
-        noti_height = ljr_msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
+        noti_height = friend_header_height + ljr_msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
     }
     break;
     case notification_type::lobby_join_request_response: {
@@ -1439,7 +1447,7 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
-        noti_height = ljrr_msg_height + global_style.WindowPadding.y;
+        noti_height = friend_header_height + ljrr_msg_height + global_style.WindowPadding.y;
     }
     break;
     case notification_type::lobby_kicked: {
@@ -1450,7 +1458,7 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
-        noti_height = lk_msg_height + global_style.WindowPadding.y;
+        noti_height = friend_header_height + lk_msg_height + global_style.WindowPadding.y;
     }
     break;
     default: PRINT_DEBUG("ERROR: unhandled notification type %i", (int)noti.type); break;

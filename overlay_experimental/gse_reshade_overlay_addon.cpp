@@ -783,6 +783,12 @@ static void render_notifications(effect_runtime *runtime)
                             n.ach_max_progress > 0;
         if (has_progress) notif_h += font_size + ImGui::GetStyle().WindowPadding.y;
 
+        // Add friend header height for notification types that display avatar + 3-line info
+        if (n.source_friend_id != 0) {
+            float friend_hdr = (std::max)(48.0f, font_size * 3.0f) + ImGui::GetStyle().ItemSpacing.y + 1.0f;
+            notif_h += friend_hdr;
+        }
+
         // Get position preference (per-type, matching native overlay)
         int notif_pos = GSE_NOTIF_POS_TOP_RIGHT; // fallback default
         if (s_bridge.GetOption) {

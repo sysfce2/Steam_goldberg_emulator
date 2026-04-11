@@ -21,7 +21,7 @@
 #include "dll/dll.h"                    // get_steam_client()
 #include "dll/steam_client.h"           // Steam_Client → steam_overlay
 #include "overlay/steam_overlay.h"
-#include "dll/dll/steam_app_ids.h"      // steam_preowned_app_ids
+#include "dll/steam_app_ids.h"      // steam_preowned_app_ids
 
 #include <cstring>
 #include <algorithm>
