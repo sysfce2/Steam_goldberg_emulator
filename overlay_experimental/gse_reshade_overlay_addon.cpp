@@ -1573,12 +1573,18 @@ static void render_main_overlay(effect_runtime *runtime)
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
                     (unsigned long long)state.steam_id);
-                // Show local IPs if available
+                // Show local IPs if available (one line per adapter)
                 if (s_bridge.GetLocalIP) {
-                    char local_ip[256] = {};
+                    char local_ip[512] = {};
                     if (s_bridge.GetLocalIP(local_ip, sizeof(local_ip)) && local_ip[0]) {
-                        ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", local_ip);
+                        // Parse newline-separated "AdapterName: IP" lines
+                        char *line = local_ip;
+                        while (line && *line) {
+                            char *nl = strchr(line, '\n');
+                            if (nl) *nl = '\0';
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "%s", line);
+                            line = nl ? nl + 1 : nullptr;
+                        }
                     }
                 }
 
@@ -1666,30 +1672,38 @@ static void render_main_overlay(effect_runtime *runtime)
                     ImGui::SetClipboardText(id_str);
                 }
                 if (s_bridge.GetLocalIP) {
-                    char local_ip[256] = {};
+                    char local_ip[512] = {};
                     if (s_bridge.GetLocalIP(local_ip, sizeof(local_ip)) && local_ip[0]) {
-                        // Check if multiple IPs (contains comma)
-                        if (strchr(local_ip, ',')) {
+                        // Check if multiple adapters (contains newline)
+                        if (strchr(local_ip, '\n')) {
                             ImGui::SameLine();
                             if (ImGui::BeginMenu("Copy IP##local")) {
-                                char tmp[256];
+                                char tmp[512];
                                 strncpy(tmp, local_ip, sizeof(tmp) - 1);
                                 tmp[sizeof(tmp) - 1] = '\0';
-                                char *ctx = nullptr;
-                                char *tok = strtok_s(tmp, ",", &ctx);
-                                while (tok) {
-                                    while (*tok == ' ') ++tok;
-                                    if (ImGui::MenuItem(tok)) {
-                                        ImGui::SetClipboardText(tok);
+                                // Parse newline-separated "AdapterName: IP" lines
+                                char *line = tmp;
+                                while (line && *line) {
+                                    char *nl = strchr(line, '\n');
+                                    if (nl) *nl = '\0';
+                                    // Extract just the IP part after ": " for clipboard
+                                    char *colon = strstr(line, ": ");
+                                    const char *ip_only = colon ? colon + 2 : line;
+                                    // Show full "AdapterName: IP" as label
+                                    if (ImGui::MenuItem(line)) {
+                                        ImGui::SetClipboardText(ip_only);
                                     }
-                                    tok = strtok_s(nullptr, ",", &ctx);
+                                    line = nl ? nl + 1 : nullptr;
                                 }
                                 ImGui::EndMenu();
                             }
                         } else {
                             ImGui::SameLine();
+                            // Single adapter — extract IP after ": "
+                            char *colon = strstr(local_ip, ": ");
+                            const char *ip_only = colon ? colon + 2 : local_ip;
                             if (ImGui::Button("Copy IP##local")) {
-                                ImGui::SetClipboardText(local_ip);
+                                ImGui::SetClipboardText(ip_only);
                             }
                         }
                     }

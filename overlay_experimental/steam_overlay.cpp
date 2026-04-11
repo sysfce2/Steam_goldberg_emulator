@@ -6002,9 +6002,17 @@ int Steam_Overlay::Bridge_GetLocalIP(char *out, int max_len) const
     int count = network->getAdapters(adapters, 16);
     size_t pos = 0;
     int written = 0;
-    for (int i = 0; i < count && pos < (size_t)max_len - 20; ++i) {
+    for (int i = 0; i < count && pos < (size_t)max_len - 60; ++i) {
         if (adapters[i].ip == 0) continue;
-        if (pos > 0) { out[pos++] = ','; out[pos++] = ' '; }
+        if (pos > 0) { out[pos++] = '\n'; }
+        // Format: "AdapterName: IP"
+        size_t name_len = strlen(adapters[i].name);
+        if (name_len > 0) {
+            memcpy(out + pos, adapters[i].name, name_len);
+            pos += name_len;
+            out[pos++] = ':';
+            out[pos++] = ' ';
+        }
         char tmp[24];
         format_ip_address(adapters[i].ip, tmp, sizeof(tmp));
         size_t len = strlen(tmp);
