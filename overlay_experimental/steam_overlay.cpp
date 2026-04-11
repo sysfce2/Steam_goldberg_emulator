@@ -30,6 +30,10 @@
 #include "fonts/unifont.hpp"
 // builtin audio
 #include "overlay/notification.h"
+#include "overlay_bridge.h"
+
+// forward declaration — defined later in this file
+static void format_ip_address(uint32 ip, char *buf, size_t len);
 
 #define URL_WINDOW_NAME "URL Window"
 
@@ -4989,8 +4993,6 @@ void Steam_Overlay::networking_msg_received(Common_Message *msg)
  *  These run on whatever thread the addon calls from (ReShade render thread).
  *  We lock overlay_mutex for thread safety.
  * ══════════════════════════════════════════════════════════════════════════ */
-
-#include "overlay_bridge.h"
 
 bool Steam_Overlay::Bridge_GetWarnLocalSave() const
 {
