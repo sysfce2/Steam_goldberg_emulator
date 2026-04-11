@@ -5966,10 +5966,12 @@ int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) 
     }
 
     // Helper to check if an IP (host byte order) falls in an adapter's subnet
+    // lower/upper are stored in network byte order, so convert to host for proper range comparison
     auto ip_in_subnet = [](uint32 ip_host, const Networking::AdapterInfo &a) -> bool {
         if (a.lower == 0 && a.upper == 0) return false;
-        uint32 ip_net = htonl(ip_host);
-        return ip_net >= a.lower && ip_net <= a.upper;
+        uint32 lower_host = ntohl(a.lower);
+        uint32 upper_host = ntohl(a.upper);
+        return ip_host >= lower_host && ip_host <= upper_host;
     };
 
     uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
