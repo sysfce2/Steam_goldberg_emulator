@@ -466,6 +466,8 @@ public:
     void FriendUpdate(Friend _friend) {}
 
     void AddAchievementNotification(const std::string &ach_name, nlohmann::json const& ach, bool for_progress) {}
+
+    void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted) {}
 };
 
 #endif // EMU_OVERLAY
