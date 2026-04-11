@@ -162,6 +162,7 @@ class Steam_Overlay
     bool show_chat = false;
     bool show_achievements = false;
     bool show_settings = false;
+    bool show_networks = false;
     bool show_sce_browser = false;
 
     // SCE asset download progress (set by NotifySceAssetsReady, read on render thread)
@@ -440,6 +441,9 @@ public:
 
     // IP address support for ReShade addon
     int  Bridge_GetLocalIP(char *out, int max_len) const;
+
+    // Network topology for overlay
+    int  Bridge_GetNetworkInfo(struct GSE_NetAdapter *out, int max_adapters) const;
 };
 
 #else // EMU_OVERLAY

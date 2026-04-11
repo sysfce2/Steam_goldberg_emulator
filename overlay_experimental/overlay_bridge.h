@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 13
+#define GSE_BRIDGE_ABI_VERSION 14
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -375,6 +375,28 @@ typedef struct GSE_NotifAppearance {
 typedef int       (*pfn_GSE_OverlayBridge_GetNotifAppearance)(GSE_NotifAppearance *out);  /* returns 1 on success */
 typedef int       (*pfn_GSE_OverlayBridge_GetLocalIP)(char *out, int max_len);             /* returns 1 if IP available */
 
+/* ── Network topology info ───────────────────────────────────────────── */
+#define GSE_NET_MAX_USERS_PER_ADAPTER 32
+
+typedef struct GSE_NetUser {
+    uint64_t steam_id;
+    char     name[128];
+    char     ip_str[24];
+    uint8_t  is_self;           /* 1 if this is the local user */
+    uint8_t  _pad[7];
+} GSE_NetUser;
+
+typedef struct GSE_NetAdapter {
+    char     name[128];         /* adapter friendly name (e.g. "Ethernet", "Wi-Fi") */
+    char     ip_str[24];        /* our IP on this adapter (dotted-quad) */
+    char     subnet_str[32];    /* CIDR notation (e.g. "192.168.1.0/24") */
+    int32_t  user_count;        /* number of entries in users[] */
+    int32_t  _pad;
+    GSE_NetUser users[GSE_NET_MAX_USERS_PER_ADAPTER];
+} GSE_NetAdapter;
+
+typedef int       (*pfn_GSE_OverlayBridge_GetNetworkInfo)(GSE_NetAdapter *out, int max_adapters); /* returns adapter count */
+
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE         1
 #define GSE_FRIEND_ACTION_JOIN           2
@@ -451,6 +473,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetLocalAvatar      GetLocalAvatar;
     pfn_GSE_OverlayBridge_GetNotifAppearance  GetNotifAppearance;
     pfn_GSE_OverlayBridge_GetLocalIP           GetLocalIP;
+    pfn_GSE_OverlayBridge_GetNetworkInfo       GetNetworkInfo;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -503,6 +526,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetLocalAvatar);
     LOAD(GetNotifAppearance);
     LOAD(GetLocalIP);
+    LOAD(GetNetworkInfo);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

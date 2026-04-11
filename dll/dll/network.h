@@ -170,6 +170,16 @@ public:
     uint16 getPort(CSteamID id);
     uint32 getOwnIP();
 
+    struct AdapterInfo {
+        uint32 ip;            // adapter's own IP (host byte order)
+        uint32 lower;         // subnet start (network byte order)
+        uint32 upper;         // subnet end / broadcast (network byte order)
+        uint8_t prefix_len;   // CIDR prefix (e.g. 24)
+        char name[128];       // adapter friendly name
+    };
+    int getAdapters(AdapterInfo *out, int max_count);
+    int getConnectedUsers(CSteamID *out, int max_count);
+
     void startQuery(IP_PORT ip_port);
     void shutDownQuery();
     bool isQueryAlive();

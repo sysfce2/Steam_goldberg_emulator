@@ -2668,6 +2668,12 @@ void Steam_Overlay::render_main_window()
             show_settings = !show_settings;
         }
 
+        ImGui::SameLine();
+        // user clicked on "networks"
+        if (ImGui::Button("Networks")) {
+            show_networks = !show_networks;
+        }
+
         // SCE buttons — only shown when SCE catalog data is present
         {
             Steam_User_Stats *user_stats = get_steam_client()->steam_user_stats;
@@ -4216,6 +4222,72 @@ void Steam_Overlay::render_main_window()
                 }
             }
 
+            ImGui::End();
+        }
+
+        // Networks panel — show all adapters and users grouped by subnet
+        if (show_networks) {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(ImGui::GetFontSize() * 20, ImGui::GetFontSize() * 12), ImVec2(8192, 8192));
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            if (ImGui::Begin("Networks", &show_networks)) {
+                GSE_NetAdapter adapters[8];
+                int count = Bridge_GetNetworkInfo(adapters, 8);
+
+                if (count == 0) {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No network adapters detected");
+                }
+
+                for (int ai = 0; ai < count; ++ai) {
+                    auto &a = adapters[ai];
+                    // Collapsible header per adapter
+                    char header[256];
+                    if (a.subnet_str[0])
+                        snprintf(header, sizeof(header), "%s (%s) - %s", a.name, a.ip_str, a.subnet_str);
+                    else
+                        snprintf(header, sizeof(header), "%s", a.name);
+
+                    if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
+                        for (int ui = 0; ui < a.user_count; ++ui) {
+                            auto &u = a.users[ui];
+                            ImGui::PushID(ai * 100 + ui);
+
+                            if (u.is_self) {
+                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), u8"  \u25CF %s", u.name);
+                                ImGui::SameLine();
+                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                                ImGui::SameLine();
+                                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[You]");
+                            } else {
+                                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), u8"  \u25CF %s", u.name);
+                                ImGui::SameLine();
+                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                            }
+                            // Right-click context menu for copy
+                            if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                                ImGui::OpenPopup("##net_ctx");
+                            if (ImGui::BeginPopup("##net_ctx")) {
+                                if (ImGui::MenuItem("Copy IP")) {
+                                    ImGui::SetClipboardText(u.ip_str);
+                                }
+                                if (ImGui::MenuItem("Copy Name")) {
+                                    ImGui::SetClipboardText(u.name);
+                                }
+                                char id_str[32];
+                                snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)u.steam_id);
+                                if (ImGui::MenuItem("Copy Steam ID")) {
+                                    ImGui::SetClipboardText(id_str);
+                                }
+                                ImGui::EndPopup();
+                            }
+
+                            ImGui::PopID();
+                        }
+                        if (a.user_count == 0) {
+                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "  (no users detected)");
+                        }
+                    }
+                }
+            }
             ImGui::End();
         }
 
@@ -5871,6 +5943,110 @@ int Steam_Overlay::Bridge_GetLocalIP(char *out, int max_len) const
     if (ip == 0) return 0;
     format_ip_address(ip, out, (size_t)max_len);
     return (out[0] != '\0') ? 1 : 0;
+}
+
+int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) const
+{
+    if (!out || max_adapters <= 0 || !network) return 0;
+    memset(out, 0, sizeof(GSE_NetAdapter) * max_adapters);
+
+    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+
+    // Get adapter info
+    Networking::AdapterInfo adapters[16];
+    int adapter_count = network->getAdapters(adapters, 16);
+    if (adapter_count > max_adapters) adapter_count = max_adapters;
+
+    // Build name→friend map from friends list
+    std::unordered_map<uint64, std::string> id_to_name;
+    for (const auto &[frd, state] : friends) {
+        id_to_name[(uint64)frd.id()] = frd.name();
+    }
+
+    // Helper to check if an IP (host byte order) falls in an adapter's subnet
+    auto ip_in_subnet = [](uint32 ip_host, const Networking::AdapterInfo &a) -> bool {
+        if (a.lower == 0 && a.upper == 0) return false;
+        uint32 ip_net = htonl(ip_host);
+        return ip_net >= a.lower && ip_net <= a.upper;
+    };
+
+    uint64 local_id = settings->get_local_steam_id().ConvertToUint64();
+    std::string local_name = settings->get_local_name();
+
+    // Track which friends were assigned to at least one adapter
+    std::unordered_set<uint64> assigned;
+
+    for (int i = 0; i < adapter_count; ++i) {
+        auto &a = adapters[i];
+        auto &o = out[i];
+
+        strncpy(o.name, a.name, sizeof(o.name) - 1);
+        format_ip_address(a.ip, o.ip_str, sizeof(o.ip_str));
+
+        // Build CIDR string
+        uint32 net_ip = ntohl(a.lower);
+        snprintf(o.subnet_str, sizeof(o.subnet_str), "%u.%u.%u.%u/%u",
+            (net_ip >> 24) & 0xFF, (net_ip >> 16) & 0xFF, (net_ip >> 8) & 0xFF, net_ip & 0xFF,
+            a.prefix_len);
+
+        o.user_count = 0;
+
+        // Add ourselves (our adapter IP)
+        if (o.user_count < GSE_NET_MAX_USERS_PER_ADAPTER) {
+            auto &u = o.users[o.user_count++];
+            u.steam_id = local_id;
+            strncpy(u.name, local_name.c_str(), sizeof(u.name) - 1);
+            format_ip_address(a.ip, u.ip_str, sizeof(u.ip_str));
+            u.is_self = 1;
+        }
+
+        // Add friends whose IP falls in this adapter's subnet
+        for (const auto &[frd, state] : friends) {
+            if (o.user_count >= GSE_NET_MAX_USERS_PER_ADAPTER) break;
+            uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
+            if (frd_ip != 0 && ip_in_subnet(frd_ip, a)) {
+                auto &u = o.users[o.user_count++];
+                u.steam_id = (uint64)frd.id();
+                strncpy(u.name, frd.name().c_str(), sizeof(u.name) - 1);
+                format_ip_address(frd_ip, u.ip_str, sizeof(u.ip_str));
+                u.is_self = 0;
+                assigned.insert((uint64)frd.id());
+            }
+        }
+    }
+
+    // Add an "Other" adapter for friends whose IP doesn't match any adapter subnet
+    int result_count = adapter_count;
+    bool need_other = false;
+    for (const auto &[frd, state] : friends) {
+        uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
+        if (frd_ip != 0 && assigned.find((uint64)frd.id()) == assigned.end()) {
+            need_other = true;
+            break;
+        }
+    }
+    if (need_other && result_count < max_adapters) {
+        auto &o = out[result_count];
+        strncpy(o.name, "Other", sizeof(o.name) - 1);
+        o.ip_str[0] = '\0';
+        o.subnet_str[0] = '\0';
+        o.user_count = 0;
+
+        for (const auto &[frd, state] : friends) {
+            if (o.user_count >= GSE_NET_MAX_USERS_PER_ADAPTER) break;
+            uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
+            if (frd_ip != 0 && assigned.find((uint64)frd.id()) == assigned.end()) {
+                auto &u = o.users[o.user_count++];
+                u.steam_id = (uint64)frd.id();
+                strncpy(u.name, frd.name().c_str(), sizeof(u.name) - 1);
+                format_ip_address(frd_ip, u.ip_str, sizeof(u.ip_str));
+                u.is_self = 0;
+            }
+        }
+        result_count++;
+    }
+
+    return result_count;
 }
 
 #endif

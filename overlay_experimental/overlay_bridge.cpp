@@ -613,6 +613,14 @@ __declspec(dllexport) int GSE_OverlayBridge_GetLocalIP(char *out, int max_len)
     return client->steam_overlay->Bridge_GetLocalIP(out, max_len);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters)
+{
+    if (!out || max_adapters <= 0) return 0;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetNetworkInfo(out, max_adapters);
+}
+
 } // extern "C"
 
 #endif // EMU_OVERLAY

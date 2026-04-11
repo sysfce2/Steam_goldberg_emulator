@@ -86,6 +86,7 @@ static bool s_show_achievements = false;
 static bool s_show_settings     = false;
 static bool s_show_user_info    = false;
 static bool s_show_friends      = false;
+static bool s_show_networks     = false;
 static bool s_show_sce_browser  = false;
 static bool s_show_chat         = false;
 static int  s_active_chat_idx   = 0;  // currently selected chat tab
@@ -1398,6 +1399,10 @@ static void render_main_overlay(effect_runtime *runtime)
     if (ImGui::Button(translationSettings[s_current_language]))
         s_show_settings = !s_show_settings;
 
+    ImGui::SameLine();
+    if (ImGui::Button("Networks"))
+        s_show_networks = !s_show_networks;
+
     // ── SCE buttons (matching native: only shown when catalog data is present) ──
     if (s_bridge.GetSceStatus) {
         GSE_SceStatus sce{};
@@ -1748,6 +1753,71 @@ static void render_main_overlay(effect_runtime *runtime)
             }
             ImGui::End();
         }
+    }
+
+    // ── Networks Window ──
+    if (s_show_networks && s_bridge.GetNetworkInfo) {
+        ImGui::SetNextWindowSizeConstraints(ImVec2(ImGui::GetFontSize() * 20, ImGui::GetFontSize() * 12), ImVec2(8192, 8192));
+        ImGui::SetNextWindowBgAlpha(1.0f);
+        if (ImGui::Begin("Networks", &s_show_networks)) {
+            GSE_NetAdapter adapters[8];
+            int count = s_bridge.GetNetworkInfo(adapters, 8);
+
+            if (count == 0) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No network adapters detected");
+            }
+
+            for (int ai = 0; ai < count; ++ai) {
+                auto &a = adapters[ai];
+                char header[256];
+                if (a.subnet_str[0])
+                    snprintf(header, sizeof(header), "%s (%s) - %s", a.name, a.ip_str, a.subnet_str);
+                else
+                    snprintf(header, sizeof(header), "%s", a.name);
+
+                if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
+                    for (int ui = 0; ui < a.user_count; ++ui) {
+                        auto &u = a.users[ui];
+                        ImGui::PushID(ai * 100 + ui);
+
+                        if (u.is_self) {
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), u8"  \u25CF %s", u.name);
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[You]");
+                        } else {
+                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), u8"  \u25CF %s", u.name);
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                        }
+                        // Right-click context menu for copy
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                            ImGui::OpenPopup("##net_ctx");
+                        if (ImGui::BeginPopup("##net_ctx")) {
+                            if (ImGui::MenuItem("Copy IP")) {
+                                ImGui::SetClipboardText(u.ip_str);
+                            }
+                            if (ImGui::MenuItem("Copy Name")) {
+                                ImGui::SetClipboardText(u.name);
+                            }
+                            char id_str[32];
+                            snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)u.steam_id);
+                            if (ImGui::MenuItem("Copy Steam ID")) {
+                                ImGui::SetClipboardText(id_str);
+                            }
+                            ImGui::EndPopup();
+                        }
+
+                        ImGui::PopID();
+                    }
+                    if (a.user_count == 0) {
+                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "  (no users detected)");
+                    }
+                }
+            }
+        }
+        ImGui::End();
     }
 
     // ── Achievement Window (separate Begin(), matching native) ──

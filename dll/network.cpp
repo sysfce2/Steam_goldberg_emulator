@@ -23,6 +23,9 @@ static int number_broadcasts = -1;
 static IP_PORT broadcasts[MAX_BROADCASTS];
 static uint32_t lower_range_ips[MAX_BROADCASTS];
 static uint32_t upper_range_ips[MAX_BROADCASTS];
+static uint32_t adapter_own_ips[MAX_BROADCASTS];   // host byte order
+static uint8_t  adapter_prefix_len[MAX_BROADCASTS]; // CIDR prefix (e.g. 24)
+static char     adapter_names[MAX_BROADCASTS][128]; // friendly name
 
 #define BROADCAST_INTERVAL 5.0
 #define HEARTBEAT_TIMEOUT 20.0
@@ -72,6 +75,13 @@ static void get_broadcast_info(uint16 port)
                 ip_port->port = port;
                 lower_range_ips[number_broadcasts] = htonl(iface_ip & subnet_mask);
                 upper_range_ips[number_broadcasts] = broadcast_ip;
+                adapter_own_ips[number_broadcasts] = iface_ip;
+                adapter_prefix_len[number_broadcasts] = (uint8_t)prefix;
+                adapter_names[number_broadcasts][0] = '\0';
+                if (pAdapter->FriendlyName) {
+                    WideCharToMultiByte(CP_UTF8, 0, pAdapter->FriendlyName, -1,
+                        adapter_names[number_broadcasts], sizeof(adapter_names[0]), NULL, NULL);
+                }
                 number_broadcasts++;
 
                 if (number_broadcasts >= MAX_BROADCASTS) {
@@ -142,6 +152,38 @@ static void get_broadcast_info(uint16 port)
         }
 
         ip_port->port = port;
+
+        // Get adapter's own IP and netmask for subnet info
+        struct ifreq ifr_addr = i_faces[i];
+        if (ioctl(sock, SIOCGIFADDR, &ifr_addr) >= 0) {
+            struct sockaddr_in *sa = (struct sockaddr_in *)&ifr_addr.ifr_addr;
+            uint32 iface_ip = ntohl(sa->sin_addr.s_addr);
+            adapter_own_ips[number_broadcasts] = iface_ip;
+
+            struct ifreq ifr_mask = i_faces[i];
+            if (ioctl(sock, SIOCGIFNETMASK, &ifr_mask) >= 0) {
+                struct sockaddr_in *sm = (struct sockaddr_in *)&ifr_mask.ifr_addr;
+                uint32 mask = ntohl(sm->sin_addr.s_addr);
+                // Count prefix bits
+                uint8_t prefix = 0;
+                for (uint32 m = mask; m & 0x80000000u; m <<= 1) prefix++;
+                adapter_prefix_len[number_broadcasts] = prefix;
+                lower_range_ips[number_broadcasts] = htonl(iface_ip & mask);
+                upper_range_ips[number_broadcasts] = htonl(iface_ip | ~mask);
+            } else {
+                adapter_prefix_len[number_broadcasts] = 0;
+                lower_range_ips[number_broadcasts] = 0;
+                upper_range_ips[number_broadcasts] = 0;
+            }
+        } else {
+            adapter_own_ips[number_broadcasts] = 0;
+            adapter_prefix_len[number_broadcasts] = 0;
+            lower_range_ips[number_broadcasts] = 0;
+            upper_range_ips[number_broadcasts] = 0;
+        }
+        strncpy(adapter_names[number_broadcasts], i_faces[i].ifr_name, sizeof(adapter_names[0]) - 1);
+        adapter_names[number_broadcasts][sizeof(adapter_names[0]) - 1] = '\0';
+
         number_broadcasts++;
     }
 
@@ -1383,6 +1425,34 @@ void Networking::rmCallback(Callback_Ids id, CSteamID steam_id, void (*message_c
 uint32 Networking::getOwnIP()
 {
     return own_ip;
+}
+
+int Networking::getAdapters(AdapterInfo *out, int max_count)
+{
+    if (!out || max_count <= 0 || number_broadcasts < 0) return 0;
+    int count = (std::min)(max_count, number_broadcasts);
+    for (int i = 0; i < count; ++i) {
+        out[i].ip = adapter_own_ips[i];
+        out[i].lower = lower_range_ips[i];
+        out[i].upper = upper_range_ips[i];
+        out[i].prefix_len = adapter_prefix_len[i];
+        memcpy(out[i].name, adapter_names[i], sizeof(out[i].name));
+    }
+    return count;
+}
+
+int Networking::getConnectedUsers(CSteamID *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+    int written = 0;
+    for (auto &conn : connections) {
+        if (!conn.connected) continue;
+        for (auto &id : conn.ids) {
+            if (written >= max_count) return written;
+            out[written++] = id;
+        }
+    }
+    return written;
 }
 
 void Networking::startQuery(IP_PORT ip_port)
