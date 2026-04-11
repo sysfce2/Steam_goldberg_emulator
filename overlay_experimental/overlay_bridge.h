@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 12
+#define GSE_BRIDGE_ABI_VERSION 13
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -223,6 +223,7 @@ typedef struct GSE_Friend {
     int32_t  lobby_member_count;    /* number of members in friend's lobby */
     int32_t  lobby_member_limit;    /* max members allowed in friend's lobby */
     char     app_name[256];         /* resolved game name for friend's appid (may be empty) */
+    char     ip_str[24];            /* detected IP address as dotted-quad string (empty if unknown) */
 } GSE_Friend;
 
 typedef struct GSE_LocalLobbyInfo {
@@ -372,6 +373,7 @@ typedef struct GSE_NotifAppearance {
 } GSE_NotifAppearance;
 
 typedef int       (*pfn_GSE_OverlayBridge_GetNotifAppearance)(GSE_NotifAppearance *out);  /* returns 1 on success */
+typedef int       (*pfn_GSE_OverlayBridge_GetLocalIP)(char *out, int max_len);             /* returns 1 if IP available */
 
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE         1
@@ -448,6 +450,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetAvatar           GetAvatar;
     pfn_GSE_OverlayBridge_GetLocalAvatar      GetLocalAvatar;
     pfn_GSE_OverlayBridge_GetNotifAppearance  GetNotifAppearance;
+    pfn_GSE_OverlayBridge_GetLocalIP           GetLocalIP;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -499,6 +502,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetAvatar);
     LOAD(GetLocalAvatar);
     LOAD(GetNotifAppearance);
+    LOAD(GetLocalIP);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

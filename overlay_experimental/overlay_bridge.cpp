@@ -604,6 +604,15 @@ __declspec(dllexport) int GSE_OverlayBridge_GetNotifAppearance(GSE_NotifAppearan
     return 1;
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetLocalIP(char *out, int max_len)
+{
+    if (!out || max_len <= 0) return 0;
+    out[0] = '\0';
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetLocalIP(out, max_len);
+}
+
 } // extern "C"
 
 #endif // EMU_OVERLAY

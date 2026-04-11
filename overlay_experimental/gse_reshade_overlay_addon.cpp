@@ -1568,6 +1568,14 @@ static void render_main_overlay(effect_runtime *runtime)
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
                     (unsigned long long)state.steam_id);
+                // Show local IP if available
+                if (s_bridge.GetLocalIP) {
+                    char local_ip[24] = {};
+                    if (s_bridge.GetLocalIP(local_ip, sizeof(local_ip)) && local_ip[0]) {
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", local_ip);
+                    }
+                }
 
                 // Line 2: Playing AppName (AppID XXXX)
                 ImGui::SetCursorPosX(text_start.x);
@@ -1651,6 +1659,15 @@ static void render_main_overlay(effect_runtime *runtime)
                     char id_str[32];
                     snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)state.steam_id);
                     ImGui::SetClipboardText(id_str);
+                }
+                if (s_bridge.GetLocalIP) {
+                    char local_ip[24] = {};
+                    if (s_bridge.GetLocalIP(local_ip, sizeof(local_ip)) && local_ip[0]) {
+                        ImGui::SameLine();
+                        if (ImGui::Button("Copy IP##local")) {
+                            ImGui::SetClipboardText(local_ip);
+                        }
+                    }
                 }
             }
             ImGui::Separator();
@@ -2229,6 +2246,11 @@ static void render_friends_list()
             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", f.name);
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)f.steam_id);
+        // Show detected IP if available
+        if (f.ip_str[0]) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", f.ip_str);
+        }
 
         // Line 2: Playing AppName (AppID XXXX)
         ImGui::SetCursorPosX(text_start.x);
@@ -2285,6 +2307,11 @@ static void render_friends_list()
                 char id_str[32];
                 snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)f.steam_id);
                 ImGui::SetClipboardText(id_str);
+            }
+            if (f.ip_str[0]) {
+                if (ImGui::MenuItem("Copy IP")) {
+                    ImGui::SetClipboardText(f.ip_str);
+                }
             }
             if (f.lobby_id != 0) {
                 if (ImGui::MenuItem("Copy Lobby ID")) {

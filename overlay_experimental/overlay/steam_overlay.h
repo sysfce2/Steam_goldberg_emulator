@@ -437,6 +437,9 @@ public:
     // Avatar support for ReShade addon
     int  Bridge_GetAvatar(uint64_t steam_id, struct GSE_AvatarData *out);
     int  Bridge_GetLocalAvatar(struct GSE_AvatarData *out);
+
+    // IP address support for ReShade addon
+    int  Bridge_GetLocalIP(char *out, int max_len) const;
 };
 
 #else // EMU_OVERLAY

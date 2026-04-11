@@ -2527,6 +2527,20 @@ void Steam_Overlay::render_main_window()
                 settings->get_local_steam_id().ConvertToUint64(),
                 settings->get_local_game_id().AppID());
             
+            // Show local IP address
+            if (network) {
+                uint32 local_ip = network->getOwnIP();
+                if (local_ip != 0) {
+                    char ip_buf[24];
+                    format_ip_address(local_ip, ip_buf, sizeof(ip_buf));
+                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "IP: %s", ip_buf);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Copy IP##local")) {
+                        ImGui::SetClipboardText(ip_buf);
+                    }
+                }
+            }
+
             // Show lobby/game status
             if (i_have_lobby) {
                 Steam_Friends *steamFriends = get_steam_client()->steam_friends;
@@ -3034,6 +3048,16 @@ void Steam_Overlay::render_main_window()
                             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
                         ImGui::SameLine();
                         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd.id());
+                        // Show detected IP if available
+                        if (network) {
+                            uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
+                            if (frd_ip != 0) {
+                                char ip_buf[24];
+                                format_ip_address(frd_ip, ip_buf, sizeof(ip_buf));
+                                ImGui::SameLine();
+                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", ip_buf);
+                            }
+                        }
 
                         // Line 2: Playing AppName (AppID XXXX)
                         ImGui::SetCursorPosX(text_start.x);
@@ -3091,6 +3115,16 @@ void Steam_Overlay::render_main_window()
                             }
                             if (ImGui::MenuItem(translationCopyId[current_language])) {
                                 ImGui::SetClipboardText(std::to_string(frd.id()).c_str());
+                            }
+                            if (network) {
+                                uint32 frd_ip = network->getIP(CSteamID((uint64)frd.id()));
+                                if (frd_ip != 0) {
+                                    char ip_buf[24];
+                                    format_ip_address(frd_ip, ip_buf, sizeof(ip_buf));
+                                    if (ImGui::MenuItem("Copy IP")) {
+                                        ImGui::SetClipboardText(ip_buf);
+                                    }
+                                }
                             }
                             if (frd.lobby_id() != 0) {
                                 if (ImGui::MenuItem("Copy Lobby ID")) {
@@ -5207,6 +5241,15 @@ float Steam_Overlay::Bridge_GetSDRWhiteScale() const
     return s_sdr_white_scale;
 }
 
+// Helper: format a host-byte-order uint32 IP as dotted-quad (e.g. "192.168.1.1")
+static void format_ip_address(uint32 ip, char *buf, size_t len)
+{
+    if (!buf || len == 0) return;
+    if (ip == 0) { buf[0] = '\0'; return; }
+    snprintf(buf, len, "%u.%u.%u.%u",
+        (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF);
+}
+
 int Steam_Overlay::Bridge_GetFriendCount() const
 {
     std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
@@ -5286,6 +5329,12 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
                 o.lobby_member_count = matchmaking->GetNumLobbyMembers(friend_lobby);
                 o.lobby_member_limit = matchmaking->GetLobbyMemberLimit(friend_lobby);
             }
+        }
+
+        // Get friend's detected IP address from the networking layer
+        if (network) {
+            uint32 friend_ip = network->getIP(CSteamID((uint64)frd.id()));
+            format_ip_address(friend_ip, o.ip_str, sizeof(o.ip_str));
         }
 
         ++written;
@@ -5811,6 +5860,17 @@ int Steam_Overlay::Bridge_GetLocalAvatar(GSE_AvatarData *out)
     }
     
     return out->valid;
+}
+
+int Steam_Overlay::Bridge_GetLocalIP(char *out, int max_len) const
+{
+    if (!out || max_len <= 0) return 0;
+    out[0] = '\0';
+    if (!network) return 0;
+    uint32 ip = network->getOwnIP();
+    if (ip == 0) return 0;
+    format_ip_address(ip, out, (size_t)max_len);
+    return (out[0] != '\0') ? 1 : 0;
 }
 
 #endif
