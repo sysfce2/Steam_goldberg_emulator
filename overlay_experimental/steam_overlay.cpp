@@ -1373,7 +1373,11 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
     auto &global_style = ImGui::GetStyle();
     const float padding_all_sides = 2 * (global_style.WindowPadding.y + global_style.WindowPadding.x);
 
-    const float noti_width = scrn_width * Notification::width_percent;
+    const float min_noti_width = scrn_width * Notification::width_percent;
+    const bool is_achievement = ((notification_type)noti.type == notification_type::achievement ||
+                                 (notification_type)noti.type == notification_type::achievement_progress);
+    const float noti_width = is_achievement ? min_noti_width :
+        (noti.last_width > min_noti_width ? noti.last_width : min_noti_width);
     const float msg_height = ImGui::CalcTextSize(
         noti.message.c_str(),
         noti.message.c_str() + noti.message.size(),
@@ -1468,6 +1472,11 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
     // add some y padding for niceness
     noti_height += 2 * global_style.WindowPadding.y;
 
+    // For non-achievement types, prefer the cached rendered size from the previous frame
+    // This ensures stacking is accurate even if the estimate was slightly off
+    if (!is_achievement && noti.last_height > 0)
+        noti_height = noti.last_height;
+
     // 0 on the y-axis is top, 0 on the x-axis is left
     float x = 0.0f;
     float y = 0.0f;
@@ -1520,7 +1529,13 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
     }
 
     ImGui::SetNextWindowPos(ImVec2( x, y ));
-    ImGui::SetNextWindowSize(ImVec2(noti_width, noti_height));
+    // Achievement notifications use fixed size (already sized correctly).
+    // All other types auto-resize with 25% minimum width and 50% maximum width.
+    if (is_achievement) {
+        ImGui::SetNextWindowSize(ImVec2(min_noti_width, noti_height));
+    } else {
+        ImGui::SetNextWindowSizeConstraints(ImVec2(min_noti_width, 0), ImVec2(scrn_width * 0.5f, FLT_MAX));
+    }
 }
 
 float Steam_Overlay::animate_factor(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration)
@@ -1737,8 +1752,17 @@ void Steam_Overlay::build_notifications(float width, float height)
         std::string wnd_name = "NotiPopupShow" + std::to_string(it->id);
 
         set_next_notification_pos({width, height}, elapsed_notif, noti_duration, *it, coords);
-        if (ImGui::Begin(wnd_name.c_str(), nullptr,
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | extra_flags)) {
+        ImGuiWindowFlags noti_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | extra_flags;
+        {
+            bool is_ach = ((notification_type)it->type == notification_type::achievement ||
+                           (notification_type)it->type == notification_type::achievement_progress);
+            if (!is_ach) noti_flags |= ImGuiWindowFlags_AlwaysAutoResize;
+        }
+        if (ImGui::Begin(wnd_name.c_str(), nullptr, noti_flags)) {
+            // Cache actual rendered size for accurate stacking next frame
+            ImVec2 win_sz = ImGui::GetWindowSize();
+            it->last_width = win_sz.x;
+            it->last_height = win_sz.y;
             switch ((notification_type)it->type) {
                 case notification_type::achievement_progress:
                 case notification_type::achievement: {

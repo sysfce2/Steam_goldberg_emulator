@@ -107,6 +107,9 @@ struct Notification
     uint64 join_request_requester_id{};
     // Source friend ID for notifications that involve a specific friend
     uint64 source_friend_id{};
+    // Cached rendered size from previous frame (for stacking calculations)
+    mutable float last_width{};
+    mutable float last_height{};
 };
 
 // notification coordinates { x, y }

@@ -668,6 +668,9 @@ struct NotifCoords {
     float bot_left = 0, bot_center = 0, bot_right = 0;
 };
 
+// Cache actual rendered notification size per ID for accurate stacking
+static std::unordered_map<int, ImVec2> s_notif_size_cache;
+
 static void render_notifications(effect_runtime *runtime)
 {
     if (!s_bridge_ok || !s_bridge.GetNotifications) return;
@@ -680,8 +683,8 @@ static void render_notifications(effect_runtime *runtime)
     float screen_w = io.DisplaySize.x;
     float screen_h = io.DisplaySize.y;
 
-    float notif_w = screen_w * NOTIF_WIDTH_FRAC;
-    if (notif_w < 300.0f) notif_w = 300.0f;
+    float min_notif_w = screen_w * NOTIF_WIDTH_FRAC;
+    if (min_notif_w < 300.0f) min_notif_w = 300.0f;
 
     auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -774,21 +777,53 @@ static void render_notifications(effect_runtime *runtime)
         float factor = animate_factor(elapsed, display_dur);
         float alpha = 1.0f - factor;
 
-        // Compute notification height estimate
+        // Compute notification height estimate (used for stacking, not window size)
         float font_size = ImGui::GetFontSize();
-        float title_h = font_size + ImGui::GetStyle().ItemSpacing.y;
-        float row_h = ICON_SIZE;  // icon row
         float padding = ImGui::GetStyle().WindowPadding.y * 2.0f;
-        float notif_h = title_h + row_h + padding;
+        float notif_h = 0.0f;
+        bool is_achievement = (n.type == GSE_NOTIF_ACHIEVEMENT || n.type == GSE_NOTIF_ACHIEVEMENT_PROG);
         bool has_progress = (n.type == GSE_NOTIF_ACHIEVEMENT_PROG ||
                             (n.type == GSE_NOTIF_ACHIEVEMENT && !n.ach_achieved)) &&
                             n.ach_max_progress > 0;
-        if (has_progress) notif_h += font_size + ImGui::GetStyle().WindowPadding.y;
 
-        // Add friend header height for notification types that display avatar + 3-line info
-        if (n.source_friend_id != 0) {
-            float friend_hdr = (std::max)(48.0f, font_size * 3.0f) + ImGui::GetStyle().ItemSpacing.y + 1.0f;
-            notif_h += friend_hdr;
+        if (is_achievement) {
+            // Achievement: title + icon row + optional progress bar
+            float title_h = font_size + ImGui::GetStyle().ItemSpacing.y;
+            float row_h = ICON_SIZE;
+            notif_h = title_h + row_h + padding;
+            if (has_progress) notif_h += font_size + ImGui::GetStyle().WindowPadding.y;
+        } else {
+            // Non-achievement: friend header + message text + optional buttons
+            float msg_h = font_size + ImGui::GetStyle().ItemSpacing.y;  // approximate 1 line of message text
+            notif_h = msg_h + padding;
+
+            // Friend avatar + 3-line header
+            if (n.source_friend_id != 0) {
+                float friend_hdr = (std::max)(48.0f, font_size * 3.0f) + ImGui::GetStyle().ItemSpacing.y + 1.0f;
+                notif_h += friend_hdr;
+            }
+
+            // Button row for interactive notification types
+            float btn_h = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y;
+            switch (n.type) {
+            case GSE_NOTIF_INVITE:
+            case GSE_NOTIF_LOBBY_JOIN_REQ:
+                notif_h += btn_h;
+                break;
+            case GSE_NOTIF_MESSAGE:
+                if (n.source_friend_id) notif_h += btn_h; // "Open Chat" button
+                break;
+            default:
+                break;
+            }
+        }
+
+        // Use cached rendered size from previous frame if available
+        float notif_w = min_notif_w;
+        auto cache_it = s_notif_size_cache.find(n.id);
+        if (!is_achievement && cache_it != s_notif_size_cache.end()) {
+            if (cache_it->second.x > min_notif_w) notif_w = cache_it->second.x;
+            notif_h = cache_it->second.y;
         }
 
         // Get position preference (per-type, matching native overlay)
@@ -858,7 +893,11 @@ static void render_notifications(effect_runtime *runtime)
         }
 
         ImGui::SetNextWindowPos(ImVec2(x, y));
-        ImGui::SetNextWindowSize(ImVec2(notif_w, 0));
+        if (is_achievement) {
+            ImGui::SetNextWindowSize(ImVec2(min_notif_w, 0));
+        } else {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(min_notif_w, 0), ImVec2(screen_w * 0.5f, screen_h));
+        }
 
         char win_id[64];
         snprintf(win_id, sizeof(win_id), "##gse_notif_%d", n.id);
@@ -891,6 +930,8 @@ static void render_notifications(effect_runtime *runtime)
             break;
         }
 
+        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
+
         // Push native notification colors
         ImGui::PushStyleColor(ImGuiCol_WindowBg, COL_NOTIF_BG);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, alpha));
@@ -898,6 +939,8 @@ static void render_notifications(effect_runtime *runtime)
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
 
         if (ImGui::Begin(win_id, nullptr, flags)) {
+            // Cache actual rendered size for accurate stacking next frame
+            s_notif_size_cache[n.id] = ImGui::GetWindowSize();
             switch (n.type) {
             case GSE_NOTIF_ACHIEVEMENT:
             case GSE_NOTIF_ACHIEVEMENT_PROG: {
@@ -1007,6 +1050,16 @@ static void render_notifications(effect_runtime *runtime)
     }
 
     ImGui::PopStyleVar(); // WindowRounding
+
+    // Clean up cached sizes for notifications that no longer exist
+    for (auto it = s_notif_size_cache.begin(); it != s_notif_size_cache.end(); ) {
+        bool found = false;
+        for (int i = 0; i < count; ++i) {
+            if (notifs[i].id == it->first) { found = true; break; }
+        }
+        if (!found) it = s_notif_size_cache.erase(it);
+        else ++it;
+    }
 }
 
 /* ── Stats HUD (always visible when enabled, matching native style) ────── */
