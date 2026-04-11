@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 11
+#define GSE_BRIDGE_ABI_VERSION 12
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -337,6 +337,42 @@ typedef void      (*pfn_GSE_OverlayBridge_CloseChat)(uint64_t steam_id);
 typedef int       (*pfn_GSE_OverlayBridge_GetAvatar)(uint64_t steam_id, GSE_AvatarData *out);  /* returns 1 if avatar available */
 typedef int       (*pfn_GSE_OverlayBridge_GetLocalAvatar)(GSE_AvatarData *out);  /* returns 1 if avatar available */
 
+/* ── Notification appearance (all configurable values from overlay settings) ── */
+typedef struct GSE_NotifAppearance {
+    float icon_size;                /* achievement icon size (px), default 64 */
+    float notification_rounding;    /* window corner rounding (px), default 10 */
+    float notification_margin_x;    /* horizontal gap between notifications and screen edge (px), default 5 */
+    float notification_margin_y;    /* vertical gap between stacked notifications (px), default 5 */
+    uint32_t notification_animation;/* slide in/out animation duration (ms), default 350 */
+    float notification_r;           /* background color red   (0-1), default 0.12 */
+    float notification_g;           /* background color green (0-1), default 0.14 */
+    float notification_b;           /* background color blue  (0-1), default 0.21 */
+    float notification_a;           /* background color alpha (0-1), default 1.0  */
+    float background_r;             /* main overlay background red   (0-1) */
+    float background_g;             /* main overlay background green (0-1) */
+    float background_b;             /* main overlay background blue  (0-1) */
+    float background_a;             /* main overlay background alpha (0-1) */
+    float element_r;                /* button/frame color red   (0-1) */
+    float element_g;                /* button/frame color green (0-1) */
+    float element_b;                /* button/frame color blue  (0-1) */
+    float element_a;                /* button/frame color alpha (0-1) */
+    float element_hovered_r;        /* hovered element red   (0-1) */
+    float element_hovered_g;        /* hovered element green (0-1) */
+    float element_hovered_b;        /* hovered element blue  (0-1) */
+    float element_hovered_a;        /* hovered element alpha (0-1) */
+    float stats_background_r;       /* stats HUD background red   (0-1) */
+    float stats_background_g;       /* stats HUD background green (0-1) */
+    float stats_background_b;       /* stats HUD background blue  (0-1) */
+    float stats_background_a;       /* stats HUD background alpha (0-1) */
+    float stats_text_r;             /* stats HUD text red   (0-1) */
+    float stats_text_g;             /* stats HUD text green (0-1) */
+    float stats_text_b;             /* stats HUD text blue  (0-1) */
+    float stats_text_a;             /* stats HUD text alpha (0-1) */
+    float width_percent;            /* minimum notification width as fraction of screen (0.25 = 25%) */
+} GSE_NotifAppearance;
+
+typedef int       (*pfn_GSE_OverlayBridge_GetNotifAppearance)(GSE_NotifAppearance *out);  /* returns 1 on success */
+
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE         1
 #define GSE_FRIEND_ACTION_JOIN           2
@@ -411,6 +447,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_CloseChat           CloseChat;
     pfn_GSE_OverlayBridge_GetAvatar           GetAvatar;
     pfn_GSE_OverlayBridge_GetLocalAvatar      GetLocalAvatar;
+    pfn_GSE_OverlayBridge_GetNotifAppearance  GetNotifAppearance;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -461,6 +498,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(CloseChat);
     LOAD(GetAvatar);
     LOAD(GetLocalAvatar);
+    LOAD(GetNotifAppearance);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

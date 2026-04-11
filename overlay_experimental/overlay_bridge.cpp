@@ -562,6 +562,48 @@ __declspec(dllexport) int GSE_OverlayBridge_GetLocalAvatar(GSE_AvatarData *out)
     return client->steam_overlay->Bridge_GetLocalAvatar(out);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetNotifAppearance(GSE_NotifAppearance *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    auto *client = get_steam_client();
+    if (!client) return 0;
+    auto *s = client->settings_client;
+    if (!s) return 0;
+    auto &a = s->overlay_appearance;
+    out->icon_size              = a.icon_size;
+    out->notification_rounding  = a.notification_rounding;
+    out->notification_margin_x  = a.notification_margin_x;
+    out->notification_margin_y  = a.notification_margin_y;
+    out->notification_animation = a.notification_animation;
+    out->notification_r         = a.notification_r;
+    out->notification_g         = a.notification_g;
+    out->notification_b         = a.notification_b;
+    out->notification_a         = a.notification_a;
+    out->background_r           = a.background_r;
+    out->background_g           = a.background_g;
+    out->background_b           = a.background_b;
+    out->background_a           = a.background_a;
+    out->element_r              = a.element_r;
+    out->element_g              = a.element_g;
+    out->element_b              = a.element_b;
+    out->element_a              = a.element_a;
+    out->element_hovered_r      = a.element_hovered_r;
+    out->element_hovered_g      = a.element_hovered_g;
+    out->element_hovered_b      = a.element_hovered_b;
+    out->element_hovered_a      = a.element_hovered_a;
+    out->stats_background_r     = a.stats_background_r;
+    out->stats_background_g     = a.stats_background_g;
+    out->stats_background_b     = a.stats_background_b;
+    out->stats_background_a     = a.stats_background_a;
+    out->stats_text_r           = a.stats_text_r;
+    out->stats_text_g           = a.stats_text_g;
+    out->stats_text_b           = a.stats_text_b;
+    out->stats_text_a           = a.stats_text_a;
+    out->width_percent          = Notification::width_percent;
+    return 1;
+}
+
 } // extern "C"
 
 #endif // EMU_OVERLAY

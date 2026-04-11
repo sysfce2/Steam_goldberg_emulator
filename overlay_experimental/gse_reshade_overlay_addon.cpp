@@ -108,20 +108,10 @@ struct AddonChatWindow {
 };
 static std::vector<AddonChatWindow> s_open_chats;  // currently open chat windows in addon
 
-/* ── Native overlay color constants (matching steam_overlay.cpp) ──────── */
+/* ── Color constants ─────────────────────────────────────────────────── */
+// Configurable colors (COL_NOTIF_BG, COL_MAIN_BG, COL_ELEMENT, etc.)
+// are now macros defined after s_appearance below.
 
-// Notification background (dark grayish-blue)
-static const ImVec4 COL_NOTIF_BG        = ImVec4(0.12f, 0.14f, 0.21f, 1.0f);
-// Main overlay window background
-static const ImVec4 COL_MAIN_BG         = ImVec4(0.12f, 0.11f, 0.11f, 0.55f);
-// Button / frame / element color (slate blue)
-static const ImVec4 COL_ELEMENT         = ImVec4(0.30f, 0.32f, 0.40f, 1.0f);
-// Element hovered (brighter blue)
-static const ImVec4 COL_ELEMENT_HOVER   = ImVec4(0.278f, 0.393f, 0.602f, 1.0f);
-// Stats HUD background
-static const ImVec4 COL_STATS_BG        = ImVec4(0.0f, 0.0f, 0.0f, 0.6f);
-// Stats HUD text (retro arcade yellow)
-static const ImVec4 COL_STATS_TEXT      = ImVec4(0.8f, 0.7f, 0.0f, 1.0f);
 // Achievement status colors
 static const ImU32  COL_ACH_ACHIEVED    = IM_COL32(0, 220, 0, 255);     // Green checkmark
 static const ImU32  COL_ACH_PROGRESS    = IM_COL32(255, 180, 0, 255);   // Orange arrow
@@ -131,16 +121,53 @@ static const ImVec4 COL_DLC_HEADER         = ImVec4(0.20f, 0.30f, 0.45f, 0.80f);
 static const ImVec4 COL_DLC_HEADER_HOVER   = ImVec4(0.25f, 0.38f, 0.55f, 0.90f);
 static const ImVec4 COL_DLC_HEADER_ACTIVE  = ImVec4(0.30f, 0.45f, 0.65f, 1.00f);
 
-// Default icon size matching native
-static constexpr float ICON_SIZE = 64.0f;
-// Default notification rounding
-static constexpr float NOTIF_ROUNDING = 10.0f;
-// Notification width as fraction of screen
-static constexpr float NOTIF_WIDTH_FRAC = 0.25f;
-// Notification margin from screen edges
-static constexpr float NOTIF_MARGIN = 5.0f;
-// Animation duration in ms
-static constexpr int64_t ANIM_DURATION_MS = 350;
+// Cached appearance values (updated each frame from bridge)
+static GSE_NotifAppearance s_appearance = {
+    /* icon_size */             64.0f,
+    /* notification_rounding */ 10.0f,
+    /* notification_margin_x */ 5.0f,
+    /* notification_margin_y */ 5.0f,
+    /* notification_animation*/ 350,
+    /* notification_r */        0.12f,
+    /* notification_g */        0.14f,
+    /* notification_b */        0.21f,
+    /* notification_a */        1.0f,
+    /* background_r */          0.12f,
+    /* background_g */          0.11f,
+    /* background_b */          0.11f,
+    /* background_a */          0.55f,
+    /* element_r */             0.30f,
+    /* element_g */             0.32f,
+    /* element_b */             0.40f,
+    /* element_a */             1.0f,
+    /* element_hovered_r */     0.278f,
+    /* element_hovered_g */     0.393f,
+    /* element_hovered_b */     0.602f,
+    /* element_hovered_a */     1.0f,
+    /* stats_background_r */    0.0f,
+    /* stats_background_g */    0.0f,
+    /* stats_background_b */    0.0f,
+    /* stats_background_a */    0.6f,
+    /* stats_text_r */          0.8f,
+    /* stats_text_g */          0.7f,
+    /* stats_text_b */          0.0f,
+    /* stats_text_a */          1.0f,
+    /* width_percent */         0.25f,
+};
+
+// ── Appearance macros (read live from s_appearance each frame) ────────── //
+#define COL_NOTIF_BG      ImVec4(s_appearance.notification_r, s_appearance.notification_g, s_appearance.notification_b, s_appearance.notification_a)
+#define COL_MAIN_BG       ImVec4(s_appearance.background_r, s_appearance.background_g, s_appearance.background_b, s_appearance.background_a)
+#define COL_ELEMENT       ImVec4(s_appearance.element_r, s_appearance.element_g, s_appearance.element_b, s_appearance.element_a)
+#define COL_ELEMENT_HOVER ImVec4(s_appearance.element_hovered_r, s_appearance.element_hovered_g, s_appearance.element_hovered_b, s_appearance.element_hovered_a)
+#define COL_STATS_BG      ImVec4(s_appearance.stats_background_r, s_appearance.stats_background_g, s_appearance.stats_background_b, s_appearance.stats_background_a)
+#define COL_STATS_TEXT    ImVec4(s_appearance.stats_text_r, s_appearance.stats_text_g, s_appearance.stats_text_b, s_appearance.stats_text_a)
+#define ICON_SIZE         (s_appearance.icon_size)
+#define NOTIF_ROUNDING    (s_appearance.notification_rounding)
+#define NOTIF_WIDTH_FRAC  (s_appearance.width_percent)
+#define NOTIF_MARGIN_X    (s_appearance.notification_margin_x)
+#define NOTIF_MARGIN_Y    (s_appearance.notification_margin_y)
+#define ANIM_DURATION_MS  ((int64_t)s_appearance.notification_animation)
 
 /* ── Current device pointer (set each frame in on_reshade_overlay) ─────── */
 
@@ -855,39 +882,39 @@ static void render_notifications(effect_runtime *runtime)
         switch (notif_pos) {
         case GSE_NOTIF_POS_TOP_LEFT: {
             float anim_off = slide * notif_w;
-            x = NOTIF_MARGIN - anim_off;
-            y = coords.top_left + NOTIF_MARGIN;
+            x = NOTIF_MARGIN_X - anim_off;
+            y = coords.top_left + NOTIF_MARGIN_Y;
             coords.top_left = y + notif_h;
         } break;
         case GSE_NOTIF_POS_TOP_CENTER: {
             float anim_off = slide * notif_h;
             x = (screen_w - notif_w) * 0.5f;
-            y = coords.top_center + NOTIF_MARGIN - anim_off;
+            y = coords.top_center + NOTIF_MARGIN_Y - anim_off;
             coords.top_center = y + notif_h;
         } break;
         case GSE_NOTIF_POS_TOP_RIGHT: {
             float anim_off = slide * notif_w;
-            x = screen_w - notif_w - NOTIF_MARGIN + anim_off;
-            y = coords.top_right + NOTIF_MARGIN;
+            x = screen_w - notif_w - NOTIF_MARGIN_X + anim_off;
+            y = coords.top_right + NOTIF_MARGIN_Y;
             coords.top_right = y + notif_h;
         } break;
         case GSE_NOTIF_POS_BOT_LEFT: {
             float anim_off = slide * notif_w;
-            x = NOTIF_MARGIN - anim_off;
-            y = screen_h - coords.bot_left - NOTIF_MARGIN - notif_h;
+            x = NOTIF_MARGIN_X - anim_off;
+            y = screen_h - coords.bot_left - NOTIF_MARGIN_Y - notif_h;
             coords.bot_left = screen_h - y;
         } break;
         case GSE_NOTIF_POS_BOT_CENTER: {
             float anim_off = slide * notif_h;
             x = (screen_w - notif_w) * 0.5f;
-            y = screen_h - coords.bot_center - NOTIF_MARGIN - notif_h + anim_off;
+            y = screen_h - coords.bot_center - NOTIF_MARGIN_Y - notif_h + anim_off;
             coords.bot_center = screen_h - y;
         } break;
         default:
         case GSE_NOTIF_POS_BOT_RIGHT: {
             float anim_off = slide * notif_w;
-            x = screen_w - notif_w - NOTIF_MARGIN + anim_off;
-            y = screen_h - coords.bot_right - NOTIF_MARGIN - notif_h;
+            x = screen_w - notif_w - NOTIF_MARGIN_X + anim_off;
+            y = screen_h - coords.bot_right - NOTIF_MARGIN_Y - notif_h;
             coords.bot_right = screen_h - y;
         } break;
         }
@@ -1150,6 +1177,11 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Store device pointer for icon upload during this frame
     s_current_device = runtime->get_device();
     s_sce_tex_per_frame = 0;  // reset per-frame load cap
+
+    // Refresh appearance values from bridge (overlay config)
+    if (s_bridge.GetNotifAppearance) {
+        s_bridge.GetNotifAppearance(&s_appearance);
+    }
 
     // Flush deferred GPU resource destruction (queued by free_sce_textures last frame)
     {
