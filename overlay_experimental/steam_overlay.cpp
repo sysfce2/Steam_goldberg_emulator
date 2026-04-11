@@ -2939,16 +2939,27 @@ void Steam_Overlay::render_main_window()
                                     ImGui::SetClipboardText(std::to_string(frd.lobby_id()).c_str());
                                 }
                             }
-                            // Kick from lobby (only if friend is in our lobby and we're the owner)
+                            // Kick from lobby (only if friend is actually in our lobby member list and we're the owner)
                             {
                                 CSteamID my_lobby = settings->get_lobby();
-                                if (my_lobby.IsValid() && frd.lobby_id() == my_lobby.ConvertToUint64()) {
+                                if (my_lobby.IsValid()) {
                                     Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
                                     CSteamID owner = mm->GetLobbyOwner(my_lobby);
                                     if (owner == settings->get_local_steam_id()) {
-                                        ImGui::Separator();
-                                        if (ImGui::MenuItem("Kick from Lobby")) {
-                                            mm->KickLobbyMember(my_lobby.ConvertToUint64(), frd.id());
+                                        // Check actual lobby member list
+                                        bool friend_in_my_lobby = false;
+                                        int member_count = mm->GetNumLobbyMembers(my_lobby);
+                                        for (int mi = 0; mi < member_count; ++mi) {
+                                            if (mm->GetLobbyMemberByIndex(my_lobby, mi).ConvertToUint64() == frd.id()) {
+                                                friend_in_my_lobby = true;
+                                                break;
+                                            }
+                                        }
+                                        if (friend_in_my_lobby) {
+                                            ImGui::Separator();
+                                            if (ImGui::MenuItem("Kick from Lobby")) {
+                                                mm->KickLobbyMember(my_lobby.ConvertToUint64(), frd.id());
+                                            }
                                         }
                                     }
                                 }
@@ -5065,9 +5076,22 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
         o.lobby_id = frd.lobby_id();
         o.in_lobby = (frd.lobby_id() != 0) ? 1 : 0;
 
-        // Check if this friend is in the local user's lobby
+        // Check if this friend is actually a member of the local user's lobby
+        // (using the lobby member list, which is more reliable than frd.lobby_id())
         CSteamID my_lobby = settings->get_lobby();
-        o.in_my_lobby = (my_lobby.IsValid() && frd.lobby_id() == my_lobby.ConvertToUint64()) ? 1 : 0;
+        o.in_my_lobby = 0;
+        if (my_lobby.IsValid()) {
+            Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+            if (mm) {
+                int member_count = mm->GetNumLobbyMembers(my_lobby);
+                for (int mi = 0; mi < member_count; ++mi) {
+                    if (mm->GetLobbyMemberByIndex(my_lobby, mi).ConvertToUint64() == frd.id()) {
+                        o.in_my_lobby = 1;
+                        break;
+                    }
+                }
+            }
+        }
 
         // Resolve appid → game name
         if (o.appid != 0) {
@@ -5378,7 +5402,7 @@ void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
             case 7: // kick from lobby
                 {
                     CSteamID my_lobby = settings->get_lobby();
-                    if (my_lobby.IsValid() && frd.lobby_id() == my_lobby.ConvertToUint64()) {
+                    if (my_lobby.IsValid()) {
                         Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
                         mm->KickLobbyMember(my_lobby.ConvertToUint64(), steam_id);
                     }
