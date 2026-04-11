@@ -21,6 +21,7 @@
 #include "dll/dll.h"                    // get_steam_client()
 #include "dll/steam_client.h"           // Steam_Client → steam_overlay
 #include "overlay/steam_overlay.h"
+#include "dll/dll/steam_app_ids.h"      // steam_preowned_app_ids
 
 #include <cstring>
 #include <algorithm>
@@ -120,6 +121,14 @@ __declspec(dllexport) int GSE_OverlayBridge_GetState(GSE_OverlayState *out)
 #endif
     safe_copy(out->build_string, sizeof(out->build_string), EMU_BUILD_STRING);
     safe_copy(out->build_date, sizeof(out->build_date), EMU_BUILD_DATE_STRING);
+
+    // Resolve app name from preowned app IDs
+    if (out->app_id != 0) {
+        auto it = steam_preowned_app_ids.find(out->app_id);
+        if (it != steam_preowned_app_ids.end()) {
+            safe_copy(out->app_name, sizeof(out->app_name), it->second);
+        }
+    }
 
     return 1;
 }

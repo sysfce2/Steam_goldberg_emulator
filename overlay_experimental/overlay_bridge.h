@@ -21,7 +21,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 10
+#define GSE_BRIDGE_ABI_VERSION 11
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -80,6 +80,7 @@ typedef struct GSE_OverlayState {
     char     build_string[128];
     char     build_date[64];
     uint64_t steam_id;              /* local player SteamID64 (added in ABI v8) */
+    char     app_name[256];         /* resolved game name for local app_id (added in ABI v11) */
 } GSE_OverlayState;
 
 typedef struct GSE_Achievement {

@@ -2762,6 +2762,12 @@ void Steam_Overlay::render_main_window()
                     ImVec2 text_start = ImGui::GetCursorPos();
                     uint32 local_appid = settings->get_local_game_id().AppID();
 
+                    auto resolve_app_name = [](uint32 appid) -> std::string {
+                        auto it = steam_preowned_app_ids.find(appid);
+                        if (it != steam_preowned_app_ids.end()) return it->second;
+                        return std::to_string(appid);
+                    };
+
                     // Line 1: Username (ID: steamid)
                     ImGui::SetCursorPos(text_start);
                     ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", settings->get_local_name());
@@ -2769,16 +2775,11 @@ void Steam_Overlay::render_main_window()
                     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
                         settings->get_local_steam_id().ConvertToUint64());
 
-                    // Line 2: Playing AppID (with app name if known)
-                    auto resolve_app_name = [](uint32 appid) -> std::string {
-                        auto it = steam_preowned_app_ids.find(appid);
-                        if (it != steam_preowned_app_ids.end()) return it->second;
-                        return std::to_string(appid);
-                    };
+                    // Line 2: Playing AppName (AppID XXXX)
                     std::string app_name = resolve_app_name(local_appid);
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", app_name.c_str(), local_appid);
 
-                    // Line 3: Status - In Game / In Lobby / In Server
+                    // Line 3: In Lobby / In Server / In Game
                     CSteamID lobby = settings->get_lobby();
                     bool in_lobby = lobby.IsValid();
                     Steam_GameServer *gs = get_steam_client()->steam_gameserver;
@@ -2791,7 +2792,6 @@ void Steam_Overlay::render_main_window()
                             int member_limit = matchmaking->GetLobbyMemberLimit(lobby);
                             CSteamID owner = matchmaking->GetLobbyOwner(lobby);
                             std::string owner_name;
-                            // Try to find owner name from friends list
                             for (auto &[frd, st] : friends) {
                                 if (frd.id() == owner.ConvertToUint64()) {
                                     owner_name = frd.name();
@@ -2875,13 +2875,14 @@ void Steam_Overlay::render_main_window()
                         return std::to_string(appid);
                     };
 
-                    // ---- Per-friend compact renderer (single line: avatar + name + game) ----
+                    // ---- Per-friend renderer (3-line: avatar + name/id + game + lobby) ----
                     auto render_friend_row = [&](const Friend &frd, friend_window_state &state) {
                         ImGui::PushID(state.id - base_friend_window_id + base_friend_item_id);
 
-                        // Invisible selectable spanning the full row for right-click target
-                        const float avatar_size = 32.0f;
-                        float row_height = (std::max)(avatar_size, ImGui::GetTextLineHeight());
+                        // 48px avatar to fit 3 text lines
+                        const float avatar_size = 48.0f;
+                        float line_h = ImGui::GetTextLineHeight();
+                        float row_height = (std::max)(avatar_size, line_h * 3.0f);
                         ImVec2 cursor_before = ImGui::GetCursorPos();
                         ImGui::Selectable("##friend_row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(0, row_height));
                         ImGui::SetCursorPos(cursor_before);
@@ -2897,19 +2898,49 @@ void Steam_Overlay::render_main_window()
                         }
                         ImGui::SameLine();
 
-                        // Name + game name on same line (vertically centered with avatar)
-                        float text_y = (avatar_size - ImGui::GetTextLineHeight()) * 0.5f;
-                        ImVec2 text_cursor = ImGui::GetCursorPos();
-                        ImGui::SetCursorPosY(text_cursor.y + text_y);
+                        ImVec2 text_start = ImGui::GetCursorPos();
+
+                        // Line 1: FriendName (ID: steamid)
+                        ImGui::SetCursorPos(text_start);
                         bool needs_attn = (state.window_state & window_state_need_attention);
                         if (needs_attn)
                             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", frd.name().c_str());
                         else
                             ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd.id());
+
+                        // Line 2: Playing AppName (AppID XXXX)
                         if (frd.appid() != 0) {
-                            ImGui::SameLine();
                             std::string game = resolve_app_name(frd.appid());
-                            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "- %s", game.c_str());
+                            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game.c_str(), frd.appid());
+                        } else {
+                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+                        }
+
+                        // Line 3: Lobby info (if friend has a lobby)
+                        if (frd.lobby_id() != 0) {
+                            Steam_Matchmaking *mm_frd = get_steam_client()->steam_matchmaking;
+                            if (mm_frd) {
+                                CSteamID frd_lobby((uint64)frd.lobby_id());
+                                int frd_mc = mm_frd->GetNumLobbyMembers(frd_lobby);
+                                int frd_ml = mm_frd->GetLobbyMemberLimit(frd_lobby);
+                                CSteamID frd_owner = mm_frd->GetLobbyOwner(frd_lobby);
+                                std::string frd_owner_name;
+                                for (auto &[f2, s2] : friends) {
+                                    if (f2.id() == frd_owner.ConvertToUint64()) { frd_owner_name = f2.name(); break; }
+                                }
+                                if (frd_owner_name.empty()) {
+                                    if (frd_owner == settings->get_local_steam_id())
+                                        frd_owner_name = settings->get_local_name();
+                                    else if (frd_owner.ConvertToUint64() == frd.id())
+                                        frd_owner_name = frd.name();
+                                    else
+                                        frd_owner_name = std::to_string(frd_owner.ConvertToUint64());
+                                }
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                                    (unsigned long long)frd.lobby_id(), frd_mc, frd_ml, frd_owner_name.c_str());
+                            }
                         }
 
                         // Right-click context menu
