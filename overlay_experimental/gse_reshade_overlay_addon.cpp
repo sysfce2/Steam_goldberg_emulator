@@ -1237,8 +1237,10 @@ static void on_reshade_overlay(effect_runtime *runtime)
 
     // Show a software cursor when the GSE overlay is open.
     // ReShade only renders its own cursor when its settings panel is visible,
-    // but our overlay needs one too.
-    ImGui::GetIO().MouseDrawCursor = s_show_main_overlay;
+    // but our overlay needs one too.  Don't touch MouseDrawCursor when the
+    // ReShade menu is open — let ReShade manage its own cursor.
+    if (!s_reshade_menu_open)
+        ImGui::GetIO().MouseDrawCursor = s_show_main_overlay;
 
     // While the overlay is open, block game input so the mouse and keyboard
     // are routed to ImGui instead of the game.  This also makes ReShade
