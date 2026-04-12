@@ -6487,10 +6487,14 @@ int Steam_Overlay::Bridge_GetLobbyChatState(GSE_LobbyChatState *out)
                     sender_name = std::to_string(e.user_id.ConvertToUint64());
             }
 
-            // Append to history
-            if (!lobby_chat_history.empty())
-                lobby_chat_history += '\n';
-            lobby_chat_history += sender_name + ": " + e.message;
+            // Append to history (strip any embedded nulls from the message)
+            std::string msg_text = e.message;
+            while (!msg_text.empty() && msg_text.back() == '\0') msg_text.pop_back();
+            if (!msg_text.empty()) {
+                if (!lobby_chat_history.empty())
+                    lobby_chat_history += '\n';
+                lobby_chat_history += sender_name + ": " + msg_text;
+            }
         }
         lobby_chat_last_entry_count = entry_count;
     }

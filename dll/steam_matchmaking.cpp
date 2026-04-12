@@ -1175,6 +1175,29 @@ bool Steam_Matchmaking::SendLobbyChatMsg( CSteamID steamIDLobby, const void *pvM
     Lobby *lobby = get_lobby(steamIDLobby);
     if (!lobby || lobby->deleted()) return false;
 
+    // Add to local chat_entries immediately so sender sees their own message right away
+    {
+        struct Chat_Entry entry{};
+        entry.type = EChatEntryType::k_EChatEntryTypeChatMsg;
+        entry.message = std::string((const char*)pvMsgBody, cubMsgBody);
+        // Strip trailing null terminators from the message
+        while (!entry.message.empty() && entry.message.back() == '\0') entry.message.pop_back();
+        entry.lobby_id = steamIDLobby;
+        entry.user_id = settings->get_local_steam_id();
+        chat_entries.push_back(entry);
+    }
+
+    // Fire LobbyChatMsg_t callback for sender immediately
+    {
+        LobbyChatMsg_t data{};
+        data.m_ulSteamIDLobby = steamIDLobby.ConvertToUint64();
+        data.m_ulSteamIDUser = settings->get_local_steam_id().ConvertToUint64();
+        data.m_eChatEntryType = EChatEntryType::k_EChatEntryTypeChatMsg;
+        data.m_iChatID = static_cast<uint32>(chat_entries.size());
+        callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    }
+
+    // Send to all lobby members via network (self-loopback will be skipped in receive handler)
     Lobby_Messages *message = new Lobby_Messages();
     message->set_type(Lobby_Messages::CHAT_MESSAGE);
     message->set_bdata(pvMsgBody, cubMsgBody);
@@ -1917,11 +1940,14 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
                 PRINT_DEBUG("LOBBY MESSAGE: CHAT MESSAGE");
                 EChatEntryType entry_type = EChatEntryType::k_EChatEntryTypeChatMsg;
 
-                if (we_are_in_lobby) {
+                // Skip self-loopback (sender already added their own entry in SendLobbyChatMsg)
+                if (we_are_in_lobby && msg->source_id() != settings->get_local_steam_id().ConvertToUint64()) {
                     {
                         struct Chat_Entry entry{};
                         entry.type = entry_type;
                         entry.message = msg->lobby_messages().bdata();
+                        // Strip trailing null terminators from bdata
+                        while (!entry.message.empty() && entry.message.back() == '\0') entry.message.pop_back();
                         entry.lobby_id = CSteamID((uint64)msg->lobby_messages().id());
                         entry.user_id = CSteamID((uint64)msg->source_id());
                         chat_entries.push_back(entry);
