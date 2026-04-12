@@ -364,7 +364,15 @@ void Steam_Matchmaking::HandleJoinResponse(Common_Message *msg)
             pending_joins.erase(g);
         }
     }
-    // If accepted, the normal pending_joins logic will resolve when it sees us as a member
+    // If accepted, reset the pending join timer so it doesn't time out before lobby data arrives
+    if (accepted) {
+        auto g = std::find_if(pending_joins.begin(), pending_joins.end(),
+            [&](const Pending_Joins &pj) { return pj.lobby_id.ConvertToUint64() == lobby_id; });
+        if (g != pending_joins.end()) {
+            g->joined = std::chrono::high_resolution_clock::now();
+            PRINT_DEBUG("reset pending join timer for lobby %llu", lobby_id);
+        }
+    }
 
     // Notify overlay about the response
     Steam_Overlay *overlay = get_steam_client()->steam_overlay;
@@ -1695,6 +1703,7 @@ void Steam_Matchmaking::RunCallbacks()
             callback_results->addCallResult(g->api_id, data.k_iCallback, &data, sizeof(data));
             callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
             g = pending_joins.erase(g);
+            on_self_enter_leave_lobby((uint64)lobby->room_id(), lobby->type(), false);
             trigger_lobby_dataupdate((uint64)lobby->room_id(), (uint64)lobby->room_id(), true);
         } else if (check_timedout(g->joined, PENDING_JOIN_TIMEOUT)) {
             PRINT_DEBUG("pending join timeout %llu", g->lobby_id.ConvertToUint64());
@@ -1849,6 +1858,7 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
                             invited_users.erase(inv_it);
                             if (add_member_to_lobby(lobby, requester)) {
                                 trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), false, true, 0.01);
+                                SendJoinResponse((uint64)lobby->room_id(), (uint64)msg->source_id(), true);
                                 // Re-broadcast friend data so all peers see the membership change
                                 Steam_Friends *sf = get_steam_client()->steam_friends;
                                 if (sf) sf->resend_friend_data();
