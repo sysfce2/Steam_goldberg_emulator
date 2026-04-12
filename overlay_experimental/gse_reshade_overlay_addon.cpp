@@ -966,7 +966,9 @@ static void render_notifications(effect_runtime *runtime)
             break;
         default:
             break;
-        }\n\n        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
+        }
+
+        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
 
         // Push native notification colors
         ImGui::PushStyleColor(ImGuiCol_WindowBg, COL_NOTIF_BG);
