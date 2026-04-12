@@ -4901,8 +4901,8 @@ bool Steam_Overlay::is_friend_joinable(std::pair<const Friend, friend_window_sta
 
     FriendGameInfo_t friend_game_info{};
     steamFriends->GetFriendGamePlayed((uint64)f.first.id(), &friend_game_info);
-    if (friend_game_info.m_steamIDLobby.IsValid() && (f.second.window_state & window_state_lobby_invite)) {
-        PRINT_DEBUG("%" PRIu64 " true (friend in a game)", f.first.id());
+    if (friend_game_info.m_steamIDLobby.IsValid()) {
+        PRINT_DEBUG("%" PRIu64 " true (friend in a lobby)", f.first.id());
         return true;
     }
 
