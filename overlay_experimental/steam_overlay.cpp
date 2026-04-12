@@ -1162,8 +1162,8 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
                 has_friend_action.push(frd);
             }
         }
-        // user clicked on "join lobby" (works for any friend with a lobby, hide if already in same lobby)
-        if (state.joinable && !friend_in_my_lobby) {
+        // user clicked on "join lobby" (same app only, hide if already in same lobby)
+        if (settings->get_local_game_id().AppID() == frd.appid() && state.joinable && !friend_in_my_lobby) {
             std::string translationJoin_tmp(translationJoin[current_language]);
             translationJoin_tmp.append("##PopupJoinLobby");
             if (ImGui::Button(translationJoin_tmp.c_str())) {
@@ -1269,7 +1269,7 @@ void Steam_Overlay::build_chat_window()
                         // Line 3: Status
                         ImGui::SetCursorPosX(text_start.x);
                         bool same_app = (local_appid == frd.appid());
-                        if (same_app && frd.lobby_id() != 0) {
+                        if (frd.lobby_id() != 0) {
                             ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu", frd.lobby_id());
                         } else if (same_app) {
                             ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
@@ -3148,8 +3148,8 @@ void Steam_Overlay::render_main_window()
                             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
                         }
 
-                        // Line 3: Lobby info (if friend has a lobby and same app)
-                        if ((settings->get_local_game_id().AppID() == frd.appid()) && frd.lobby_id() != 0) {
+                        // Line 3: Lobby info (if friend has a lobby)
+                        if (frd.lobby_id() != 0) {
                             ImGui::SetCursorPosX(text_start.x);
                             Steam_Matchmaking *mm_frd = get_steam_client()->steam_matchmaking;
                             if (mm_frd) {
@@ -3205,7 +3205,7 @@ void Steam_Overlay::render_main_window()
                                     has_friend_action.push(frd);
                                 }
                             }
-                            if (state.joinable && frd.lobby_id() != 0 && !friend_in_my_lobby) {
+                            if (same_app && state.joinable && frd.lobby_id() != 0 && !friend_in_my_lobby) {
                                 if (ImGui::MenuItem(translationJoin[current_language])) {
                                     state.window_state |= window_state_join;
                                     has_friend_action.push(frd);

@@ -2511,8 +2511,8 @@ static void render_friends_list()
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
         }
 
-        // Line 3: Lobby info (if friend has a lobby and same app)
-        if (f.same_app && f.in_lobby && f.lobby_id != 0) {
+        // Line 3: Lobby info (if friend has a lobby)
+        if (f.in_lobby && f.lobby_id != 0) {
             ImGui::SetCursorPosX(text_start.x);
             if (f.lobby_owner_name[0])
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
@@ -2551,7 +2551,7 @@ static void render_friends_list()
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);
                 }
             }
-            if (f.is_joinable && f.lobby_id != 0 && !f.in_my_lobby && s_bridge.FriendAction) {
+            if (f.same_app && f.is_joinable && f.lobby_id != 0 && !f.in_my_lobby && s_bridge.FriendAction) {
                 if (ImGui::MenuItem(translationJoin[s_current_language])) {
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
                 }
