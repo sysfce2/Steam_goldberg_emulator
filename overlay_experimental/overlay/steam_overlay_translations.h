@@ -493,7 +493,7 @@ const char translationInviteAll[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUF
 // friends_chat_accept_game_invite
 const char translationJoin[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
 	// 0 - English
-  u8"Accept Game Invite",
+  u8"Join Lobby",
 
 	// 1 - Arabic
   u8"Accept Game Invite",

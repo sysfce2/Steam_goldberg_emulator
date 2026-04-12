@@ -1134,25 +1134,25 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
             auto lobby_id_str = std::to_string(frd.lobby_id());
             ImGui::SetClipboardText(lobby_id_str.c_str());
         }
-        // If we have the same appid, activate the invite button
-        if (settings->get_local_game_id().AppID() == frd.appid()) {
-            // Check if friend is already in our lobby
-            bool friend_in_my_lobby = false;
-            {
-                CSteamID my_lob = settings->get_lobby();
-                if (my_lob.IsValid()) {
-                    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
-                    if (mm) {
-                        int mc = mm->GetNumLobbyMembers(my_lob);
-                        for (int mi = 0; mi < mc; ++mi) {
-                            if (mm->GetLobbyMemberByIndex(my_lob, mi).ConvertToUint64() == frd.id()) {
-                                friend_in_my_lobby = true;
-                                break;
-                            }
+        // Check if friend is already in our lobby
+        bool friend_in_my_lobby = false;
+        {
+            CSteamID my_lob = settings->get_lobby();
+            if (my_lob.IsValid()) {
+                Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                if (mm) {
+                    int mc = mm->GetNumLobbyMembers(my_lob);
+                    for (int mi = 0; mi < mc; ++mi) {
+                        if (mm->GetLobbyMemberByIndex(my_lob, mi).ConvertToUint64() == frd.id()) {
+                            friend_in_my_lobby = true;
+                            break;
                         }
                     }
                 }
             }
+        }
+        // If we have the same appid, activate the invite button
+        if (settings->get_local_game_id().AppID() == frd.appid()) {
             // user clicked on "invite to game" (hide if friend already in our lobby)
             std::string translationInvite_tmp(translationInvite[current_language]);
             translationInvite_tmp.append("##PopupInviteToGame");
@@ -1162,10 +1162,10 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
                 has_friend_action.push(frd);
             }
         }
-        // user clicked on "join lobby" (works for any friend with a lobby)
-        if (state.joinable) {
+        // user clicked on "join lobby" (works for any friend with a lobby, hide if already in same lobby)
+        if (state.joinable && !friend_in_my_lobby) {
             std::string translationJoin_tmp(translationJoin[current_language]);
-            translationJoin_tmp.append("##PopupAcceptInvite");
+            translationJoin_tmp.append("##PopupJoinLobby");
             if (ImGui::Button(translationJoin_tmp.c_str())) {
                 close_popup = true;
                 if (!invite_all_friends_clicked) {
@@ -3193,7 +3193,7 @@ void Steam_Overlay::render_main_window()
                                     has_friend_action.push(frd);
                                 }
                             }
-                            if (state.joinable && frd.lobby_id() != 0) {
+                            if (state.joinable && frd.lobby_id() != 0 && !friend_in_my_lobby) {
                                 if (ImGui::MenuItem(translationJoin[current_language])) {
                                     state.window_state |= window_state_join;
                                     has_friend_action.push(frd);
