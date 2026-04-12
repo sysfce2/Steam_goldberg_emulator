@@ -1743,6 +1743,11 @@ void Steam_Overlay::build_notifications(float width, float height)
        
         // some extra window flags for each notification type
         ImGuiWindowFlags extra_flags = ImGuiWindowFlags_NoFocusOnAppearing;
+        if (show_overlay) {
+            // When overlay is open, all notifications are fully passive:
+            // don't steal focus, don't intercept clicks (use context menu to accept invites)
+            extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+        } else {
         switch ((notification_type)it->type) {
             // games like "Mafia Definitive Edition" will pause the entire game/scene if focus was stolen
             // be less intrusive for notifications that do not require interaction
@@ -1784,6 +1789,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                 PRINT_DEBUG("error unhandled flags for type %i", (int)it->type);
             break;
         }
+        } // !show_overlay
 
         std::string wnd_name = "NotiPopupShow" + std::to_string(it->id);
 
@@ -1792,13 +1798,7 @@ void Steam_Overlay::build_notifications(float width, float height)
         {
             bool is_ach = ((notification_type)it->type == notification_type::achievement ||
                            (notification_type)it->type == notification_type::achievement_progress);
-            if (!is_ach) noti_flags |= ImGuiWindowFlags_AlwaysAutoResize;
-        }
-        // When the overlay is open, force notifications to the front of the z-stack
-        // so they're never hidden behind the overlay panel or its popups
-        if (show_overlay)
-            ImGui::SetNextWindowFocus();
-        if (ImGui::Begin(wnd_name.c_str(), nullptr, noti_flags)) {
+            if (!is_ach) noti_flags |= ImGuiWindowFlags_AlwaysAutoResize;\n        }\n        if (ImGui::Begin(wnd_name.c_str(), nullptr, noti_flags)) {
             // Cache actual rendered size for accurate stacking next frame
             ImVec2 win_sz = ImGui::GetWindowSize();
             it->last_width = win_sz.x;

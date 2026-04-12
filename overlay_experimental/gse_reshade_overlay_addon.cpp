@@ -938,6 +938,11 @@ static void render_notifications(effect_runtime *runtime)
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoFocusOnAppearing |
             ImGuiWindowFlags_NoSavedSettings;
 
+        if (s_show_main_overlay) {
+            // When overlay is open, all notifications are fully passive:
+            // don't steal focus, don't intercept clicks (use context menu to accept invites)
+            flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+        } else {
         switch (n.type) {
         case GSE_NOTIF_ACHIEVEMENT:
         case GSE_NOTIF_ACHIEVEMENT_PROG:
@@ -961,8 +966,7 @@ static void render_notifications(effect_runtime *runtime)
         default:
             break;
         }
-
-        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
+        } // !s_show_main_overlay\n\n        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
 
         // Push native notification colors
         ImGui::PushStyleColor(ImGuiCol_WindowBg, COL_NOTIF_BG);
@@ -970,10 +974,6 @@ static void render_notifications(effect_runtime *runtime)
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, alpha));
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
 
-        // When the overlay is open, force notifications to the front of the z-stack
-        // so they're never hidden behind the overlay panel or its popups
-        if (s_show_main_overlay)
-            ImGui::SetNextWindowFocus();
         if (ImGui::Begin(win_id, nullptr, flags)) {
             // Cache actual rendered size for accurate stacking next frame
             s_notif_size_cache[n.id] = ImGui::GetWindowSize();
