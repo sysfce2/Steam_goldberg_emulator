@@ -3151,27 +3151,43 @@ void Steam_Overlay::render_main_window()
                         // Line 3: Lobby info (if friend has a lobby)
                         if (frd.lobby_id() != 0) {
                             ImGui::SetCursorPosX(text_start.x);
+                            int frd_mc = 0, frd_ml = 0;
+                            std::string frd_owner_name;
+
+                            // Try local matchmaking data first (available for same-app lobbies)
                             Steam_Matchmaking *mm_frd = get_steam_client()->steam_matchmaking;
                             if (mm_frd) {
                                 CSteamID frd_lobby((uint64)frd.lobby_id());
-                                int frd_mc = mm_frd->GetNumLobbyMembers(frd_lobby);
-                                int frd_ml = mm_frd->GetLobbyMemberLimit(frd_lobby);
+                                frd_mc = mm_frd->GetNumLobbyMembers(frd_lobby);
+                                frd_ml = mm_frd->GetLobbyMemberLimit(frd_lobby);
                                 CSteamID frd_owner = mm_frd->GetLobbyOwner(frd_lobby);
-                                std::string frd_owner_name;
-                                for (auto &[f2, s2] : friends) {
-                                    if (f2.id() == frd_owner.ConvertToUint64()) { frd_owner_name = f2.name(); break; }
+                                if (frd_owner.IsValid()) {
+                                    for (auto &[f2, s2] : friends) {
+                                        if (f2.id() == frd_owner.ConvertToUint64()) { frd_owner_name = f2.name(); break; }
+                                    }
+                                    if (frd_owner_name.empty()) {
+                                        if (frd_owner == settings->get_local_steam_id())
+                                            frd_owner_name = settings->get_local_name();
+                                        else if (frd_owner.ConvertToUint64() == frd.id())
+                                            frd_owner_name = frd.name();
+                                    }
                                 }
-                                if (frd_owner_name.empty()) {
-                                    if (frd_owner == settings->get_local_steam_id())
-                                        frd_owner_name = settings->get_local_name();
-                                    else if (frd_owner.ConvertToUint64() == frd.id())
-                                        frd_owner_name = frd.name();
-                                    else
-                                        frd_owner_name = std::to_string(frd_owner.ConvertToUint64());
-                                }
+                            }
+
+                            // Fall back to proto fields for cross-app lobbies
+                            if (frd_mc == 0 && frd.lobby_member_count() > 0)
+                                frd_mc = frd.lobby_member_count();
+                            if (frd_ml == 0 && frd.lobby_member_limit() > 0)
+                                frd_ml = frd.lobby_member_limit();
+                            if (frd_owner_name.empty() && frd.lobby_owner_name().size() > 0)
+                                frd_owner_name = frd.lobby_owner_name();
+
+                            if (!frd_owner_name.empty())
                                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
                                     (unsigned long long)frd.lobby_id(), frd_mc, frd_ml, frd_owner_name.c_str());
-                            }
+                            else
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                                    (unsigned long long)frd.lobby_id(), frd_mc, frd_ml);
                         }
 
                         // Right-click context menu (opened from selectable above)
@@ -5710,6 +5726,7 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
 
         // Get friend's lobby details (owner name, member count/limit)
         if (o.in_lobby) {
+            // Try local matchmaking data first (available for same-app lobbies)
             Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
             if (matchmaking) {
                 CSteamID friend_lobby((uint64)frd.lobby_id());
@@ -5723,6 +5740,14 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
                 o.lobby_member_count = matchmaking->GetNumLobbyMembers(friend_lobby);
                 o.lobby_member_limit = matchmaking->GetLobbyMemberLimit(friend_lobby);
             }
+
+            // Fall back to proto fields for cross-app lobbies
+            if (o.lobby_member_count == 0 && frd.lobby_member_count() > 0)
+                o.lobby_member_count = frd.lobby_member_count();
+            if (o.lobby_member_limit == 0 && frd.lobby_member_limit() > 0)
+                o.lobby_member_limit = frd.lobby_member_limit();
+            if (o.lobby_owner_name[0] == '\0' && frd.lobby_owner_name().size() > 0)
+                bridge_safe_copy(o.lobby_owner_name, sizeof(o.lobby_owner_name), frd.lobby_owner_name());
         }
 
         // Get friend's detected IP addresses from the networking layer

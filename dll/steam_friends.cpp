@@ -154,6 +154,30 @@ void Steam_Friends::resend_friend_data()
     modified = true;
 }
 
+// Populate lobby summary fields on the Friend proto so peers can display
+// member count, limit, and owner name even for cross-app lobbies.
+static void populate_lobby_summary(Friend *f, Settings *settings)
+{
+    CSteamID my_lobby = settings->get_lobby();
+    if (!my_lobby.IsValid()) return;
+
+    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+    if (!mm) return;
+
+    f->set_lobby_member_count(mm->GetNumLobbyMembers(my_lobby));
+    f->set_lobby_member_limit(mm->GetLobbyMemberLimit(my_lobby));
+
+    CSteamID owner = mm->GetLobbyOwner(my_lobby);
+    if (owner.IsValid()) {
+        if (owner == settings->get_local_steam_id()) {
+            f->set_lobby_owner_name(settings->get_local_name());
+        } else {
+            const char *oname = get_steam_client()->steam_friends->GetFriendPersonaName(owner);
+            if (oname && oname[0]) f->set_lobby_owner_name(std::string(oname));
+        }
+    }
+}
+
 void Steam_Friends::force_resend_friend_data()
 {
     PRINT_DEBUG("immediate friend data send");
@@ -165,6 +189,7 @@ void Steam_Friends::force_resend_friend_data()
     f->set_name(settings->get_local_name());
     f->set_appid(settings->get_local_game_id().AppID());
     f->set_lobby_id(settings->get_lobby().ConvertToUint64());
+    populate_lobby_summary(f, settings);
     msg.set_allocated_friend_(f);
     network->sendToAllIndividuals(&msg, true);
     modified = false;
@@ -1471,6 +1496,7 @@ void Steam_Friends::RunCallbacks()
         f->set_name(settings->get_local_name());
         f->set_appid(settings->get_local_game_id().AppID());
         f->set_lobby_id(settings->get_lobby().ConvertToUint64());
+        populate_lobby_summary(f, settings);
         msg.set_allocated_friend_(f);
         network->sendToAllIndividuals(&msg, true);
         modified = false;
@@ -1502,6 +1528,7 @@ void Steam_Friends::Callback(Common_Message *msg)
             f->set_name(settings->get_local_name());
             f->set_appid(settings->get_local_game_id().AppID());
             f->set_lobby_id(settings->get_lobby().ConvertToUint64());
+            populate_lobby_summary(f, settings);
             
             int avatar_number = GetLargeFriendAvatar(settings->get_local_steam_id());
             auto avatar_info = settings->get_image(avatar_number);
@@ -1540,7 +1567,10 @@ void Steam_Friends::Callback(Common_Message *msg)
             // Only notify the overlay if something visually relevant changed
             bool changed = (f->name() != msg->friend_().name())
                         || (f->appid() != msg->friend_().appid())
-                        || (f->lobby_id() != msg->friend_().lobby_id());
+                        || (f->lobby_id() != msg->friend_().lobby_id())
+                        || (f->lobby_member_count() != msg->friend_().lobby_member_count())
+                        || (f->lobby_member_limit() != msg->friend_().lobby_member_limit())
+                        || (f->lobby_owner_name() != msg->friend_().lobby_owner_name());
             *f = msg->friend_();
             if (changed) {
                 overlay->FriendUpdate(*f);

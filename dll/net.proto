@@ -191,6 +191,9 @@ message Friend {
     uint32 appid = 4;
     uint64 lobby_id = 5;
     bytes avatar = 6;
+    int32 lobby_member_count = 7;
+    int32 lobby_member_limit = 8;
+    bytes lobby_owner_name = 9;
 }
 
 message Auth_Ticket {
