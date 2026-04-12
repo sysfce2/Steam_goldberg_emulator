@@ -777,8 +777,10 @@ static void render_notifications(effect_runtime *runtime)
         // Line 3: Lobby info
         ImGui::SetCursorPosX(text_start.x);
         if (finfo->in_lobby && finfo->lobby_id != 0) {
+            bool frd_is_owner = (finfo->lobby_owner_name[0] && strcmp(finfo->lobby_owner_name, finfo->name) == 0);
             if (finfo->lobby_owner_name[0])
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                    frd_is_owner ? "Has Lobby" : "In Lobby",
                     (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit, finfo->lobby_owner_name);
             else
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
@@ -1348,7 +1350,8 @@ static void render_main_overlay(effect_runtime *runtime)
 
             if (got_lobby_info) {
                 // Actual matchmaking lobby
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby (%d/%d) %s", 
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s (%d/%d) %s",
+                    lobby_info.is_owner ? "Has Lobby" : "In Lobby",
                     lobby_info.member_count, lobby_info.member_limit,
                     lobby_info.is_owner ? "[Owner]" : "");
                 ImGui::SameLine();
@@ -1675,11 +1678,14 @@ static void render_main_overlay(effect_runtime *runtime)
                             }
                         }
                     }
+                    bool local_is_owner = lobby_info.is_owner;
                     if (!owner_name.empty())
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                            local_is_owner ? "Has Lobby" : "In Lobby",
                             (unsigned long long)lobby_info.lobby_id, lobby_info.member_count, lobby_info.member_limit, owner_name.c_str());
                     else
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d)",
+                            local_is_owner ? "Has Lobby" : "In Lobby",
                             (unsigned long long)lobby_info.lobby_id, lobby_info.member_count, lobby_info.member_limit);
                 } else if (in_server) {
                     if (gs_info.server_name[0] != '\0')
@@ -2516,8 +2522,10 @@ static void render_friends_list()
         // Line 3: Lobby info (if friend has a lobby)
         if (f.in_lobby && f.lobby_id != 0) {
             ImGui::SetCursorPosX(text_start.x);
+            bool frd_is_owner = (f.lobby_owner_name[0] && strcmp(f.lobby_owner_name, f.name) == 0);
             if (f.lobby_owner_name[0])
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                    frd_is_owner ? "Has Lobby" : "In Lobby",
                     (unsigned long long)f.lobby_id, f.lobby_member_count, f.lobby_member_limit, f.lobby_owner_name);
             else
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
@@ -2827,8 +2835,10 @@ static void render_chat_windows()
                         // Line 3: Status
                         ImGui::SetCursorPosX(text_start.x);
                         if (finfo && finfo->in_lobby && finfo->lobby_id != 0) {
+                            bool frd_is_owner = (finfo->lobby_owner_name[0] && strcmp(finfo->lobby_owner_name, finfo->name) == 0);
                             if (finfo->lobby_owner_name[0])
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                                    frd_is_owner ? "Has Lobby" : "In Lobby",
                                     (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit, finfo->lobby_owner_name);
                             else
                                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",

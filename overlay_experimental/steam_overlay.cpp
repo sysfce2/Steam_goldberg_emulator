@@ -1270,7 +1270,9 @@ void Steam_Overlay::build_chat_window()
                         ImGui::SetCursorPosX(text_start.x);
                         bool same_app = (local_appid == frd.appid());
                         if (frd.lobby_id() != 0) {
-                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu", frd.lobby_id());
+                            bool frd_is_owner = (frd.lobby_owner_name().size() > 0 && frd.lobby_owner_name() == frd.name());
+                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu",
+                                frd_is_owner ? "Has Lobby" : "In Lobby", frd.lobby_id());
                         } else if (same_app) {
                             ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
                         } else if (frd.appid() != 0) {
@@ -1712,7 +1714,8 @@ void Steam_Overlay::build_notifications(float width, float height)
                     else
                         owner_name = std::to_string(owner.ConvertToUint64());
                 }
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                    (owner_name == frd_ptr->name()) ? "Has Lobby" : "In Lobby",
                     (unsigned long long)frd_ptr->lobby_id(), mc, ml, owner_name.c_str());
             }
         }
@@ -3015,7 +3018,9 @@ void Steam_Overlay::render_main_window()
                                 else
                                     owner_name = std::to_string(owner.ConvertToUint64());
                             }
-                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                            bool local_is_owner = (owner == settings->get_local_steam_id());
+                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                                local_is_owner ? "Has Lobby" : "In Lobby",
                                 lobby.ConvertToUint64(), member_count, member_limit, owner_name.c_str());
                         }
                     } else if (in_server) {
@@ -3189,8 +3194,12 @@ void Steam_Overlay::render_main_window()
                             if (frd_owner_name.empty() && frd.lobby_owner_name().size() > 0)
                                 frd_owner_name = frd.lobby_owner_name();
 
+                            // Check if this friend is the lobby owner
+                            bool friend_is_owner = (!frd_owner_name.empty() && frd_owner_name == frd.name());
+
                             if (!frd_owner_name.empty())
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d - %s)",
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                                    friend_is_owner ? "Has Lobby" : "In Lobby",
                                     (unsigned long long)frd.lobby_id(), frd_mc, frd_ml, frd_owner_name.c_str());
                             else
                                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
