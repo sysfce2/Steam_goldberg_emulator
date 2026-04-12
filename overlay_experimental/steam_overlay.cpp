@@ -4897,14 +4897,13 @@ void Steam_Overlay::FriendUpdate(Friend _friend)
     std::pair<const Friend, friend_window_state>* updated_frd = nullptr;
     for (auto it = friends.begin(); it != friends.end(); ++it) {
         if (it->first.id() == _friend.id()) {
-            // Preserve the window state
-            friend_window_state state = it->second;
+            // Update the Friend key in-place (Friend_Less only compares by id(),
+            // so map ordering is preserved — no need to erase and reinsert)
+            Friend &frd_ref = const_cast<Friend&>(it->first);
+            frd_ref = _friend;
             // Update window title with new appid
-            state.window_title = _friend.name() + " " + translationPlaying[current_language] + " " + std::to_string(_friend.appid());
-            // Remove old entry and insert with updated Friend key
-            friends.erase(it);
-            friends[_friend] = state;
-            updated_frd = &(*friends.find(_friend));
+            it->second.window_title = _friend.name() + " " + translationPlaying[current_language] + " " + std::to_string(_friend.appid());
+            updated_frd = &(*it);
             break;
         }
     }

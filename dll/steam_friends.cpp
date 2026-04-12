@@ -1537,9 +1537,14 @@ void Steam_Friends::Callback(Common_Message *msg)
                 }
             }
             //TODO: callbacks?
+            // Only notify the overlay if something visually relevant changed
+            bool changed = (f->name() != msg->friend_().name())
+                        || (f->appid() != msg->friend_().appid())
+                        || (f->lobby_id() != msg->friend_().lobby_id());
             *f = msg->friend_();
-            // Notify overlay of updated friend data (e.g., lobby_id changed)
-            overlay->FriendUpdate(*f);
+            if (changed) {
+                overlay->FriendUpdate(*f);
+            }
         }
     }
 
