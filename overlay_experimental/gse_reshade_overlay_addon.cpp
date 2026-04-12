@@ -952,6 +952,7 @@ static void render_notifications(effect_runtime *runtime)
             break;
         case GSE_NOTIF_INVITE:
         case GSE_NOTIF_LOBBY_JOIN_REQ:
+        case GSE_NOTIF_FRIEND_LOBBY:
             // interactive: buttons
             break;
         default:
@@ -1051,6 +1052,14 @@ static void render_notifications(effect_runtime *runtime)
             case GSE_NOTIF_LOBBY_KICKED:
                 render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
+                break;
+            case GSE_NOTIF_FRIEND_LOBBY:
+                render_notif_friend_header(n.source_friend_id);
+                ImGui::TextWrapped("%s", n.message);
+                if (ImGui::Button("Request to Join")) {
+                    if (s_bridge.RequestJoinFriendLobby)
+                        s_bridge.RequestJoinFriendLobby(n.id);
+                }
                 break;
             case GSE_NOTIF_AUTO_ACCEPT_INVITE:
                 ImGui::TextWrapped("%s", n.message);

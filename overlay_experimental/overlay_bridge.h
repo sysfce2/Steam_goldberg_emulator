@@ -43,6 +43,7 @@ enum GSE_NotifType {
     GSE_NOTIF_LOBBY_JOIN_REQ     = 5,
     GSE_NOTIF_LOBBY_JOIN_RESP    = 6,
     GSE_NOTIF_LOBBY_KICKED       = 7,
+    GSE_NOTIF_FRIEND_LOBBY       = 8,
 };
 
 enum GSE_RendererAPI {
@@ -291,6 +292,7 @@ typedef int       (*pfn_GSE_OverlayBridge_GetNotifications)(GSE_Notification *ou
 typedef void      (*pfn_GSE_OverlayBridge_ExpireNotification)(int id);
 typedef void      (*pfn_GSE_OverlayBridge_AcceptLobbyJoinRequest)(int notification_id);
 typedef void      (*pfn_GSE_OverlayBridge_DeclineLobbyJoinRequest)(int notification_id);
+typedef void      (*pfn_GSE_OverlayBridge_RequestJoinFriendLobby)(uint64_t friend_id);
 
 /* Display / HDR info */
 typedef int       (*pfn_GSE_OverlayBridge_GetDisplayInfo)(GSE_DisplayInfo *out, int max_count);
@@ -442,6 +444,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_ExpireNotification  ExpireNotification;
     pfn_GSE_OverlayBridge_AcceptLobbyJoinRequest AcceptLobbyJoinRequest;
     pfn_GSE_OverlayBridge_DeclineLobbyJoinRequest DeclineLobbyJoinRequest;
+    pfn_GSE_OverlayBridge_RequestJoinFriendLobby RequestJoinFriendLobby;
     pfn_GSE_OverlayBridge_GetDisplayInfo      GetDisplayInfo;
     pfn_GSE_OverlayBridge_GetSDRWhiteScale    GetSDRWhiteScale;
     pfn_GSE_OverlayBridge_GetFriendCount      GetFriendCount;
@@ -495,6 +498,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(ExpireNotification);
     LOAD(AcceptLobbyJoinRequest);
     LOAD(DeclineLobbyJoinRequest);
+    LOAD(RequestJoinFriendLobby);
     LOAD(GetDisplayInfo);
     LOAD(GetSDRWhiteScale);
     LOAD(GetFriendCount);

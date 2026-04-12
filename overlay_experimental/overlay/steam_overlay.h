@@ -69,6 +69,7 @@ enum class notification_type
     lobby_join_request,
     lobby_join_request_response,
     lobby_kicked,
+    friend_lobby_available,
 };
 
 struct Overlay_Achievement
@@ -225,6 +226,9 @@ class Steam_Overlay
     std::atomic<bool> invite_all_friends_clicked = false;
     // track lobby join requests we've already shown a notification for
     std::set<std::pair<uint64, uint64>> notified_lobby_join_requests{};
+
+    // track which friend lobbies we've already notified about (friend_id -> lobby_id)
+    std::unordered_map<uint64, uint64> notified_friend_lobbies{};
 
     bool overlay_state_changed = false;
 
@@ -429,6 +433,7 @@ public:
     void Bridge_KickAllLobbyMembers();
     void Bridge_AcceptLobbyJoinRequest(int notification_id);
     void Bridge_DeclineLobbyJoinRequest(int notification_id);
+    void Bridge_RequestJoinFriendLobby(int notification_id);
     void Bridge_SetShowFps(bool v);
     void Bridge_SetShowFrametime(bool v);
     void Bridge_SetShowPlaytime(bool v);

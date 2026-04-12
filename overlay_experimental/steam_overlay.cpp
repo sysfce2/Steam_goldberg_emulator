@@ -970,6 +970,10 @@ bool Steam_Overlay::submit_notification(
             // non-interactive, no input stealing
         break;
 
+        case notification_type::friend_lobby_available:
+            obscure_game_input(true);
+        break;
+
         default:
             PRINT_DEBUG("error unhandled type %i", (int)type);
         break;
@@ -1748,6 +1752,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                 extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
             break;
 
+            case notification_type::friend_lobby_available:
+                // interactive: Request to Join button
+            break;
+
             default:
                 PRINT_DEBUG("error unhandled flags for type %i", (int)it->type);
             break;
@@ -1854,6 +1862,18 @@ void Steam_Overlay::build_notifications(float width, float height)
                     render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
                 break;
+
+                case notification_type::friend_lobby_available: {
+                    render_notif_friend_header(it->source_friend_id);
+                    ImGui::TextWrapped("%s", it->message.c_str());
+                    if (ImGui::Button("Request to Join")) {
+                        Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                        PRINT_DEBUG("user requesting join to lobby %" PRIu64 " (friend %" PRIu64 ")", it->join_request_lobby_id, it->source_friend_id);
+                        mm->JoinLobby(CSteamID((uint64)it->join_request_lobby_id));
+                        it->start_time = {};
+                    }
+                }
+                break;
                 
                 default:
                     PRINT_DEBUG("error unhandled notification for type %i", (int)it->type);
@@ -1886,6 +1906,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                     obscure_game_input(false);
                     // clean up tracking if expired without action
                     notified_lobby_join_requests.erase({item.join_request_lobby_id, item.join_request_requester_id});
+                break;
+
+                case notification_type::friend_lobby_available:
+                    obscure_game_input(false);
                 break;
 
                 // not effective
@@ -4715,6 +4739,7 @@ void Steam_Overlay::FriendUpdate(Friend _friend)
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     
     // Find existing friend entry by ID
+    std::pair<const Friend, friend_window_state>* updated_frd = nullptr;
     for (auto it = friends.begin(); it != friends.end(); ++it) {
         if (it->first.id() == _friend.id()) {
             // Preserve the window state
@@ -4724,8 +4749,43 @@ void Steam_Overlay::FriendUpdate(Friend _friend)
             // Remove old entry and insert with updated Friend key
             friends.erase(it);
             friends[_friend] = state;
-            return;
+            updated_frd = &(*friends.find(_friend));
+            break;
         }
+    }
+
+    if (!updated_frd) return;
+
+    // Check if a same-app friend entered a lobby we haven't notified about yet
+    uint64 friend_id = _friend.id();
+    uint64 friend_lobby = _friend.lobby_id();
+    bool same_app = (settings->get_local_game_id().AppID() == _friend.appid());
+
+    if (same_app && friend_lobby != 0) {
+        auto tracked = notified_friend_lobbies.find(friend_id);
+        if (tracked == notified_friend_lobbies.end() || tracked->second != friend_lobby) {
+            // New lobby or different lobby — show notification
+            notified_friend_lobbies[friend_id] = friend_lobby;
+            std::string msg = _friend.name() + " is in a lobby";
+            Notification notif{};
+            notif.start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+            notif.steady_start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
+            notif.id = find_free_notification_id(notifications);
+            if (notif.id != 0) {
+                notif.type = (uint8)notification_type::friend_lobby_available;
+                notif.message = msg;
+                notif.frd = updated_frd;
+                notif.source_friend_id = friend_id;
+                notif.join_request_lobby_id = friend_lobby;
+                notifications.emplace_back(notif);
+                allow_renderer_frame_processing(true);
+                obscure_game_input(true);
+                PRINT_DEBUG("friend %" PRIu64 " lobby notification for lobby %" PRIu64 "", friend_id, friend_lobby);
+            }
+        }
+    } else {
+        // Friend left lobby or different app — clear tracking
+        notified_friend_lobbies.erase(friend_id);
     }
 }
 
@@ -5798,6 +5858,21 @@ void Steam_Overlay::Bridge_DeclineLobbyJoinRequest(int notification_id)
             Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
             mm->DeclineLobbyJoinRequest(n.join_request_lobby_id, n.join_request_requester_id);
             notified_lobby_join_requests.erase({n.join_request_lobby_id, n.join_request_requester_id});
+            n.start_time = {};
+            n.expired = true;
+            break;
+        }
+    }
+}
+
+void Steam_Overlay::Bridge_RequestJoinFriendLobby(int notification_id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    for (auto &n : notifications) {
+        if (n.id == notification_id && (notification_type)n.type == notification_type::friend_lobby_available) {
+            Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+            PRINT_DEBUG("requesting join to lobby %" PRIu64 " (friend %" PRIu64 ")", n.join_request_lobby_id, n.source_friend_id);
+            mm->JoinLobby(CSteamID((uint64)n.join_request_lobby_id));
             n.start_time = {};
             n.expired = true;
             break;
