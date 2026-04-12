@@ -1392,12 +1392,6 @@ static void render_main_overlay(effect_runtime *runtime)
         s_show_achievements = !s_show_achievements;
 
     ImGui::SameLine();
-    if (ImGui::Button(translationTestAchievement[s_current_language])) {
-        if (s_bridge.TestAchievement)
-            s_bridge.TestAchievement();
-    }
-
-    ImGui::SameLine();
     if (ImGui::Button(translationCopyId[s_current_language])) {
         char id_str[32];
         snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)state.steam_id);
@@ -2896,6 +2890,11 @@ static void render_achievement_list()
     if (s_bridge.SimulateAchievements) {
         if (ImGui::Button("Simulate##ach_simulate"))
             s_bridge.SimulateAchievements();
+        ImGui::SameLine();
+    }
+    if (s_bridge.TestAchievement) {
+        if (ImGui::Button(translationTestAchievement[s_current_language]))
+            s_bridge.TestAchievement();
     }
 
     // ── Tab bar: In Progress | My Achievements | [Groups] | Global Stats ──

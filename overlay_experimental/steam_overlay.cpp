@@ -2682,12 +2682,6 @@ void Steam_Overlay::render_main_window()
         }
 
         ImGui::SameLine();
-        // user clicked on "test achievement"
-        if (ImGui::Button(translationTestAchievement[current_language])) {
-            show_test_achievement();
-        }
-
-        ImGui::SameLine();
         // user clicked on "copy id" on themselves
         if (ImGui::Button(translationCopyId[current_language])) {
             auto friend_id_str = std::to_string(settings->get_local_steam_id().ConvertToUint64());
@@ -3330,6 +3324,10 @@ void Steam_Overlay::render_main_window()
                         }
                     }
                     ach_global_percentages = ach_global_percentages_snapshot;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(translationTestAchievement[current_language])) {
+                    show_test_achievement();
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Simulate##ach_simulate")) {
