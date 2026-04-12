@@ -3151,7 +3151,15 @@ void Steam_Overlay::render_main_window()
                                 show_chat = true;
                             }
                             bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
-                            if (same_app && i_have_lobby) {
+                            bool is_my_lobby_owner = false;
+                            {
+                                CSteamID my_lob = settings->get_lobby();
+                                if (my_lob.IsValid()) {
+                                    Steam_Matchmaking *mm_ctx = get_steam_client()->steam_matchmaking;
+                                    if (mm_ctx) is_my_lobby_owner = (mm_ctx->GetLobbyOwner(my_lob) == settings->get_local_steam_id());
+                                }
+                            }
+                            if (same_app && i_have_lobby && is_my_lobby_owner) {
                                 if (ImGui::MenuItem(translationInvite[current_language])) {
                                     state.window_state |= window_state_invite;
                                     has_friend_action.push(frd);

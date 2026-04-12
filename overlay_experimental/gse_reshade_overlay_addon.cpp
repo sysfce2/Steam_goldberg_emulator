@@ -2415,7 +2415,12 @@ static void render_friends_list()
                 s_active_chat_idx = found_idx;
                 if (s_bridge.OpenChat) s_bridge.OpenChat(f.steam_id);
             }
-            if (has_lobby && f.same_app && s_bridge.FriendAction) {
+            bool is_lobby_owner_ctx = false;
+            if (has_lobby && s_bridge.GetLocalLobbyInfo) {
+                GSE_LocalLobbyInfo linfo_ctx{};
+                if (s_bridge.GetLocalLobbyInfo(&linfo_ctx)) is_lobby_owner_ctx = linfo_ctx.is_owner;
+            }
+            if (has_lobby && is_lobby_owner_ctx && f.same_app && s_bridge.FriendAction) {
                 if (ImGui::MenuItem(translationInvite[s_current_language])) {
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_INVITE);
                 }
