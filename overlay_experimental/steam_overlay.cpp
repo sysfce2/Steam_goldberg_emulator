@@ -5034,10 +5034,13 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
     }
     if (!had_lobby && i_have_lobby) {
         CSteamID lobby = settings->get_lobby();
-        std::string msg = "Lobby created";
-        if (lobby.IsValid()) msg += " (" + std::to_string(lobby.ConvertToUint64()) + ")";
-        if (!submit_notification(notification_type::lobby_status, msg)) {
-            pending_lobby_notifications.push_back(msg);
+        bool is_owner = lobby.IsValid() && get_steam_client()->steam_matchmaking &&
+            get_steam_client()->steam_matchmaking->GetLobbyOwner(lobby) == settings->get_local_steam_id();
+        if (is_owner) {
+            std::string msg = "Lobby created (" + std::to_string(lobby.ConvertToUint64()) + ")";
+            if (!submit_notification(notification_type::lobby_status, msg)) {
+                pending_lobby_notifications.push_back(msg);
+            }
         }
     } else if (had_lobby && !i_have_lobby) {
         if (!submit_notification(notification_type::lobby_status, "Lobby closed")) {
