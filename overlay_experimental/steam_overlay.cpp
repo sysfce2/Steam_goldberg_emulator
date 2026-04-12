@@ -1803,7 +1803,9 @@ void Steam_Overlay::build_notifications(float width, float height)
         {
             bool is_ach = ((notification_type)it->type == notification_type::achievement ||
                            (notification_type)it->type == notification_type::achievement_progress);
-            if (!is_ach) noti_flags |= ImGuiWindowFlags_AlwaysAutoResize;\n        }\n        if (ImGui::Begin(wnd_name.c_str(), nullptr, noti_flags)) {
+            if (!is_ach) noti_flags |= ImGuiWindowFlags_AlwaysAutoResize;
+        }
+        if (ImGui::Begin(wnd_name.c_str(), nullptr, noti_flags)) {
             // Cache actual rendered size for accurate stacking next frame
             ImVec2 win_sz = ImGui::GetWindowSize();
             it->last_width = win_sz.x;
