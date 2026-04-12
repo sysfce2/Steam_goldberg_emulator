@@ -1134,24 +1134,40 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
             auto lobby_id_str = std::to_string(frd.lobby_id());
             ImGui::SetClipboardText(lobby_id_str.c_str());
         }
-        // If we have the same appid, activate the invite/join buttons
+        // If we have the same appid, activate the invite button
         if (settings->get_local_game_id().AppID() == frd.appid()) {
-            // user clicked on "invite to game"
+            // Check if friend is already in our lobby
+            bool friend_in_my_lobby = false;
+            {
+                CSteamID my_lob = settings->get_lobby();
+                if (my_lob.IsValid()) {
+                    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+                    if (mm) {
+                        int mc = mm->GetNumLobbyMembers(my_lob);
+                        for (int mi = 0; mi < mc; ++mi) {
+                            if (mm->GetLobbyMemberByIndex(my_lob, mi).ConvertToUint64() == frd.id()) {
+                                friend_in_my_lobby = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // user clicked on "invite to game" (hide if friend already in our lobby)
             std::string translationInvite_tmp(translationInvite[current_language]);
             translationInvite_tmp.append("##PopupInviteToGame");
-            if (i_have_lobby && ImGui::Button(translationInvite_tmp.c_str())) {
+            if (i_have_lobby && !friend_in_my_lobby && ImGui::Button(translationInvite_tmp.c_str())) {
                 close_popup = true;
                 state.window_state |= window_state_invite;
                 has_friend_action.push(frd);
             }
-            
-            // user clicked on "accept game invite"
+        }
+        // user clicked on "join lobby" (works for any friend with a lobby)
+        if (state.joinable) {
             std::string translationJoin_tmp(translationJoin[current_language]);
             translationJoin_tmp.append("##PopupAcceptInvite");
-            if (state.joinable && ImGui::Button(translationJoin_tmp.c_str())) {
+            if (ImGui::Button(translationJoin_tmp.c_str())) {
                 close_popup = true;
-                // don't bother adding this friend if the button "invite all" was clicked
-                // we will send them the invitation later in Steam_Overlay::steam_run_callback()
                 if (!invite_all_friends_clicked) {
                     state.window_state |= window_state_join;
                     has_friend_action.push(frd);
@@ -1245,7 +1261,7 @@ void Steam_Overlay::build_chat_window()
                         // Line 3: Status
                         ImGui::SetCursorPosX(text_start.x);
                         bool same_app = (local_appid == frd.appid());
-                        if (frd.lobby_id() != 0) {
+                        if (same_app && frd.lobby_id() != 0) {
                             ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu", frd.lobby_id());
                         } else if (same_app) {
                             ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
@@ -1664,9 +1680,9 @@ void Steam_Overlay::build_notifications(float width, float height)
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
         }
 
-        // Line 3: Lobby info
+        // Line 3: Lobby info (only if same app)
         ImGui::SetCursorPosX(text_start.x);
-        if (frd_ptr->lobby_id() != 0) {
+        if ((local_appid == frd_ptr->appid()) && frd_ptr->lobby_id() != 0) {
             Steam_Matchmaking *mm_n = get_steam_client()->steam_matchmaking;
             if (mm_n) {
                 CSteamID frd_lobby((uint64)frd_ptr->lobby_id());
@@ -3120,8 +3136,8 @@ void Steam_Overlay::render_main_window()
                             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
                         }
 
-                        // Line 3: Lobby info (if friend has a lobby)
-                        if (frd.lobby_id() != 0) {
+                        // Line 3: Lobby info (if friend has a lobby and same app)
+                        if ((settings->get_local_game_id().AppID() == frd.appid()) && frd.lobby_id() != 0) {
                             ImGui::SetCursorPosX(text_start.x);
                             Steam_Matchmaking *mm_frd = get_steam_client()->steam_matchmaking;
                             if (mm_frd) {
@@ -3154,20 +3170,30 @@ void Steam_Overlay::render_main_window()
                             }
                             bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
                             bool is_my_lobby_owner = false;
+                            bool friend_in_my_lobby = false;
                             {
                                 CSteamID my_lob = settings->get_lobby();
                                 if (my_lob.IsValid()) {
                                     Steam_Matchmaking *mm_ctx = get_steam_client()->steam_matchmaking;
-                                    if (mm_ctx) is_my_lobby_owner = (mm_ctx->GetLobbyOwner(my_lob) == settings->get_local_steam_id());
+                                    if (mm_ctx) {
+                                        is_my_lobby_owner = (mm_ctx->GetLobbyOwner(my_lob) == settings->get_local_steam_id());
+                                        int mc = mm_ctx->GetNumLobbyMembers(my_lob);
+                                        for (int mi = 0; mi < mc; ++mi) {
+                                            if (mm_ctx->GetLobbyMemberByIndex(my_lob, mi).ConvertToUint64() == frd.id()) {
+                                                friend_in_my_lobby = true;
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            if (same_app && i_have_lobby && is_my_lobby_owner) {
+                            if (same_app && i_have_lobby && is_my_lobby_owner && !friend_in_my_lobby) {
                                 if (ImGui::MenuItem(translationInvite[current_language])) {
                                     state.window_state |= window_state_invite;
                                     has_friend_action.push(frd);
                                 }
                             }
-                            if (same_app && state.joinable && frd.lobby_id() != 0) {
+                            if (state.joinable && frd.lobby_id() != 0) {
                                 if (ImGui::MenuItem(translationJoin[current_language])) {
                                     state.window_state |= window_state_join;
                                     has_friend_action.push(frd);
@@ -5032,8 +5058,41 @@ void Steam_Overlay::steam_run_callback_friends_actions()
     Steam_Friends* steamFriends = get_steam_client()->steam_friends;
     Steam_Matchmaking* steamMatchmaking = get_steam_client()->steam_matchmaking;
 
-    std::for_each(friends.begin(), friends.end(), [this](std::pair<Friend const, friend_window_state> &i) {
+    CSteamID my_lobby_action = settings->get_lobby();
+    std::for_each(friends.begin(), friends.end(), [this, &my_lobby_action](std::pair<Friend const, friend_window_state> &i) {
         i.second.joinable = is_friend_joinable(i);
+
+        // Auto-clear stale/invalid invites
+        if (i.second.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+            bool clear_invite = false;
+
+            // Already in the friend's lobby — no need for the invite
+            if (my_lobby_action.IsValid() && my_lobby_action.ConvertToUint64() == i.first.lobby_id()) {
+                clear_invite = true;
+            }
+
+            // Lobby invite but friend no longer has a lobby
+            if ((i.second.window_state & window_state_lobby_invite) && i.first.lobby_id() == 0) {
+                clear_invite = true;
+            }
+
+            // Rich invite but friend no longer has a connect string
+            if (i.second.window_state & window_state_rich_invite) {
+                Steam_Friends* sf = get_steam_client()->steam_friends;
+                if (sf && std::string(sf->get_friend_rich_presence_silent((uint64)i.first.id(), "connect")).empty()) {
+                    clear_invite = true;
+                }
+            }
+
+            // Friend is no longer joinable at all
+            if (!i.second.joinable) {
+                clear_invite = true;
+            }
+
+            if (clear_invite) {
+                i.second.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+            }
+        }
     });
 
     while (!has_friend_action.empty()) {
