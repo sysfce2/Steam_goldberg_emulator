@@ -87,6 +87,7 @@ static bool s_show_settings     = false;
 static bool s_show_user_info    = false;
 static bool s_show_friends      = false;
 static bool s_show_networks     = false;
+static bool s_show_lobby_chat   = false;
 static bool s_show_sce_browser  = false;
 static bool s_show_chat         = false;
 static int  s_active_chat_idx   = 0;  // currently selected chat tab
@@ -1406,6 +1407,18 @@ static void render_main_overlay(effect_runtime *runtime)
     if (ImGui::Button("Networks"))
         s_show_networks = !s_show_networks;
 
+    // Lobby Chat button — only shown when in a lobby
+    {
+        bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
+        if (has_lobby) {
+            ImGui::SameLine();
+            if (ImGui::Button("Lobby Chat"))
+                s_show_lobby_chat = !s_show_lobby_chat;
+        } else {
+            s_show_lobby_chat = false;
+        }
+    }
+
     // ── SCE buttons (matching native: only shown when catalog data is present) ──
     if (s_bridge.GetSceStatus) {
         GSE_SceStatus sce{};
@@ -1861,6 +1874,90 @@ static void render_main_overlay(effect_runtime *runtime)
                         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "  (no users detected)");
                     }
                 }
+            }
+        }
+        ImGui::End();
+    }
+
+    // ── Lobby Chat Window ──
+    if (s_show_lobby_chat && s_bridge.GetLobbyChatState) {
+        ImGui::SetNextWindowSizeConstraints(ImVec2(ImGui::GetFontSize() * 22, ImGui::GetFontSize() * 16), ImVec2(8192, 8192));
+        ImGui::SetNextWindowBgAlpha(1.0f);
+        if (ImGui::Begin("Lobby Chat", &s_show_lobby_chat)) {
+            GSE_LobbyChatState lcs{};
+            bool got_state = s_bridge.GetLobbyChatState(&lcs) != 0;
+
+            if (got_state && lcs.lobby_id != 0) {
+                // Header: member list
+                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "Members (%d):", lcs.member_count);
+                ImGui::SameLine();
+                for (int i = 0; i < lcs.member_count; ++i) {
+                    if (i > 0) ImGui::SameLine();
+                    bool is_self = (lcs.members[i].steam_id == state.steam_id);
+                    if (is_self)
+                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", lcs.members[i].name);
+                    else
+                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", lcs.members[i].name);
+                    if (i < lcs.member_count - 1) {
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                    }
+                }
+                ImGui::Separator();
+
+                // Chat history area
+                float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
+                ImGui::BeginChild("##lobby_chat_history", ImVec2(0, -footer_height), true);
+
+                if (lcs.chat_history[0]) {
+                    char *history = lcs.chat_history;
+                    char *line = history;
+                    while (*line) {
+                        char *end = strchr(line, '\n');
+                        if (end) *end = '\0';
+
+                        bool is_self_msg = (strncmp(line, "You: ", 5) == 0);
+                        if (is_self_msg)
+                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                        else
+                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+
+                        if (!end) break;
+                        *end = '\n';
+                        line = end + 1;
+                    }
+                } else {
+                    ImGui::TextDisabled("No messages yet.");
+                }
+
+                // Auto-scroll to bottom when new messages arrive
+                static int32_t last_lobby_history_len = 0;
+                if (lcs.history_len != last_lobby_history_len) {
+                    ImGui::SetScrollHereY(1.0f);
+                    last_lobby_history_len = lcs.history_len;
+                }
+
+                ImGui::EndChild();
+
+                // Input bar
+                static char lobby_input_buf[768] = {};
+                float send_btn_w = ImGui::CalcTextSize("Send").x + ImGui::GetStyle().FramePadding.x * 2 + 8;
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send_btn_w - 8);
+
+                bool send_msg = false;
+                if (ImGui::InputText("##lobby_chat_input", lobby_input_buf, sizeof(lobby_input_buf),
+                        ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    send_msg = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Send##lobby_send") || send_msg) {
+                    if (lobby_input_buf[0] && s_bridge.SendLobbyChatMsg) {
+                        s_bridge.SendLobbyChatMsg(lobby_input_buf);
+                        lobby_input_buf[0] = '\0';
+                    }
+                }
+            } else {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Not in a lobby.");
             }
         }
         ImGui::End();

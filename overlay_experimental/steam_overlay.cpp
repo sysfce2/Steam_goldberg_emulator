@@ -2700,6 +2700,14 @@ void Steam_Overlay::render_main_window()
             show_networks = !show_networks;
         }
 
+        // Lobby Chat button — only shown when in a lobby
+        if (i_have_lobby) {
+            ImGui::SameLine();
+            if (ImGui::Button("Lobby Chat")) {
+                show_lobby_chat = !show_lobby_chat;
+            }
+        }
+
         // SCE buttons — only shown when SCE catalog data is present
         {
             Steam_User_Stats *user_stats = get_steam_client()->steam_user_stats;
@@ -4357,6 +4365,92 @@ void Steam_Overlay::render_main_window()
             ImGui::End();
         }
 
+        // Lobby Chat window
+        if (show_lobby_chat && i_have_lobby) {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(ImGui::GetFontSize() * 22, ImGui::GetFontSize() * 16), ImVec2(8192, 8192));
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            if (ImGui::Begin("Lobby Chat", &show_lobby_chat)) {
+                GSE_LobbyChatState lcs{};
+                bool got_state = Bridge_GetLobbyChatState(&lcs) != 0;
+
+                if (got_state) {
+                    // Header: member list
+                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "Members (%d):", lcs.member_count);
+                    ImGui::SameLine();
+                    for (int i = 0; i < lcs.member_count; ++i) {
+                        if (i > 0) ImGui::SameLine();
+                        bool is_self = (lcs.members[i].steam_id == settings->get_local_steam_id().ConvertToUint64());
+                        if (is_self)
+                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", lcs.members[i].name);
+                        else
+                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", lcs.members[i].name);
+                        if (i < lcs.member_count - 1) {
+                            ImGui::SameLine();
+                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                        }
+                    }
+                    ImGui::Separator();
+
+                    // Chat history area
+                    float footer_height = ImGui::GetFrameHeightWithSpacing() + 4;
+                    ImGui::BeginChild("##lobby_chat_history", ImVec2(0, -footer_height), true);
+
+                    if (lcs.chat_history[0]) {
+                        char *history = lcs.chat_history;
+                        char *line = history;
+                        while (*line) {
+                            char *end = strchr(line, '\n');
+                            if (end) *end = '\0';
+
+                            bool is_self = (strncmp(line, "You: ", 5) == 0);
+                            if (is_self)
+                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                            else
+                                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+
+                            if (!end) break;
+                            *end = '\n';
+                            line = end + 1;
+                        }
+                    } else {
+                        ImGui::TextDisabled("No messages yet.");
+                    }
+
+                    // Auto-scroll to bottom when new messages arrive
+                    static size_t last_history_len = 0;
+                    size_t cur_history_len = lcs.history_len;
+                    if (cur_history_len != last_history_len) {
+                        ImGui::SetScrollHereY(1.0f);
+                        last_history_len = cur_history_len;
+                    }
+
+                    ImGui::EndChild();
+
+                    // Input bar
+                    float send_btn_w = ImGui::CalcTextSize("Send").x + ImGui::GetStyle().FramePadding.x * 2 + 8;
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send_btn_w - 8);
+
+                    bool send_msg = false;
+                    if (ImGui::InputText("##lobby_chat_input", lobby_chat_input, sizeof(lobby_chat_input),
+                            ImGuiInputTextFlags_EnterReturnsTrue)) {
+                        send_msg = true;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Send##lobby_send") || send_msg) {
+                        if (lobby_chat_input[0]) {
+                            Bridge_SendLobbyChatMsg(lobby_chat_input);
+                            lobby_chat_input[0] = '\0';
+                        }
+                    }
+                } else {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Not in a lobby.");
+                }
+            }
+            ImGui::End();
+        } else if (!i_have_lobby) {
+            show_lobby_chat = false;
+        }
+
         // we have a url to open/display
         if (show_url.size()) {
             std::string url = show_url;
@@ -4873,6 +4967,10 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
         if (!submit_notification(notification_type::message, "Lobby closed")) {
             pending_lobby_notifications.push_back("Lobby closed");
         }
+        // Clear lobby chat history
+        lobby_chat_history.clear();
+        lobby_chat_last_entry_count = 0;
+        lobby_chat_input[0] = '\0';
     }
 
     // Detect game server state transitions
@@ -6264,6 +6362,105 @@ int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) 
     }
 
     return result_count;
+}
+
+int Steam_Overlay::Bridge_GetLobbyChatState(GSE_LobbyChatState *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!i_have_lobby) return 0;
+
+    CSteamID lobby = settings->get_lobby();
+    if (!lobby.IsValid()) return 0;
+
+    Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+    if (!matchmaking) return 0;
+
+    out->lobby_id = lobby.ConvertToUint64();
+
+    // Fill member list
+    int num_members = matchmaking->GetNumLobbyMembers(lobby);
+    int member_write = 0;
+    for (int i = 0; i < num_members && member_write < GSE_LOBBY_CHAT_MAX_MEMBERS; ++i) {
+        CSteamID member_id = matchmaking->GetLobbyMemberByIndex(lobby, i);
+        if (!member_id.IsValid()) continue;
+        auto &m = out->members[member_write];
+        m.steam_id = member_id.ConvertToUint64();
+
+        // Get display name
+        if (member_id == settings->get_local_steam_id()) {
+            strncpy(m.name, settings->get_local_name(), sizeof(m.name) - 1);
+        } else {
+            Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+            const char *name = steamFriends ? steamFriends->GetFriendPersonaName(member_id) : nullptr;
+            if (name && name[0])
+                strncpy(m.name, name, sizeof(m.name) - 1);
+            else
+                snprintf(m.name, sizeof(m.name), "%llu", (unsigned long long)member_id.ConvertToUint64());
+        }
+        m.name[sizeof(m.name) - 1] = '\0';
+        member_write++;
+    }
+    out->member_count = member_write;
+
+    // Build chat history from chat_entries
+    const auto &entries = matchmaking->GetChatEntries();
+    size_t entry_count = entries.size();
+
+    // Process new entries since last poll
+    if (entry_count > lobby_chat_last_entry_count) {
+        Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+        for (size_t i = lobby_chat_last_entry_count; i < entry_count; ++i) {
+            const auto &e = entries[i];
+            if (e.lobby_id != lobby) continue;  // only show current lobby's messages
+
+            // Get sender name
+            std::string sender_name;
+            if (e.user_id == settings->get_local_steam_id()) {
+                sender_name = "You";
+            } else {
+                const char *name = steamFriends ? steamFriends->GetFriendPersonaName(e.user_id) : nullptr;
+                if (name && name[0])
+                    sender_name = name;
+                else
+                    sender_name = std::to_string(e.user_id.ConvertToUint64());
+            }
+
+            // Append to history
+            if (!lobby_chat_history.empty())
+                lobby_chat_history += '\n';
+            lobby_chat_history += sender_name + ": " + e.message;
+        }
+        lobby_chat_last_entry_count = entry_count;
+    }
+
+    // Copy history to output
+    size_t hist_len = lobby_chat_history.size();
+    if (hist_len >= GSE_LOBBY_CHAT_HISTORY_SIZE) hist_len = GSE_LOBBY_CHAT_HISTORY_SIZE - 1;
+    memcpy(out->chat_history, lobby_chat_history.c_str() + (lobby_chat_history.size() - hist_len), hist_len);
+    out->chat_history[hist_len] = '\0';
+    out->history_len = (int32_t)hist_len;
+
+    return 1;
+}
+
+void Steam_Overlay::Bridge_SendLobbyChatMsg(const char *msg)
+{
+    if (!msg || !msg[0]) return;
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!i_have_lobby) return;
+
+    CSteamID lobby = settings->get_lobby();
+    if (!lobby.IsValid()) return;
+
+    Steam_Matchmaking *matchmaking = get_steam_client()->steam_matchmaking;
+    if (!matchmaking) return;
+
+    size_t len = strlen(msg);
+    if (len > 4000) len = 4000;  // Steam's 4KB limit
+    matchmaking->SendLobbyChatMsg(lobby, msg, (int)len + 1);
 }
 
 #endif

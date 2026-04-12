@@ -635,6 +635,23 @@ __declspec(dllexport) int GSE_OverlayBridge_GetNetworkInfo(GSE_NetAdapter *out, 
     return client->steam_overlay->Bridge_GetNetworkInfo(out, max_adapters);
 }
 
+__declspec(dllexport) int GSE_OverlayBridge_GetLobbyChatState(GSE_LobbyChatState *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetLobbyChatState(out);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_SendLobbyChatMsg(const char *msg)
+{
+    if (!msg || !msg[0]) return;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_SendLobbyChatMsg(msg);
+}
+
 } // extern "C"
 
 #endif // EMU_OVERLAY

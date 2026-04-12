@@ -266,6 +266,23 @@ typedef struct GSE_ChatState {
 #define GSE_AVATAR_SIZE 64   /* 64x64 pixels */
 #define GSE_AVATAR_BYTES (GSE_AVATAR_SIZE * GSE_AVATAR_SIZE * 4)
 
+/* ── Lobby Chat ──────────────────────────────────────────────────────── */
+#define GSE_LOBBY_CHAT_HISTORY_SIZE 8192
+#define GSE_LOBBY_CHAT_MAX_MEMBERS  32
+
+typedef struct GSE_LobbyChatMember {
+    uint64_t steam_id;
+    char     name[128];
+} GSE_LobbyChatMember;
+
+typedef struct GSE_LobbyChatState {
+    uint64_t lobby_id;                              /* current lobby ID (0 if not in lobby) */
+    int32_t  member_count;                          /* members in lobby */
+    int32_t  history_len;                           /* bytes written to chat_history (excl NUL) */
+    char     chat_history[GSE_LOBBY_CHAT_HISTORY_SIZE]; /* newline-separated chat log */
+    GSE_LobbyChatMember members[GSE_LOBBY_CHAT_MAX_MEMBERS];
+} GSE_LobbyChatState;
+
 typedef struct GSE_AvatarData {
     uint64_t steam_id;                      /* owner of this avatar */
     uint8_t  valid;                         /* 1 if avatar data is valid */
@@ -401,6 +418,10 @@ typedef struct GSE_NetAdapter {
 
 typedef int       (*pfn_GSE_OverlayBridge_GetNetworkInfo)(GSE_NetAdapter *out, int max_adapters); /* returns adapter count */
 
+/* Lobby Chat */
+typedef int       (*pfn_GSE_OverlayBridge_GetLobbyChatState)(GSE_LobbyChatState *out);  /* returns 1 if in lobby */
+typedef void      (*pfn_GSE_OverlayBridge_SendLobbyChatMsg)(const char *msg);
+
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE         1
 #define GSE_FRIEND_ACTION_JOIN           2
@@ -480,6 +501,8 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetNotifAppearance  GetNotifAppearance;
     pfn_GSE_OverlayBridge_GetLocalIP           GetLocalIP;
     pfn_GSE_OverlayBridge_GetNetworkInfo       GetNetworkInfo;
+    pfn_GSE_OverlayBridge_GetLobbyChatState    GetLobbyChatState;
+    pfn_GSE_OverlayBridge_SendLobbyChatMsg     SendLobbyChatMsg;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -535,6 +558,8 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetNotifAppearance);
     LOAD(GetLocalIP);
     LOAD(GetNetworkInfo);
+    LOAD(GetLobbyChatState);
+    LOAD(SendLobbyChatMsg);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

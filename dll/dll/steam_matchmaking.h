@@ -146,6 +146,9 @@ public:
     void DeclineLobbyJoinRequest(uint64 lobby_id, uint64 requester_id);
     const std::vector<struct Pending_Lobby_Join_Request>& GetPendingLobbyJoinRequests() const { return pending_lobby_join_requests; }
 
+    // Lobby chat entries accessor (called by overlay)
+    const std::vector<struct Chat_Entry>& GetChatEntries() const { return chat_entries; }
+
     // Kick members from lobby (called by overlay, owner only)
     void KickLobbyMember(uint64 lobby_id, uint64 member_id);
     void KickAllLobbyMembers(uint64 lobby_id);

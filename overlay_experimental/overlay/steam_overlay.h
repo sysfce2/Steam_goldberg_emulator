@@ -164,6 +164,7 @@ class Steam_Overlay
     bool show_achievements = false;
     bool show_settings = false;
     bool show_networks = false;
+    bool show_lobby_chat = false;
     bool show_sce_browser = false;
 
     // SCE asset download progress (set by NotifySceAssetsReady, read on render thread)
@@ -234,6 +235,11 @@ class Steam_Overlay
 
     std::atomic<bool> i_have_lobby = false;
     std::atomic<bool> i_have_game_server = false;
+
+    // Lobby chat state
+    std::string lobby_chat_history{};
+    size_t lobby_chat_last_entry_count{0};  // how many chat_entries we've already processed
+    char lobby_chat_input[768]{};
 
     // notifications queued before overlay is ready
     std::vector<std::string> pending_lobby_notifications{};
@@ -448,6 +454,10 @@ public:
     // Avatar support for ReShade addon
     int  Bridge_GetAvatar(uint64_t steam_id, struct GSE_AvatarData *out);
     int  Bridge_GetLocalAvatar(struct GSE_AvatarData *out);
+
+    // Lobby chat support
+    int  Bridge_GetLobbyChatState(struct GSE_LobbyChatState *out);
+    void Bridge_SendLobbyChatMsg(const char *msg);
 
     // IP address support for ReShade addon
     int  Bridge_GetLocalIP(char *out, int max_len) const;
