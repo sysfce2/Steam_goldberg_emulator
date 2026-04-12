@@ -2471,13 +2471,6 @@ static void render_friends_list()
                     }
                 }
             }
-            // Leave lobby (available to any member)
-            if (s_bridge.LeaveLobby && s_bridge.HasLobby && s_bridge.HasLobby()) {
-                ImGui::Separator();
-                if (ImGui::MenuItem("Leave Lobby")) {
-                    s_bridge.LeaveLobby();
-                }
-            }
             ImGui::EndPopup();
         }
 

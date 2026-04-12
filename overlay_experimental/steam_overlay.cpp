@@ -3212,10 +3212,6 @@ void Steam_Overlay::render_main_window()
                                             }
                                         }
                                     }
-                                    ImGui::Separator();
-                                    if (ImGui::MenuItem("Leave Lobby")) {
-                                        mm->LeaveLobby(my_lobby);
-                                    }
                                 }
                             }
                             ImGui::EndPopup();
