@@ -1273,6 +1273,7 @@ bool Networking::sendToIPPort(Common_Message *msg, uint32 ip, uint16 port, bool 
 uint32 Networking::getIP(CSteamID id)
 {
     Connection *conn = find_connection(id, this->appid);
+    if (!conn && crossapp_messaging) conn = find_connection(id, 0);
     if (conn) {
         return ntohl(conn->tcp_ip_port.ip);
     }
@@ -1284,6 +1285,7 @@ int Networking::getIPs(CSteamID id, uint32 *out, int max_count)
 {
     if (!out || max_count <= 0) return 0;
     Connection *conn = find_connection(id, this->appid);
+    if (!conn && crossapp_messaging) conn = find_connection(id, 0);
     if (!conn) return 0;
     int count = (std::min)(max_count, conn->known_ip_count);
     for (int i = 0; i < count; ++i) {
@@ -1295,6 +1297,7 @@ int Networking::getIPs(CSteamID id, uint32 *out, int max_count)
 uint16 Networking::getPort(CSteamID id)
 {
     Connection *conn = find_connection(id, this->appid);
+    if (!conn && crossapp_messaging) conn = find_connection(id, 0);
     if (conn) {
         return ntohs(conn->tcp_ip_port.port);
     }
