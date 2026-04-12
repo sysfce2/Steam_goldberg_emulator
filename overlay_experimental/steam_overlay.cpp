@@ -1174,6 +1174,14 @@ void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_s
                 }
             }
         }
+        // Show Accept Invite if this friend sent us a pending invite we haven't accepted yet
+        if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+            if (ImGui::Button("Accept Invite##PopupAcceptInvite")) {
+                close_popup = true;
+                state.window_state |= window_state_join;
+                has_friend_action.push(frd);
+            }
+        }
 
         if (close_popup || invite_all_friends_clicked) {
             ImGui::CloseCurrentPopup();
@@ -3199,6 +3207,13 @@ void Steam_Overlay::render_main_window()
                             }
                             if (state.joinable && frd.lobby_id() != 0 && !friend_in_my_lobby) {
                                 if (ImGui::MenuItem(translationJoin[current_language])) {
+                                    state.window_state |= window_state_join;
+                                    has_friend_action.push(frd);
+                                }
+                            }
+                            // Show Accept Invite if this friend sent us a pending invite we haven't accepted yet
+                            if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
+                                if (ImGui::MenuItem("Accept Invite")) {
                                     state.window_state |= window_state_join;
                                     has_friend_action.push(frd);
                                 }
@@ -5654,6 +5669,7 @@ int Steam_Overlay::Bridge_GetFriends(GSE_Friend *out, int max_count) const
         o.is_joinable = state.joinable ? 1 : 0;
         o.same_app = (frd.appid() == local_appid) ? 1 : 0;
         o.window_state = state.window_state;
+        o.has_pending_invite = (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) ? 1 : 0;
         o.appid = frd.appid();
         o.lobby_id = frd.lobby_id();
         o.in_lobby = (frd.lobby_id() != 0) ? 1 : 0;

@@ -2556,6 +2556,12 @@ static void render_friends_list()
                     s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_JOIN);
                 }
             }
+            // Show Accept Invite if this friend sent us a pending invite we haven't accepted yet
+            if (f.has_pending_invite && s_bridge.FriendAction) {
+                if (ImGui::MenuItem("Accept Invite")) {
+                    s_bridge.FriendAction(f.steam_id, GSE_FRIEND_ACTION_ACCEPT_INVITE);
+                }
+            }
             if (ImGui::MenuItem(translationCopyId[s_current_language])) {
                 char id_str[32];
                 snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)f.steam_id);

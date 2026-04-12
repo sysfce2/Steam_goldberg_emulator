@@ -216,7 +216,8 @@ typedef struct GSE_Friend {
     uint8_t  window_state;          /* bitmask: show, invite, join, etc. */
     uint8_t  in_lobby;              /* 1 if friend is currently in a lobby */
     uint8_t  in_my_lobby;           /* 1 if friend is in the local user's lobby */
-    uint8_t  _pad[2];
+    uint8_t  has_pending_invite;     /* 1 if this friend sent us a pending invite */
+    uint8_t  _pad[1];
     uint32_t appid;                 /* friend's current app/game ID */
     uint64_t lobby_id;              /* friend's current lobby ID (0 if none) */
     char     connect_string[GSE_CONNECT_STRING_SIZE]; /* friend's connect string (may be empty) */
