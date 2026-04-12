@@ -205,6 +205,10 @@ void Steam_Matchmaking::on_self_enter_leave_lobby(CSteamID id, int type, bool le
         settings->set_lobby(k_steamIDNil);
     }
 
+    // Force re-broadcast friend data so all peers see the lobby change immediately
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    if (steamFriends) steamFriends->resend_friend_data();
+
     //TODO: handle cases where in two lobbies of type not invisible
     //steam says a user can only be in one regular lobby but we all know how well documented steam is
 }
@@ -299,6 +303,9 @@ void Steam_Matchmaking::AcceptLobbyJoinRequest(uint64 lobby_id, uint64 requester
         if (add_member_to_lobby(lobby, CSteamID(requester_id))) {
             trigger_lobby_member_join_leave((uint64)lobby->room_id(), requester_id, false, true, 0.01);
             SendJoinResponse(lobby_id, requester_id, true);
+            // Re-broadcast friend data so all peers see the membership change
+            Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+            if (steamFriends) steamFriends->resend_friend_data();
         }
     }
 
@@ -419,6 +426,9 @@ void Steam_Matchmaking::KickLobbyMember(uint64 lobby_id, uint64 member_id)
     if (leave_lobby(lobby, CSteamID(member_id))) {
         SendKickMessage(lobby_id, member_id);
         trigger_lobby_member_join_leave(lobby_id, member_id, true, true, 0.01);
+        // Re-broadcast so peers see the membership change
+        Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+        if (steamFriends) steamFriends->resend_friend_data();
     }
 }
 
@@ -442,6 +452,9 @@ void Steam_Matchmaking::KickAllLobbyMembers(uint64 lobby_id)
             trigger_lobby_member_join_leave(lobby_id, mid, true, true, 0.01);
         }
     }
+    // Re-broadcast so peers see the membership changes
+    Steam_Friends *steamFriends = get_steam_client()->steam_friends;
+    if (steamFriends) steamFriends->resend_friend_data();
 }
 
 
@@ -1836,6 +1849,9 @@ void Steam_Matchmaking::Callback(Common_Message *msg)
                             invited_users.erase(inv_it);
                             if (add_member_to_lobby(lobby, requester)) {
                                 trigger_lobby_member_join_leave((uint64)lobby->room_id(), (uint64)msg->source_id(), false, true, 0.01);
+                                // Re-broadcast friend data so all peers see the membership change
+                                Steam_Friends *sf = get_steam_client()->steam_friends;
+                                if (sf) sf->resend_friend_data();
                             }
                             PRINT_DEBUG("Auto-accepted invited user %llu for lobby %llu", (uint64)msg->source_id(), (uint64)lobby->room_id());
                         } else {
