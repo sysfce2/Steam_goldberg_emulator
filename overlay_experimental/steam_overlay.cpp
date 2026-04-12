@@ -4784,9 +4784,13 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
         CSteamID lobby = settings->get_lobby();
         std::string msg = "Lobby created";
         if (lobby.IsValid()) msg += " (" + std::to_string(lobby.ConvertToUint64()) + ")";
-        submit_notification(notification_type::message, msg);
+        if (!submit_notification(notification_type::message, msg)) {
+            pending_lobby_notifications.push_back(msg);
+        }
     } else if (had_lobby && !i_have_lobby) {
-        submit_notification(notification_type::message, "Lobby closed");
+        if (!submit_notification(notification_type::message, "Lobby closed")) {
+            pending_lobby_notifications.push_back("Lobby closed");
+        }
     }
 
     // Detect game server state transitions
@@ -4799,9 +4803,13 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
         std::string sname = sd.server_name();
         std::string msg = "Game server started";
         if (!sname.empty()) msg += " (" + sname + ")";
-        submit_notification(notification_type::message, msg);
+        if (!submit_notification(notification_type::message, msg)) {
+            pending_lobby_notifications.push_back(msg);
+        }
     } else if (had_server && !have_server) {
-        submit_notification(notification_type::message, "Game server stopped");
+        if (!submit_notification(notification_type::message, "Game server stopped")) {
+            pending_lobby_notifications.push_back("Game server stopped");
+        }
     }
 }
 
@@ -4938,7 +4946,18 @@ void Steam_Overlay::steam_run_callback_friends_actions()
 
 void Steam_Overlay::steam_run_callback()
 {
+    // Track lobby/server state even before overlay is ready so we don't miss transitions
+    steam_run_callback_update_my_lobby();
+
     if (!Ready()) return;
+
+    // Flush any notifications that were queued before the overlay was ready
+    if (!pending_lobby_notifications.empty()) {
+        for (auto &msg : pending_lobby_notifications) {
+            submit_notification(notification_type::message, msg);
+        }
+        pending_lobby_notifications.clear();
+    }
 
     if (overlay_state_changed) {
         overlay_state_changed = false;
@@ -4967,8 +4986,6 @@ void Steam_Overlay::steam_run_callback()
         get_steam_client()->settings_server->set_language(language_text);
         steamFriends->resend_friend_data();
     }
-
-    steam_run_callback_update_my_lobby();
 
     // if variable == true, then set it to false and return true (because state was changed) in that case
     bool yes_clicked = true;

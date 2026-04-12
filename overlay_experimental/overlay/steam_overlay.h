@@ -231,6 +231,9 @@ class Steam_Overlay
     std::atomic<bool> i_have_lobby = false;
     std::atomic<bool> i_have_game_server = false;
 
+    // notifications queued before overlay is ready
+    std::vector<std::string> pending_lobby_notifications{};
+
     // some stuff has to be initialized once the renderer hook is ready
     std::atomic<bool> late_init_imgui = false;
 
