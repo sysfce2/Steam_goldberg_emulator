@@ -1650,7 +1650,9 @@ static void render_main_overlay(effect_runtime *runtime)
             // ---- Dynamic action buttons ----
             {
                 bool has_lobby = s_bridge.HasLobby ? (s_bridge.HasLobby() != 0) : false;
-                if (has_lobby && s_bridge.InviteAllFriends) {
+                GSE_LocalLobbyInfo lobby_info{};
+                bool got_lobby_early = has_lobby && s_bridge.GetLocalLobbyInfo && s_bridge.GetLocalLobbyInfo(&lobby_info);
+                if (has_lobby && got_lobby_early && lobby_info.is_owner && s_bridge.InviteAllFriends) {
                     char invite_all_btn[128];
                     snprintf(invite_all_btn, sizeof(invite_all_btn), "%s##PopupInviteAllFriends_fl", translationInviteAll[s_current_language]);
                     if (ImGui::Button(invite_all_btn)) {
@@ -1658,8 +1660,7 @@ static void render_main_overlay(effect_runtime *runtime)
                     }
                     ImGui::SameLine();
                 }
-                GSE_LocalLobbyInfo lobby_info{};
-                bool got_lobby = has_lobby && s_bridge.GetLocalLobbyInfo && s_bridge.GetLocalLobbyInfo(&lobby_info);
+                bool got_lobby = got_lobby_early;
                 if (got_lobby) {
                     if (ImGui::Button("Copy Lobby ID##fl")) {
                         char lobby_str[32];

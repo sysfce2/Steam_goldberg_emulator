@@ -2995,7 +2995,13 @@ void Steam_Overlay::render_main_window()
 
                 // ---- Dynamic action buttons ----
                 {
-                    if (i_have_lobby && !friends.empty()) {
+                    CSteamID lobby = settings->get_lobby();
+                    bool is_lobby_owner = false;
+                    if (lobby.IsValid()) {
+                        Steam_Matchmaking *mm_chk = get_steam_client()->steam_matchmaking;
+                        if (mm_chk) is_lobby_owner = (mm_chk->GetLobbyOwner(lobby) == settings->get_local_steam_id());
+                    }
+                    if (i_have_lobby && is_lobby_owner && !friends.empty()) {
                         std::string inviteAll(translationInviteAll[current_language]);
                         inviteAll.append("##PopupInviteAllFriends");
                         if (ImGui::Button(inviteAll.c_str())) {
@@ -3003,7 +3009,6 @@ void Steam_Overlay::render_main_window()
                         }
                         ImGui::SameLine();
                     }
-                    CSteamID lobby = settings->get_lobby();
                     if (lobby.IsValid()) {
                         if (ImGui::Button("Copy Lobby ID##fl")) {
                             ImGui::SetClipboardText(std::to_string(lobby.ConvertToUint64()).c_str());
