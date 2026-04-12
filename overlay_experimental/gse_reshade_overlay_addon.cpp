@@ -1810,6 +1810,9 @@ static void render_main_overlay(effect_runtime *runtime)
                     snprintf(header, sizeof(header), "%s", a.name);
 
                 if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
+                    if (a.range_str[0]) {
+                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Range: %s", a.range_str);
+                    }
                     for (int ui = 0; ui < a.user_count; ++ui) {
                         auto &u = a.users[ui];
                         ImGui::PushID(ai * 100 + ui);

@@ -390,6 +390,7 @@ typedef struct GSE_NetAdapter {
     char     name[128];         /* adapter friendly name (e.g. "Ethernet", "Wi-Fi") */
     char     ip_str[24];        /* our IP on this adapter (dotted-quad) */
     char     subnet_str[32];    /* CIDR notation (e.g. "192.168.1.0/24") */
+    char     range_str[48];     /* IP range (e.g. "192.168.1.0 - 192.168.1.255") */
     int32_t  user_count;        /* number of entries in users[] */
     int32_t  _pad;
     GSE_NetUser users[GSE_NET_MAX_USERS_PER_ADAPTER];

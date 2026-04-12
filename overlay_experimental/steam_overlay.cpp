@@ -4270,6 +4270,9 @@ void Steam_Overlay::render_main_window()
                         snprintf(header, sizeof(header), "%s", a.name);
 
                     if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
+                        if (a.range_str[0]) {
+                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Range: %s", a.range_str);
+                        }
                         for (int ui = 0; ui < a.user_count; ++ui) {
                             auto &u = a.users[ui];
                             ImGui::PushID(ai * 100 + ui);
@@ -6086,6 +6089,12 @@ int Steam_Overlay::Bridge_GetNetworkInfo(GSE_NetAdapter *out, int max_adapters) 
         snprintf(o.subnet_str, sizeof(o.subnet_str), "%u.%u.%u.%u/%u",
             (net_ip >> 24) & 0xFF, (net_ip >> 16) & 0xFF, (net_ip >> 8) & 0xFF, net_ip & 0xFF,
             a.prefix_len);
+
+        // Build IP range string
+        uint32 upper_ip = ntohl(a.upper);
+        snprintf(o.range_str, sizeof(o.range_str), "%u.%u.%u.%u - %u.%u.%u.%u",
+            (net_ip >> 24) & 0xFF, (net_ip >> 16) & 0xFF, (net_ip >> 8) & 0xFF, net_ip & 0xFF,
+            (upper_ip >> 24) & 0xFF, (upper_ip >> 16) & 0xFF, (upper_ip >> 8) & 0xFF, upper_ip & 0xFF);
 
         o.user_count = 0;
 
