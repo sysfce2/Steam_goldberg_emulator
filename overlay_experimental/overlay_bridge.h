@@ -44,6 +44,7 @@ enum GSE_NotifType {
     GSE_NOTIF_LOBBY_JOIN_RESP    = 6,
     GSE_NOTIF_LOBBY_KICKED       = 7,
     GSE_NOTIF_FRIEND_LOBBY       = 8,
+    GSE_NOTIF_LOBBY_STATUS       = 9,
 };
 
 enum GSE_RendererAPI {

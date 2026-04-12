@@ -1390,6 +1390,9 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
     
     case notification_type::lobby_kicked:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
+
+    case notification_type::lobby_status:
+        return Notification::default_show_time;
     }
 
     PRINT_DEBUG("ERROR unhandled type %i", (int)type);
@@ -1781,6 +1784,11 @@ void Steam_Overlay::build_notifications(float width, float height)
             case notification_type::friend_lobby_available:
                 // interactive: Request to Join button
                 if (show_overlay) extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+            break;
+
+            case notification_type::lobby_status:
+                // non-interactive but always visible on top when overlay is open
+                extra_flags |= ImGuiWindowFlags_NoInputs;
             break;
 
             default:
@@ -5017,11 +5025,11 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
         CSteamID lobby = settings->get_lobby();
         std::string msg = "Lobby created";
         if (lobby.IsValid()) msg += " (" + std::to_string(lobby.ConvertToUint64()) + ")";
-        if (!submit_notification(notification_type::message, msg)) {
+        if (!submit_notification(notification_type::lobby_status, msg)) {
             pending_lobby_notifications.push_back(msg);
         }
     } else if (had_lobby && !i_have_lobby) {
-        if (!submit_notification(notification_type::message, "Lobby closed")) {
+        if (!submit_notification(notification_type::lobby_status, "Lobby closed")) {
             pending_lobby_notifications.push_back("Lobby closed");
         }
         // Clear lobby chat history
@@ -5040,11 +5048,11 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
         std::string sname = sd.server_name();
         std::string msg = "Game server started";
         if (!sname.empty()) msg += " (" + sname + ")";
-        if (!submit_notification(notification_type::message, msg)) {
+        if (!submit_notification(notification_type::lobby_status, msg)) {
             pending_lobby_notifications.push_back(msg);
         }
     } else if (had_server && !have_server) {
-        if (!submit_notification(notification_type::message, "Game server stopped")) {
+        if (!submit_notification(notification_type::lobby_status, "Game server stopped")) {
             pending_lobby_notifications.push_back("Game server stopped");
         }
     }
@@ -5224,7 +5232,7 @@ void Steam_Overlay::steam_run_callback()
     // Flush any notifications that were queued before the overlay was ready
     if (!pending_lobby_notifications.empty()) {
         for (auto &msg : pending_lobby_notifications) {
-            submit_notification(notification_type::message, msg);
+            submit_notification(notification_type::lobby_status, msg);
         }
         pending_lobby_notifications.clear();
     }

@@ -869,6 +869,7 @@ static void render_notifications(effect_runtime *runtime)
             case GSE_NOTIF_LOBBY_JOIN_REQ:
             case GSE_NOTIF_LOBBY_JOIN_RESP:
             case GSE_NOTIF_LOBBY_KICKED:
+            case GSE_NOTIF_LOBBY_STATUS:
                 notif_pos = s_bridge.GetOption(GSE_OPT_NOTIF_POS_INVITE);
                 break;
             case GSE_NOTIF_MESSAGE:
@@ -958,6 +959,10 @@ static void render_notifications(effect_runtime *runtime)
         case GSE_NOTIF_FRIEND_LOBBY:
             // interactive: buttons remain clickable, but stay behind overlay windows
             if (s_show_main_overlay) flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+            break;
+        case GSE_NOTIF_LOBBY_STATUS:
+            // non-interactive but always visible on top when overlay is open
+            flags |= ImGuiWindowFlags_NoInputs;
             break;
         default:
             break;

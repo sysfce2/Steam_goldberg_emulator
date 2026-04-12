@@ -70,6 +70,7 @@ enum class notification_type
     lobby_join_request_response,
     lobby_kicked,
     friend_lobby_available,
+    lobby_status,
 };
 
 struct Overlay_Achievement
