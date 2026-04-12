@@ -82,6 +82,8 @@ static void check_incoming_messages();
 /* ── Overlay toggle state ─────────────────────────────────────────────── */
 
 static bool s_show_main_overlay = false;
+static bool s_reshade_menu_open = false;  // true when ReShade's own overlay is open
+static bool s_overlay_hidden_by_reshade = false;  // true if we hid our overlay because ReShade menu opened
 static bool s_show_achievements = false;
 static bool s_show_settings     = false;
 static bool s_show_user_info    = false;
@@ -1212,9 +1214,25 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Toggle main overlay with our own hotkey (Shift+Tab)
     if (runtime->is_key_down(VK_SHIFT) && runtime->is_key_pressed(VK_TAB)) {
         s_show_main_overlay = !s_show_main_overlay;
+        s_overlay_hidden_by_reshade = false;  // explicit toggle overrides any hiding
         // Sync overlay state with the emu DLL so callbacks fire
         if (s_bridge.ShowOverlay)
             s_bridge.ShowOverlay(s_show_main_overlay ? 1 : 0);
+    }
+
+    // If ReShade menu was opened while our overlay was visible, temporarily hide ours
+    if (s_reshade_menu_open && s_show_main_overlay && !s_overlay_hidden_by_reshade) {
+        s_show_main_overlay = false;
+        s_overlay_hidden_by_reshade = true;
+        if (s_bridge.ShowOverlay)
+            s_bridge.ShowOverlay(0);
+    }
+    // If ReShade menu was closed and we had hidden ours, restore it
+    if (!s_reshade_menu_open && s_overlay_hidden_by_reshade) {
+        s_show_main_overlay = true;
+        s_overlay_hidden_by_reshade = false;
+        if (s_bridge.ShowOverlay)
+            s_bridge.ShowOverlay(1);
     }
 
     // Show a software cursor when the GSE overlay is open.
@@ -1228,6 +1246,13 @@ static void on_reshade_overlay(effect_runtime *runtime)
     if (s_show_main_overlay)
         runtime->block_input_next_frame();
 
+    // Disable docking for our overlay windows so they can't dock to
+    // ReShade panels or to each other.  Save and restore the flag so
+    // we don't affect ReShade's own docking behavior.
+    ImGuiIO &gse_io = ImGui::GetIO();
+    const bool docking_was_enabled = (gse_io.ConfigFlags & ImGuiConfigFlags_DockingEnable) != 0;
+    gse_io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable;
+
     // Main overlay window
     if (s_show_main_overlay) {
         render_main_overlay(runtime);
@@ -1235,6 +1260,10 @@ static void on_reshade_overlay(effect_runtime *runtime)
 
     // Notifications rendered LAST so they always draw on top of everything
     render_notifications(runtime);
+
+    // Restore docking state for ReShade's own UI
+    if (docking_was_enabled)
+        gse_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 }
 
 /* ── Main overlay window (rendered when user toggles with Shift+Tab) ──── */
@@ -3448,6 +3477,14 @@ static void draw_settings_overlay(effect_runtime *runtime)
     }
 }
 
+/* ── Callback when ReShade overlay opens/closes (Home key) ────────────── */
+
+static bool on_reshade_open_overlay(effect_runtime *, bool open, input_source)
+{
+    s_reshade_menu_open = open;
+    return false;  // don't block the state change
+}
+
 /* ── DLL entry point ──────────────────────────────────────────────────── */
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
@@ -3465,6 +3502,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         // EVERY frame, regardless of whether the ReShade overlay panel is open.
         // This is where we render notifications and the main overlay.
         reshade::register_event<reshade::addon_event::reshade_overlay>(on_reshade_overlay);
+
+        // Detect when the ReShade overlay panel opens/closes (Home key)
+        // so we can temporarily hide our overlay while it's active
+        reshade::register_event<reshade::addon_event::reshade_open_overlay>(on_reshade_open_overlay);
 
         // Register a settings tab inside ReShade's overlay panel
         reshade::register_overlay("GSE Overlay Settings", draw_settings_overlay);
