@@ -3019,6 +3019,10 @@ void Steam_Overlay::render_main_window()
                                 ImGui::SameLine();
                             }
                         }
+                        if (ImGui::Button("Leave Lobby##fl")) {
+                            mm_btns->LeaveLobby(lobby);
+                        }
+                        ImGui::SameLine();
                     }
                     if (ImGui::Button(translationCopyId[current_language])) {
                         ImGui::SetClipboardText(std::to_string(settings->get_local_steam_id().ConvertToUint64()).c_str());
@@ -5893,6 +5897,18 @@ void Steam_Overlay::Bridge_KickAllLobbyMembers()
 
     Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
     mm->KickAllLobbyMembers(my_lobby.ConvertToUint64());
+}
+
+void Steam_Overlay::Bridge_LeaveLobby()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+
+    CSteamID my_lobby = settings->get_lobby();
+    if (!my_lobby.IsValid()) return;
+
+    Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
+    mm->LeaveLobby(my_lobby);
 }
 
 void Steam_Overlay::Bridge_SetShowFps(bool v)

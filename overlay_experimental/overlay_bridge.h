@@ -321,6 +321,7 @@ typedef void      (*pfn_GSE_OverlayBridge_SimulateAchievements)(void);
 typedef void      (*pfn_GSE_OverlayBridge_InviteAllFriends)(void);
 typedef void      (*pfn_GSE_OverlayBridge_FriendAction)(uint64_t steam_id, int action);
 typedef void      (*pfn_GSE_OverlayBridge_KickAllLobbyMembers)(void);
+typedef void      (*pfn_GSE_OverlayBridge_LeaveLobby)(void);
 
 /* SCE (Steam Card Exchange) */
 typedef int       (*pfn_GSE_OverlayBridge_GetSceStatus)(GSE_SceStatus *out);
@@ -463,6 +464,7 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_InviteAllFriends    InviteAllFriends;
     pfn_GSE_OverlayBridge_FriendAction        FriendAction;
     pfn_GSE_OverlayBridge_KickAllLobbyMembers KickAllLobbyMembers;
+    pfn_GSE_OverlayBridge_LeaveLobby          LeaveLobby;
     pfn_GSE_OverlayBridge_GetSceStatus        GetSceStatus;
     pfn_GSE_OverlayBridge_RequestSceDownload  RequestSceDownload;
     pfn_GSE_OverlayBridge_GetSceSeriesCount   GetSceSeriesCount;
@@ -517,6 +519,7 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(InviteAllFriends);
     LOAD(FriendAction);
     LOAD(KickAllLobbyMembers);
+    LOAD(LeaveLobby);
     LOAD(GetSceStatus);
     LOAD(RequestSceDownload);
     LOAD(GetSceSeriesCount);

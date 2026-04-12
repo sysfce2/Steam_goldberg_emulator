@@ -1674,6 +1674,12 @@ static void render_main_overlay(effect_runtime *runtime)
                         }
                         ImGui::SameLine();
                     }
+                    if (s_bridge.LeaveLobby) {
+                        if (ImGui::Button("Leave Lobby##fl")) {
+                            s_bridge.LeaveLobby();
+                        }
+                        ImGui::SameLine();
+                    }
                 }
                 if (ImGui::Button(translationCopyId[s_current_language])) {
                     char id_str[32];

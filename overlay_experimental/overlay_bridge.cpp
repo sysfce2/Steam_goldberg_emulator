@@ -403,6 +403,13 @@ __declspec(dllexport) void GSE_OverlayBridge_KickAllLobbyMembers(void)
     client->steam_overlay->Bridge_KickAllLobbyMembers();
 }
 
+__declspec(dllexport) void GSE_OverlayBridge_LeaveLobby(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_LeaveLobby();
+}
+
 __declspec(dllexport) int GSE_OverlayBridge_GetSceStatus(GSE_SceStatus *out)
 {
     if (!out) return 0;

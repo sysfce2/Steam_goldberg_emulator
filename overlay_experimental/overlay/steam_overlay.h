@@ -431,6 +431,7 @@ public:
     void Bridge_InviteAllFriends();
     void Bridge_FriendAction(uint64_t steam_id, int action);
     void Bridge_KickAllLobbyMembers();
+    void Bridge_LeaveLobby();
     void Bridge_AcceptLobbyJoinRequest(int notification_id);
     void Bridge_DeclineLobbyJoinRequest(int notification_id);
     void Bridge_RequestJoinFriendLobby(int notification_id);
