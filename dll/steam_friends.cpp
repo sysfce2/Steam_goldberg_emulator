@@ -154,6 +154,23 @@ void Steam_Friends::resend_friend_data()
     modified = true;
 }
 
+void Steam_Friends::force_resend_friend_data()
+{
+    PRINT_DEBUG("immediate friend data send");
+    lobby_id = settings->get_lobby();
+    Common_Message msg;
+    msg.set_source_id(settings->get_local_steam_id().ConvertToUint64());
+    Friend *f = new Friend(us);
+    f->set_id(settings->get_local_steam_id().ConvertToUint64());
+    f->set_name(settings->get_local_name());
+    f->set_appid(settings->get_local_game_id().AppID());
+    f->set_lobby_id(settings->get_lobby().ConvertToUint64());
+    msg.set_allocated_friend_(f);
+    network->sendToAllIndividuals(&msg, true);
+    modified = false;
+    last_sent_friends = std::chrono::high_resolution_clock::now();
+}
+
 bool Steam_Friends::ok_friend_flags(int iFriendFlags)
 {
     if (iFriendFlags & k_EFriendFlagImmediate) return true;
