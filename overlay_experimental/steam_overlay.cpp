@@ -4761,7 +4761,10 @@ void Steam_Overlay::FriendUpdate(Friend _friend)
     uint64 friend_lobby = _friend.lobby_id();
     bool same_app = (settings->get_local_game_id().AppID() == _friend.appid());
 
-    if (same_app && friend_lobby != 0) {
+    // Skip if we're already in that lobby
+    uint64 my_lobby = settings->get_lobby().ConvertToUint64();
+
+    if (same_app && friend_lobby != 0 && friend_lobby != my_lobby) {
         auto tracked = notified_friend_lobbies.find(friend_id);
         if (tracked == notified_friend_lobbies.end() || tracked->second != friend_lobby) {
             // New lobby or different lobby — show notification
