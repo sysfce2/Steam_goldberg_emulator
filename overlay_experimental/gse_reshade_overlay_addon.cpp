@@ -1673,8 +1673,7 @@ static void render_main_overlay(effect_runtime *runtime)
                             s_bridge.KickAllLobbyMembers();
                         }
                         ImGui::SameLine();
-                    }
-                    if (s_bridge.LeaveLobby) {
+                    } else if (!lobby_info.is_owner && s_bridge.LeaveLobby) {
                         if (ImGui::Button("Leave Lobby##fl")) {
                             s_bridge.LeaveLobby();
                         }

@@ -3018,11 +3018,12 @@ void Steam_Overlay::render_main_window()
                                 }
                                 ImGui::SameLine();
                             }
+                        } else {
+                            if (ImGui::Button("Leave Lobby##fl")) {
+                                mm_btns->LeaveLobby(lobby);
+                            }
+                            ImGui::SameLine();
                         }
-                        if (ImGui::Button("Leave Lobby##fl")) {
-                            mm_btns->LeaveLobby(lobby);
-                        }
-                        ImGui::SameLine();
                     }
                     if (ImGui::Button(translationCopyId[current_language])) {
                         ImGui::SetClipboardText(std::to_string(settings->get_local_steam_id().ConvertToUint64()).c_str());
