@@ -1786,6 +1786,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                            (notification_type)it->type == notification_type::achievement_progress);
             if (!is_ach) noti_flags |= ImGuiWindowFlags_AlwaysAutoResize;
         }
+        // When the overlay is open, force notifications to the front of the z-stack
+        // so they're never hidden behind the overlay panel or its popups
+        if (show_overlay)
+            ImGui::SetNextWindowFocus();
         if (ImGui::Begin(wnd_name.c_str(), nullptr, noti_flags)) {
             // Cache actual rendered size for accurate stacking next frame
             ImVec2 win_sz = ImGui::GetWindowSize();

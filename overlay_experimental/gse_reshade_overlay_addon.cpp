@@ -970,6 +970,10 @@ static void render_notifications(effect_runtime *runtime)
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, alpha));
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
 
+        // When the overlay is open, force notifications to the front of the z-stack
+        // so they're never hidden behind the overlay panel or its popups
+        if (s_show_main_overlay)
+            ImGui::SetNextWindowFocus();
         if (ImGui::Begin(win_id, nullptr, flags)) {
             // Cache actual rendered size for accurate stacking next frame
             s_notif_size_cache[n.id] = ImGui::GetWindowSize();
