@@ -938,11 +938,6 @@ static void render_notifications(effect_runtime *runtime)
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoFocusOnAppearing |
             ImGuiWindowFlags_NoSavedSettings;
 
-        if (s_show_main_overlay) {
-            // When overlay is open, all notifications are fully passive:
-            // don't steal focus, don't intercept clicks (use context menu to accept invites)
-            flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
-        } else {
         switch (n.type) {
         case GSE_NOTIF_ACHIEVEMENT:
         case GSE_NOTIF_ACHIEVEMENT_PROG:
@@ -961,12 +956,12 @@ static void render_notifications(effect_runtime *runtime)
         case GSE_NOTIF_INVITE:
         case GSE_NOTIF_LOBBY_JOIN_REQ:
         case GSE_NOTIF_FRIEND_LOBBY:
-            // interactive: buttons
+            // interactive: buttons remain clickable, but stay behind overlay windows
+            if (s_show_main_overlay) flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
         default:
             break;
-        }
-        } // !s_show_main_overlay\n\n        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
+        }\n\n        if (!is_achievement) flags |= ImGuiWindowFlags_AlwaysAutoResize;
 
         // Push native notification colors
         ImGui::PushStyleColor(ImGuiCol_WindowBg, COL_NOTIF_BG);

@@ -1743,11 +1743,6 @@ void Steam_Overlay::build_notifications(float width, float height)
        
         // some extra window flags for each notification type
         ImGuiWindowFlags extra_flags = ImGuiWindowFlags_NoFocusOnAppearing;
-        if (show_overlay) {
-            // When overlay is open, all notifications are fully passive:
-            // don't steal focus, don't intercept clicks (use context menu to accept invites)
-            extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
-        } else {
         switch ((notification_type)it->type) {
             // games like "Mafia Definitive Edition" will pause the entire game/scene if focus was stolen
             // be less intrusive for notifications that do not require interaction
@@ -1766,11 +1761,13 @@ void Steam_Overlay::build_notifications(float width, float height)
             break;
 
             case notification_type::invite:
-                // nothing
+                // interactive: buttons remain clickable
+                if (show_overlay) extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
 
             case notification_type::lobby_join_request:
                 // interactive: Accept/Decline buttons
+                if (show_overlay) extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
 
             case notification_type::lobby_join_request_response:
@@ -1783,13 +1780,13 @@ void Steam_Overlay::build_notifications(float width, float height)
 
             case notification_type::friend_lobby_available:
                 // interactive: Request to Join button
+                if (show_overlay) extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
 
             default:
                 PRINT_DEBUG("error unhandled flags for type %i", (int)it->type);
             break;
         }
-        } // !show_overlay
 
         std::string wnd_name = "NotiPopupShow" + std::to_string(it->id);
 
