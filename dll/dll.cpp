@@ -583,6 +583,16 @@ STEAMAPI_API void S_CALLTYPE SteamAPI_RunCallbacks()
 {
     // PRINT_DEBUG_ENTRY();
     get_steam_client()->RunCallbacks(true, false);
+
+#if defined(EMU_EXPERIMENTAL_BUILD)
+    // one-shot renderer detection on first callback (renderer is initialized by now)
+    static bool renderer_checked = false;
+    if (!renderer_checked) {
+        renderer_checked = true;
+        append_renderer_info();
+    }
+#endif
+
     //std::this_thread::sleep_for(std::chrono::microseconds(1)); //fixes resident evil revelations lagging. (Seems to work fine without this right now, commenting out)
 }
 

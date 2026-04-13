@@ -909,6 +909,63 @@ static void dump_process_tree()
     fclose(f);
 }
 
+// append detected renderer(s) and third-party modules for every process that loaded us
+// called from SteamAPI_RunCallbacks (first call only), when the game's renderer is initialized
+void append_renderer_info()
+{
+    // get our DLL path to derive the output file path
+    static const char anchor = 0;
+    HMODULE our_module = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&anchor),
+        &our_module
+    );
+    if (!our_module) return;
+
+    wchar_t dll_path_w[MAX_PATH]{};
+    if (!GetModuleFileNameW(our_module, dll_path_w, MAX_PATH)) return;
+
+    std::wstring out_path(dll_path_w);
+    out_path += L".txt";
+
+    // renderer DLLs to check (name, label)
+    struct { const wchar_t* dll; const char* label; } renderers[] = {
+        { L"d3d9.dll",       "DirectX 9" },
+        { L"d3d10.dll",      "DirectX 10" },
+        { L"d3d10_1.dll",    "DirectX 10.1" },
+        { L"d3d11.dll",      "DirectX 11" },
+        { L"d3d12.dll",      "DirectX 12" },
+        { L"vulkan-1.dll",   "Vulkan" },
+        { L"opengl32.dll",   "OpenGL" },
+        { L"dxgi.dll",       "DXGI" },
+    };
+
+    std::vector<std::string> detected;
+    for (auto& r : renderers) {
+        if (GetModuleHandleW(r.dll)) {
+            detected.push_back(r.label);
+        }
+    }
+
+    // append to file
+    FILE* f = _wfopen(out_path.c_str(), L"a");
+    if (!f) return;
+
+    fprintf(f, "=== Renderer Detection (PID %lu) ===\n", GetCurrentProcessId());
+    if (detected.empty()) {
+        fprintf(f, "  (none detected)\n");
+    } else {
+        for (auto& d : detected) {
+            fprintf(f, "  %s\n", d.c_str());
+            PRINT_DEBUG("renderer detected: %s", d.c_str());
+        }
+    }
+    fprintf(f, "\n");
+
+    fclose(f);
+}
+
 BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
 {
     switch ( dwReason ) {
@@ -1159,6 +1216,63 @@ static void dump_process_tree()
         PRINT_DEBUG("process tree [PID %d]: %s%s | path: %s", p.pid, p.exe_name.c_str(),
             is_current ? " (current)" : "", sanitize(p.full_path).c_str());
     }
+
+    fclose(f);
+}
+
+// append detected renderer(s) for the current process
+// called from SteamAPI_RunCallbacks (first call only), when the game's renderer is initialized
+void append_renderer_info()
+{
+    // get our .so path via dladdr
+    static const char anchor = 0;
+    Dl_info dl_info{};
+    if (!dladdr((void*)&anchor, &dl_info) || !dl_info.dli_fname) return;
+
+    std::string so_path(dl_info.dli_fname);
+    char resolved[PATH_MAX]{};
+    if (realpath(so_path.c_str(), resolved)) so_path = resolved;
+
+    std::string out_path = so_path + ".txt";
+
+    // check /proc/self/maps for renderer libraries
+    struct { const char* lib; const char* label; } renderers[] = {
+        { "libvulkan.so",  "Vulkan" },
+        { "libGL.so",      "OpenGL" },
+        { "libGLX.so",     "GLX" },
+        { "libEGL.so",     "EGL" },
+        { "libGLESv2.so",  "OpenGL ES" },
+    };
+
+    std::vector<std::string> detected;
+    FILE* maps = fopen("/proc/self/maps", "r");
+    if (maps) {
+        char line[512]{};
+        std::set<std::string> seen;
+        while (fgets(line, sizeof(line), maps)) {
+            for (auto& r : renderers) {
+                if (strstr(line, r.lib) && seen.insert(r.label).second) {
+                    detected.push_back(r.label);
+                }
+            }
+        }
+        fclose(maps);
+    }
+
+    // append to file
+    FILE* f = fopen(out_path.c_str(), "a");
+    if (!f) return;
+
+    fprintf(f, "=== Renderer Detection (PID %d) ===\n", getpid());
+    if (detected.empty()) {
+        fprintf(f, "  (none detected)\n");
+    } else {
+        for (auto& d : detected) {
+            fprintf(f, "  %s\n", d.c_str());
+            PRINT_DEBUG("renderer detected: %s", d.c_str());
+        }
+    }
+    fprintf(f, "\n");
 
     fclose(f);
 }

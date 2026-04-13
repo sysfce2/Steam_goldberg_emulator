@@ -63,5 +63,9 @@ bool crack_SteamAPI_RestartAppIfNecessary(uint32 unOwnAppID);
 bool crack_SteamAPI_Init();
 #endif
 
+#if defined(EMU_EXPERIMENTAL_BUILD)
+void append_renderer_info();
+#endif
+
 
 #endif // BASE_INCLUDE_H
