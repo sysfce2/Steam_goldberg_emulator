@@ -1593,13 +1593,17 @@ void Steam_Client::try_start_specialk_injection()
                 }
                 if (!sk_root.empty()) {
                     std::wstring ini_dir = sk_root + L"\\Profiles\\" + exe_name;
-                    CreateDirectoryW((sk_root + L"\\Profiles").c_str(), nullptr);
-                    CreateDirectoryW(ini_dir.c_str(), nullptr);
                     std::wstring ini_path = ini_dir + L"\\SpecialK.ini";
-                    if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
-                        PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
+                    // only modify if the profile already exists — creating a minimal INI
+                    // prevents SK from writing its defaults and breaks initialization
+                    if (GetFileAttributesW(ini_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                        if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
+                            PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
+                        } else {
+                            PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                        }
                     } else {
-                        PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                        PRINT_DEBUG("[SK AUTO-INJECT] SK profile not found at '%ls', skipping ReShade disable (SK will create it on first run)", ini_path.c_str());
                     }
                 }
             }
@@ -1784,14 +1788,18 @@ void Steam_Client::try_start_specialk_injection()
 
             // build profile INI path: <SK root>/Profiles/<game.exe>/SpecialK.ini
             std::wstring ini_dir = sk_root + L"\\Profiles\\" + exe_name;
-            CreateDirectoryW((sk_root + L"\\Profiles").c_str(), nullptr);
-            CreateDirectoryW(ini_dir.c_str(), nullptr);
             std::wstring ini_path = ini_dir + L"\\SpecialK.ini";
 
-            if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
-                PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
+            // only modify if the profile already exists — creating a minimal INI
+            // prevents SK from writing its defaults and breaks initialization
+            if (GetFileAttributesW(ini_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
+                    PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
+                } else {
+                    PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                }
             } else {
-                PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                PRINT_DEBUG("[SK AUTO-INJECT] SK profile not found at '%ls', skipping ReShade disable (SK will create it on first run)", ini_path.c_str());
             }
         }
     }
