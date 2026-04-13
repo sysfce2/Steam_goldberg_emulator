@@ -1197,7 +1197,61 @@ void append_renderer_info()
         detected.push_back(std::move(entry));
     }
 
-    // append to file
+    // build inline renderer summary for the process tree placeholder
+    std::string inline_renderers;
+    if (!detected.empty()) {
+        for (size_t i = 0; i < detected.size(); ++i) {
+            if (i > 0) inline_renderers += ", ";
+            inline_renderers += detected[i].label;
+            if (detected[i].is_proxy) {
+                inline_renderers += " [";
+                inline_renderers += detected[i].proxy_label;
+                inline_renderers += "]";
+            }
+        }
+    } else {
+        inline_renderers = "(none detected)";
+    }
+
+    // read-modify-write to replace "(pending - detected after init)" in the process tree
+    {
+        FILE* rf = _wfopen(out_path.c_str(), L"rb");
+        if (rf) {
+            fseek(rf, 0, SEEK_END);
+            long file_size = ftell(rf);
+            fseek(rf, 0, SEEK_SET);
+            if (file_size > 0) {
+                std::string content(file_size, '\0');
+                fread(&content[0], 1, file_size, rf);
+                fclose(rf);
+
+                const std::string placeholder_crlf = "  Renderers: (pending - detected after init)\r\n";
+                const std::string placeholder_lf = "  Renderers: (pending - detected after init)\n";
+                std::string replacement_crlf = "  Renderers: " + inline_renderers + "\r\n";
+                std::string replacement_lf = "  Renderers: " + inline_renderers + "\n";
+
+                size_t pos = content.find(placeholder_crlf);
+                if (pos != std::string::npos) {
+                    content.replace(pos, placeholder_crlf.size(), replacement_crlf);
+                } else {
+                    pos = content.find(placeholder_lf);
+                    if (pos != std::string::npos) {
+                        content.replace(pos, placeholder_lf.size(), replacement_lf);
+                    }
+                }
+
+                FILE* wf = _wfopen(out_path.c_str(), L"wb");
+                if (wf) {
+                    fwrite(content.c_str(), 1, content.size(), wf);
+                    fclose(wf);
+                }
+            } else {
+                fclose(rf);
+            }
+        }
+    }
+
+    // append detailed renderer & environment info
     FILE* f = _wfopen(out_path.c_str(), L"a");
     if (!f) return;
 
@@ -1551,6 +1605,10 @@ void append_renderer_info()
 
     std::string out_path = so_path + ".txt";
 
+    // for sanitizing home directory in paths
+    const char* home = getenv("HOME");
+    size_t home_len = home ? strlen(home) : 0;
+
     // --- Environment detection ---
     std::vector<std::string> env_info;
 
@@ -1720,7 +1778,52 @@ void append_renderer_info()
         fclose(maps);
     }
 
-    // append to file
+    // build inline renderer summary for the process tree placeholder
+    std::string inline_renderers;
+    if (!detected.empty()) {
+        for (size_t i = 0; i < detected.size(); ++i) {
+            if (i > 0) inline_renderers += ", ";
+            inline_renderers += detected[i].label;
+            if (detected[i].is_proxy) {
+                inline_renderers += " [PROXY]";
+            }
+        }
+    } else {
+        inline_renderers = "(none detected)";
+    }
+
+    // read-modify-write to replace "(pending - detected after init)" in the process tree
+    {
+        FILE* rf = fopen(out_path.c_str(), "rb");
+        if (rf) {
+            fseek(rf, 0, SEEK_END);
+            long file_size = ftell(rf);
+            fseek(rf, 0, SEEK_SET);
+            if (file_size > 0) {
+                std::string content(file_size, '\0');
+                fread(&content[0], 1, file_size, rf);
+                fclose(rf);
+
+                const std::string placeholder = "  Renderers: (pending - detected after init)\n";
+                std::string replacement = "  Renderers: " + inline_renderers + "\n";
+
+                size_t pos = content.find(placeholder);
+                if (pos != std::string::npos) {
+                    content.replace(pos, placeholder.size(), replacement);
+                }
+
+                FILE* wf = fopen(out_path.c_str(), "wb");
+                if (wf) {
+                    fwrite(content.c_str(), 1, content.size(), wf);
+                    fclose(wf);
+                }
+            } else {
+                fclose(rf);
+            }
+        }
+    }
+
+    // append detailed renderer & environment info
     FILE* f = fopen(out_path.c_str(), "a");
     if (!f) return;
 
