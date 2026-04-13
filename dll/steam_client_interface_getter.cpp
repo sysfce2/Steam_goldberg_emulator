@@ -1613,8 +1613,47 @@ void Steam_Client::try_start_specialk_injection()
     }
 
     // ReShade is loaded as a local proxy — disable SK's ReShade plugin to prevent double-load
+    // This must happen BEFORE the "SK already loaded" check, because if SK is already
+    // globally injected, we'd return early and never reach the INI write below.
     if (reshade_proxy_detected) {
         PRINT_DEBUG("[SK AUTO-INJECT] ReShade detected as local proxy DLL, will disable SK ReShade plugin loading");
+        wchar_t exe_path_rd[MAX_PATH]{};
+        if (GetModuleFileNameW(nullptr, exe_path_rd, MAX_PATH)) {
+            const wchar_t* exe_name_rd = wcsrchr(exe_path_rd, L'\\');
+            exe_name_rd = exe_name_rd ? exe_name_rd + 1 : exe_path_rd;
+
+            // try to find SK install root
+            std::wstring sk_root_rd;
+            if (settings_client && !settings_client->specialk_install_path.empty()) {
+                wchar_t tmp[MAX_PATH]{};
+                MultiByteToWideChar(CP_UTF8, 0, settings_client->specialk_install_path.c_str(), -1, tmp, MAX_PATH);
+                sk_root_rd = tmp;
+                auto last_sep = sk_root_rd.find_last_of(L"\\/");
+                if (last_sep != std::wstring::npos) {
+                    std::wstring tail = sk_root_rd.substr(last_sep + 1);
+                    for (auto& c : tail) c = towlower(c);
+                    if (tail == L"skif.exe") sk_root_rd = sk_root_rd.substr(0, last_sep);
+                }
+            }
+            if (sk_root_rd.empty()) {
+                wchar_t local_appdata[MAX_PATH]{};
+                if (SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local_appdata) == S_OK) {
+                    sk_root_rd = std::wstring(local_appdata) + L"\\Programs\\Special K";
+                }
+            }
+            if (!sk_root_rd.empty()) {
+                std::wstring ini_path_rd = sk_root_rd + L"\\Profiles\\" + exe_name_rd + L"\\SpecialK.ini";
+                if (GetFileAttributesW(ini_path_rd.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path_rd.c_str())) {
+                        PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path_rd.c_str());
+                    } else {
+                        PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                    }
+                } else {
+                    PRINT_DEBUG("[SK AUTO-INJECT] SK profile not found at '%ls', skipping ReShade disable (SK will create it on first run)", ini_path_rd.c_str());
+                }
+            }
+        }
     }
 
     // check if Special K is already loaded
