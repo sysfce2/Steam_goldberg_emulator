@@ -941,10 +941,13 @@ void append_renderer_info()
         { L"dxgi.dll",       "DXGI" },
     };
 
-    std::vector<std::string> detected;
+    struct DetectedRenderer { std::string label; std::string dll_name; };
+    std::vector<DetectedRenderer> detected;
     for (auto& r : renderers) {
         if (GetModuleHandleW(r.dll)) {
-            detected.push_back(r.label);
+            char dll_a[MAX_PATH]{};
+            WideCharToMultiByte(CP_UTF8, 0, r.dll, -1, dll_a, MAX_PATH, nullptr, nullptr);
+            detected.push_back({ r.label, dll_a });
         }
     }
 
@@ -957,8 +960,8 @@ void append_renderer_info()
         fprintf(f, "  (none detected)\n");
     } else {
         for (auto& d : detected) {
-            fprintf(f, "  %s\n", d.c_str());
-            PRINT_DEBUG("renderer detected: %s", d.c_str());
+            fprintf(f, "  %s (%s)\n", d.label.c_str(), d.dll_name.c_str());
+            PRINT_DEBUG("renderer detected: %s (%s)", d.label.c_str(), d.dll_name.c_str());
         }
     }
     fprintf(f, "\n");
@@ -1244,7 +1247,8 @@ void append_renderer_info()
         { "libGLESv2.so",  "OpenGL ES" },
     };
 
-    std::vector<std::string> detected;
+    struct DetectedRenderer { std::string label; std::string lib_path; };
+    std::vector<DetectedRenderer> detected;
     FILE* maps = fopen("/proc/self/maps", "r");
     if (maps) {
         char line[512]{};
@@ -1252,7 +1256,18 @@ void append_renderer_info()
         while (fgets(line, sizeof(line), maps)) {
             for (auto& r : renderers) {
                 if (strstr(line, r.lib) && seen.insert(r.label).second) {
-                    detected.push_back(r.label);
+                    // extract the mapped file path (last field after the offset/dev/inode columns)
+                    std::string lib_file;
+                    const char* path_start = strrchr(line, '/');
+                    if (path_start) {
+                        lib_file = path_start + 1;
+                        // trim trailing newline
+                        while (!lib_file.empty() && (lib_file.back() == '\n' || lib_file.back() == '\r'))
+                            lib_file.pop_back();
+                    } else {
+                        lib_file = r.lib;
+                    }
+                    detected.push_back({ r.label, lib_file });
                 }
             }
         }
@@ -1268,8 +1283,8 @@ void append_renderer_info()
         fprintf(f, "  (none detected)\n");
     } else {
         for (auto& d : detected) {
-            fprintf(f, "  %s\n", d.c_str());
-            PRINT_DEBUG("renderer detected: %s", d.c_str());
+            fprintf(f, "  %s (%s)\n", d.label.c_str(), d.lib_path.c_str());
+            PRINT_DEBUG("renderer detected: %s (%s)", d.label.c_str(), d.lib_path.c_str());
         }
     }
     fprintf(f, "\n");
