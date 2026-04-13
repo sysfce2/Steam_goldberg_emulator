@@ -298,6 +298,11 @@ public:
     // if empty, the emu will try to find SKIF in the default install location
     std::string specialk_install_path{};
 
+    // how long the SK injection service stays running (in seconds)
+    // 0 = use Temp mode (auto-stop after first successful injection)
+    // >0 = keep service running for this many seconds then stop (for games with launchers)
+    unsigned specialk_service_duration = 0;
+
     // use new app_ticket auth instead of old one
     bool enable_new_app_ticket = true;
     // can use GC token for generation

@@ -1552,16 +1552,19 @@ void Steam_Client::try_start_specialk_injection()
     }
 
     if (service_already_running) {
-        PRINT_DEBUG("[SK AUTO-INJECT] SK injection service already running, skipping 'Start Temp'");
+        PRINT_DEBUG("[SK AUTO-INJECT] SK injection service already running, skipping service start");
     } else {
-        // send "Start Temp" to SKIF to trigger injection service
-        PRINT_DEBUG("[SK AUTO-INJECT] sending 'Start Temp' to SKIF at '%ls'...", skif_path);
+        // determine service mode based on specialk_service_duration
+        unsigned duration = settings_client ? settings_client->specialk_service_duration : 0;
+        const wchar_t* params = duration > 0 ? L"Start" : L"Start Temp";
+
+        PRINT_DEBUG("[SK AUTO-INJECT] sending '%ls' to SKIF at '%ls'...", params, skif_path);
 
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
         sei.lpFile = skif_path;
-        sei.lpParameters = L"Start Temp";
+        sei.lpParameters = params;
         sei.nShow = SW_HIDE;
 
         if (!ShellExecuteExW(&sei)) {
@@ -1571,6 +1574,23 @@ void Steam_Client::try_start_specialk_injection()
 
         if (sei.hProcess) {
             CloseHandle(sei.hProcess);
+        }
+
+        // if using timed mode, schedule a background thread to stop the service
+        if (duration > 0) {
+            std::wstring stop_path(skif_path);
+            std::thread([stop_path, duration]() {
+                Sleep(duration * 1000);
+                SHELLEXECUTEINFOW sei_stop{};
+                sei_stop.cbSize = sizeof(sei_stop);
+                sei_stop.fMask = SEE_MASK_NOASYNC;
+                sei_stop.lpFile = stop_path.c_str();
+                sei_stop.lpParameters = L"Stop";
+                sei_stop.nShow = SW_HIDE;
+                ShellExecuteExW(&sei_stop);
+                PRINT_DEBUG("[SK AUTO-INJECT] stopped injection service after %u seconds", duration);
+            }).detach();
+            PRINT_DEBUG("[SK AUTO-INJECT] service will auto-stop in %u seconds", duration);
         }
     }
 

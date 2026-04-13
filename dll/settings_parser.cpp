@@ -1754,6 +1754,14 @@ static void parse_simple_features(class Settings *settings_client, class Setting
             settings_server->specialk_install_path = val;
         }
     }
+
+    {
+        long dur = ini.GetLongValue("main::misc", "specialk_service_duration", settings_client->specialk_service_duration);
+        if (dur >= 0) {
+            settings_client->specialk_service_duration = static_cast<unsigned>(dur);
+            settings_server->specialk_service_duration = static_cast<unsigned>(dur);
+        }
+    }
 }
 
 // [main::stats]
