@@ -1089,6 +1089,7 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
 {
     PRINT_DEBUG("'%s' '%s'", itf.data(), caller.data());
     std::lock_guard lck(global_mutex);
+    ++missing_interface_count;
     std::stringstream ss{};
 
     try {
@@ -1097,10 +1098,137 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
     }
     catch(...) { }
 
+#if defined(__WINDOWS__)
+    // caller module detection via stack walk
+    try {
+        HMODULE our_module = nullptr;
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&Steam_Client::report_missing_impl),
+            &our_module
+        );
+
+        void* stack_frames[10]{};
+        USHORT frame_count = CaptureStackBackTrace(0, 10, stack_frames, nullptr);
+        for (USHORT i = 0; i < frame_count; ++i) {
+            HMODULE frame_module = nullptr;
+            if (GetModuleHandleExW(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                    reinterpret_cast<LPCWSTR>(stack_frames[i]),
+                    &frame_module) && frame_module && frame_module != our_module) {
+                wchar_t module_path[MAX_PATH]{};
+                if (GetModuleFileNameW(frame_module, module_path, MAX_PATH)) {
+                    char module_path_a[MAX_PATH]{};
+                    WideCharToMultiByte(CP_UTF8, 0, module_path, -1, module_path_a, MAX_PATH, nullptr, nullptr);
+                    ss << "CALLER MODULE=" << module_path_a << "\n";
+                    // return address offset within the calling module
+                    auto offset = reinterpret_cast<uintptr_t>(stack_frames[i]) - reinterpret_cast<uintptr_t>(frame_module);
+                    ss << "CALLER OFFSET=0x" << std::hex << offset << std::dec << "\n";
+                }
+                break;
+            }
+        }
+    }
+    catch(...) { }
+
+    // process executable name
+    try {
+        wchar_t exe_path[MAX_PATH]{};
+        if (GetModuleFileNameW(nullptr, exe_path, MAX_PATH)) {
+            const wchar_t* exe_name = wcsrchr(exe_path, L'\\');
+            exe_name = exe_name ? exe_name + 1 : exe_path;
+            char exe_name_a[MAX_PATH]{};
+            WideCharToMultiByte(CP_UTF8, 0, exe_name, -1, exe_name_a, MAX_PATH, nullptr, nullptr);
+            ss << "PROCESS=" << exe_name_a << "\n";
+        }
+    }
+    catch(...) { }
+
+    // EMU DLL path
+    try {
+        HMODULE our_module = nullptr;
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&Steam_Client::report_missing_impl),
+            &our_module
+        );
+        if (our_module) {
+            wchar_t emu_path[MAX_PATH]{};
+            if (GetModuleFileNameW(our_module, emu_path, MAX_PATH)) {
+                char emu_path_a[MAX_PATH]{};
+                WideCharToMultiByte(CP_UTF8, 0, emu_path, -1, emu_path_a, MAX_PATH, nullptr, nullptr);
+                ss << "EMU DLL=" << emu_path_a << "\n";
+            }
+        }
+    }
+    catch(...) { }
+
+    // thread ID
+    try {
+        ss << "THREAD ID=" << GetCurrentThreadId() << "\n";
+    }
+    catch(...) { }
+
+    // detected third-party modules
+    try {
+        struct { const wchar_t* name; const char* label; } known_overlays[] = {
+            #if defined(_WIN64)
+            { L"SpecialK64.dll",        "Special K" },
+            { L"ReShade64.dll",         "ReShade" },
+            #else
+            { L"SpecialK32.dll",        "Special K" },
+            { L"ReShade32.dll",         "ReShade" },
+            #endif
+            { L"RTSSHooks64.dll",       "RTSS" },
+            { L"RTSSHooks.dll",         "RTSS" },
+            { L"GameOverlayRenderer.dll",   "Steam Overlay" },
+            { L"GameOverlayRenderer64.dll", "Steam Overlay" },
+            { L"DiscordHook.dll",       "Discord" },
+            { L"DiscordHook64.dll",     "Discord" },
+        };
+        std::string detected;
+        for (auto& entry : known_overlays) {
+            if (GetModuleHandleW(entry.name)) {
+                if (!detected.empty()) detected += ", ";
+                detected += entry.label;
+            }
+        }
+        // also check proxy DLLs for Special K export
+        const wchar_t* proxy_dlls[] = {
+            L"dxgi.dll", L"d3d11.dll", L"d3d9.dll",
+            L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"OpenGL32.dll"
+        };
+        for (auto dll_name : proxy_dlls) {
+            HMODULE hMod = GetModuleHandleW(dll_name);
+            if (hMod && GetProcAddress(hMod, "SK_GetVersionStr")) {
+                if (!detected.empty()) detected += ", ";
+                detected += "Special K (proxy)";
+                break;
+            }
+        }
+        if (!detected.empty()) {
+            ss << "DETECTED OVERLAYS=" << detected << "\n";
+        }
+    }
+    catch(...) { }
+#endif
+
+    // injector detection status
+    try {
+        ss << "GRACEFUL=" << (thirdparty_injector_detected ? "true" : "false") << "\n";
+    }
+    catch(...) { }
+
     try {
         if (settings_client) {
             ss << "APPID=" << settings_client->get_local_game_id().AppID() << "\n";
         }
+    }
+    catch(...) { }
+
+    // request counter
+    try {
+        ss << "REQUEST #=" << missing_interface_count << "\n";
     }
     catch(...) { }
 
@@ -1144,9 +1272,10 @@ std::nullptr_t Steam_Client::report_missing_impl_and_exit_or_null(std::string_vi
 
     if (thirdparty_injector_detected || 
         (settings_client && settings_client->graceful_unknown_interfaces)) {
-        // third-party injector or manual setting: just log and return nullptr
+        // third-party injector or manual setting: log to file and return nullptr
         // this matches real steamclient.dll behavior for unknown interface versions
         PRINT_DEBUG("[GRACEFUL] unknown interface '%s' requested by '%s', returning nullptr", itf.data(), caller.data());
+        report_missing_impl(itf, caller);
         return nullptr;
     }
 
