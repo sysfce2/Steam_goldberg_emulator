@@ -1413,7 +1413,6 @@ void Steam_Client::try_start_specialk_injection()
 
     wchar_t skif_path[MAX_PATH]{};
     bool found_skif = false;
-    bool already_started_service = false;
 
     PROCESSENTRY32W pe{};
     pe.dwSize = sizeof(pe);
@@ -1470,20 +1469,55 @@ void Steam_Client::try_start_specialk_injection()
         if (skif_search_path[0] && GetFileAttributesW(skif_search_path) != INVALID_FILE_ATTRIBUTES) {
             PRINT_DEBUG("[SK AUTO-INJECT] SKIF not running, starting from '%ls'", skif_search_path);
             
-            // start SKIF minimized first
+            // step 1: launch SKIF minimized (without Start Temp)
             SHELLEXECUTEINFOW sei_skif{};
             sei_skif.cbSize = sizeof(sei_skif);
             sei_skif.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
             sei_skif.lpFile = skif_search_path;
-            sei_skif.lpParameters = L"Start Temp Minimize";
+            sei_skif.lpParameters = L"Minimize";
             sei_skif.nShow = SW_HIDE;
 
             if (ShellExecuteExW(&sei_skif)) {
                 if (sei_skif.hProcess) CloseHandle(sei_skif.hProcess);
-                found_skif = true;
-                already_started_service = true;
-                wcsncpy_s(skif_path, skif_search_path, MAX_PATH - 1);
-                PRINT_DEBUG("[SK AUTO-INJECT] SKIF launched successfully");
+
+                // step 2: wait for SKIF to initialize (poll for process)
+                PRINT_DEBUG("[SK AUTO-INJECT] waiting for SKIF to initialize...");
+                const int init_timeout_ms = 5000;
+                const int init_poll_ms = 250;
+                int init_elapsed = 0;
+                bool skif_ready = false;
+
+                while (init_elapsed < init_timeout_ms) {
+                    Sleep(init_poll_ms);
+                    init_elapsed += init_poll_ms;
+                    // check if SKIF created its window (FindWindow with SKIF's class)
+                    // or just check if the process is running and responsive
+                    HANDLE hSnap2 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                    if (hSnap2 != INVALID_HANDLE_VALUE) {
+                        PROCESSENTRY32W pe2{};
+                        pe2.dwSize = sizeof(pe2);
+                        if (Process32FirstW(hSnap2, &pe2)) {
+                            do {
+                                if (_wcsicmp(pe2.szExeFile, L"SKIF.exe") == 0) {
+                                    skif_ready = true;
+                                    break;
+                                }
+                            } while (Process32NextW(hSnap2, &pe2));
+                        }
+                        CloseHandle(hSnap2);
+                    }
+                    if (skif_ready) break;
+                }
+
+                if (skif_ready) {
+                    // give SKIF a bit more time to fully initialize its D3D11 renderer
+                    Sleep(2000);
+                    found_skif = true;
+                    wcsncpy_s(skif_path, skif_search_path, MAX_PATH - 1);
+                    PRINT_DEBUG("[SK AUTO-INJECT] SKIF started and ready after %d ms", init_elapsed + 2000);
+                } else {
+                    PRINT_DEBUG("[SK AUTO-INJECT] SKIF process did not appear within %d ms", init_timeout_ms);
+                }
             } else {
                 PRINT_DEBUG("[SK AUTO-INJECT] failed to launch SKIF (error %lu)", GetLastError());
             }
@@ -1497,10 +1531,10 @@ void Steam_Client::try_start_specialk_injection()
         return;
     }
 
-    // launch SKIF with "Start Temp" to start injection service (auto-stops after injection)
-    // skip if we already started SKIF with the service flag
-    if (!already_started_service) {
-        PRINT_DEBUG("[SK AUTO-INJECT] found SKIF at '%ls', starting injection service...", skif_path);
+    // send "Start Temp" to SKIF to trigger injection service
+    // this works both when SKIF was already running and when we just launched it
+    {
+        PRINT_DEBUG("[SK AUTO-INJECT] sending 'Start Temp' to SKIF at '%ls'...", skif_path);
 
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
