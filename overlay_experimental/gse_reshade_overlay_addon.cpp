@@ -179,23 +179,53 @@ static device *s_current_device = nullptr;
 
 /* ── FPS tracking (addon-side) ────────────────────────────────────────── */
 
+static constexpr int ADDON_FT_HISTORY_SIZE = 128;
+static constexpr float ADDON_EMA_ALPHA = 0.1f;
+
 static float s_addon_fps = 0.0f;
 static float s_addon_frametime = 0.0f;
-static int   s_frame_count = 0;
-static std::chrono::steady_clock::time_point s_last_fps_time = std::chrono::steady_clock::now();
+static float s_ft_history[ADDON_FT_HISTORY_SIZE]{};
+static int   s_ft_history_idx = 0;
+static int   s_ft_history_count = 0;
+static float s_ft_min = 0.0f;
+static float s_ft_max = 0.0f;
+static float s_ft_avg = 0.0f;
+static std::chrono::steady_clock::time_point s_last_frame_time = std::chrono::steady_clock::now();
 
 static void update_fps()
 {
     auto now = std::chrono::steady_clock::now();
-    s_frame_count++;
+    float dt_ms = std::chrono::duration<float, std::milli>(now - s_last_frame_time).count();
+    s_last_frame_time = now;
 
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - s_last_fps_time).count();
-    if (elapsed >= 500) {
-        s_addon_fps = s_frame_count * 1000.0f / elapsed;
-        s_addon_frametime = elapsed / (float)s_frame_count;
-        s_frame_count = 0;
-        s_last_fps_time = now;
+    // Clamp absurd values
+    if (dt_ms < 0.0f) dt_ms = 0.0f;
+    if (dt_ms > 1000.0f) dt_ms = 1000.0f;
+
+    // Ring buffer
+    s_ft_history[s_ft_history_idx] = dt_ms;
+    s_ft_history_idx = (s_ft_history_idx + 1) % ADDON_FT_HISTORY_SIZE;
+    if (s_ft_history_count < ADDON_FT_HISTORY_SIZE) s_ft_history_count++;
+
+    // EMA smoothing
+    if (s_addon_frametime <= 0.0f) {
+        s_addon_frametime = dt_ms;
+    } else {
+        s_addon_frametime = ADDON_EMA_ALPHA * dt_ms + (1.0f - ADDON_EMA_ALPHA) * s_addon_frametime;
     }
+    s_addon_fps = (s_addon_frametime > 0.0f) ? (1000.0f / s_addon_frametime) : 0.0f;
+
+    // Min/max/avg over ring buffer
+    float sum = 0.0f, mn = 1e9f, mx = 0.0f;
+    for (int i = 0; i < s_ft_history_count; i++) {
+        float v = s_ft_history[i];
+        sum += v;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+    }
+    s_ft_avg = sum / s_ft_history_count;
+    s_ft_min = mn;
+    s_ft_max = mx;
 }
 
 /* ── Playtime tracking (addon-side) ───────────────────────────────────── */
@@ -1128,7 +1158,7 @@ static void render_stats_hud()
 
     if (state.show_fps) {
         char tmp[32];
-        snprintf(tmp, sizeof(tmp), "FPS: %2.0f", s_addon_fps);
+        snprintf(tmp, sizeof(tmp), "FPS: %.1f", s_addon_fps);
         strcat(stats_text, tmp);
         need_sep = true;
     }
@@ -1148,15 +1178,36 @@ static void render_stats_hud()
         strcat(stats_text, tmp);
     }
 
+    bool show_graph = (state.show_fps || state.show_frametime) && s_ft_history_count > 1;
+    float graph_height = 40.0f;
+
     // Calculate text size to auto-fit the window
     ImVec2 text_sz = ImGui::CalcTextSize(stats_text);
     ImVec2 padding = ImGui::GetStyle().WindowPadding;
-    ImVec2 box_sz = ImVec2(text_sz.x + padding.x * 2.0f, text_sz.y + padding.y * 2.0f);
+
+    // Min/max line sizing
+    float min_max_line_h = 0.0f;
+    float min_width = 0.0f;
+    if (show_graph) {
+        char mm_buf[128];
+        snprintf(mm_buf, sizeof(mm_buf), "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
+            s_ft_min, s_ft_avg, s_ft_max);
+        ImVec2 mm_sz = ImGui::CalcTextSize(mm_buf);
+        min_max_line_h = mm_sz.y + 2.0f;
+        min_width = mm_sz.x;
+    }
+
+    float content_width = text_sz.x;
+    if (show_graph && min_width > content_width) content_width = min_width;
+    if (show_graph && content_width < 200.0f) content_width = 200.0f;
+
+    float total_height = text_sz.y + padding.y * 2.0f;
+    if (show_graph) total_height += 4.0f + graph_height + 2.0f + min_max_line_h;
+
+    ImVec2 box_sz = ImVec2(content_width + padding.x * 2.0f, total_height);
 
     // Position: use the stats_pos from bridge state (normalized 0..1), default top-left
-    // The anchor point within the stats box moves with the position setting
-    float pos_x = 0.0f, pos_y = 0.0f;  // default: top-left
-    // TODO: expose stats_pos_x/y through the bridge when available
+    float pos_x = 0.0f, pos_y = 0.0f;
     float anchor_x = box_sz.x * pos_x;
     float anchor_y = box_sz.y * pos_y;
     float screen_x = ImGui::GetIO().DisplaySize.x * pos_x - anchor_x;
@@ -1178,6 +1229,29 @@ static void render_stats_hud()
 
     if (ImGui::Begin("##gse_stats", nullptr, flags)) {
         ImGui::TextUnformatted(stats_text);
+
+        // Frametime graph
+        if (show_graph) {
+            float graph_data[ADDON_FT_HISTORY_SIZE];
+            int count = s_ft_history_count;
+            int start = (s_ft_history_idx - count + ADDON_FT_HISTORY_SIZE) % ADDON_FT_HISTORY_SIZE;
+            for (int i = 0; i < count; i++) {
+                graph_data[i] = s_ft_history[(start + i) % ADDON_FT_HISTORY_SIZE];
+            }
+
+            float scale_max = s_ft_max * 1.2f;
+            if (scale_max < 1.0f) scale_max = 1.0f;
+
+            ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
+            ImGui::PlotLines("##ft_graph", graph_data, count, 0, nullptr,
+                0.0f, scale_max, ImVec2(content_width, graph_height));
+            ImGui::PopStyleColor(2);
+
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
+                s_ft_min, s_ft_avg, s_ft_max);
+        }
     }
     ImGui::End();
 

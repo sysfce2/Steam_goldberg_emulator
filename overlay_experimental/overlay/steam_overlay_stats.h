@@ -8,29 +8,41 @@
 #include "dll/settings.h"
 #include "InGameOverlay/ImGui/imgui.h"
 
+static constexpr int FRAMETIME_HISTORY_SIZE = 128;
 
 class Steam_Overlay_Stats {
 private:
     class Settings* settings{};
     
-    unsigned last_frametime_idx{};
-    std::chrono::high_resolution_clock::time_point last_frame_timepoint =
-        std::chrono::high_resolution_clock::now();
-    unsigned running_frametime_ms = 0; // used for the ongoing calculation
-    float active_frametime_ms = 0; // the final calculated frametime after averaging
-    unsigned active_fps = 0; // the final calculated FPS after averaging
+    // Frame timing - high precision
+    std::chrono::steady_clock::time_point last_frame_timepoint =
+        std::chrono::steady_clock::now();
+    
+    // Ring buffer for frametime history (in ms, float precision)
+    float frametime_history[FRAMETIME_HISTORY_SIZE]{};
+    int   frametime_history_idx = 0;
+    int   frametime_history_count = 0; // how many valid entries (up to FRAMETIME_HISTORY_SIZE)
 
+    // Smoothed display values (EMA)
+    float smoothed_frametime_ms = 0.0f;
+    float smoothed_fps = 0.0f;
 
-    std::chrono::high_resolution_clock::time_point initial_time =
-        std::chrono::high_resolution_clock::now();
-    std::chrono::high_resolution_clock::time_point last_playtime =
-        std::chrono::high_resolution_clock::now();
+    // Min/max/avg over the ring buffer
+    float min_frametime_ms = 0.0f;
+    float max_frametime_ms = 0.0f;
+    float avg_frametime_ms = 0.0f;
+
+    // Playtime
+    std::chrono::steady_clock::time_point initial_time =
+        std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point last_playtime =
+        std::chrono::steady_clock::now();
     unsigned active_playtime_hr = 0;
     unsigned active_playtime_min = 0;
     unsigned active_playtime_sec = 0;
 
-    void update_frametime(const std::chrono::high_resolution_clock::time_point &now);
-    void update_playtime(const std::chrono::high_resolution_clock::time_point &now);
+    void update_frametime(const std::chrono::steady_clock::time_point &now);
+    void update_playtime(const std::chrono::steady_clock::time_point &now);
 
 public:
     ImFont *font = nullptr;
