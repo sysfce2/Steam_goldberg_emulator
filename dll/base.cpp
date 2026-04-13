@@ -1262,6 +1262,8 @@ void append_renderer_info()
         std::string full_path;
         bool is_proxy;
         std::string proxy_label;
+        std::string category;    // GAME, OVERLAY, TRANSLATION, INFRA, INPUT
+        std::string annotation;  // e.g., "loaded by Special K for overlay rendering"
     };
     std::vector<DetectedRenderer> detected;
 
@@ -1318,29 +1320,155 @@ void append_renderer_info()
         detected.push_back(std::move(entry));
     }
 
+    // --- classify each detected entry ---
+    // first pass: identify overlays
+    bool sk_present = false;
+    bool reshade_present = false;
+    std::string reshade_path_str;
+    for (auto& d : detected) {
+        if (d.label.find("Special K") != std::string::npos) {
+            sk_present = true;
+        }
+        if (d.label.find("ReShade") != std::string::npos) {
+            reshade_present = true;
+            reshade_path_str = d.full_path;
+        }
+    }
+
+    // find the lowest and highest system (non-proxy) D3D versions
+    int lowest_system_d3d = 0; // 8,9,10,11,12
+    int highest_system_d3d = 0;
+    bool has_system_vulkan = false;
+    bool has_system_opengl = false;
+    for (auto& d : detected) {
+        if (d.is_proxy) continue;
+        int ver = 0;
+        if (d.label == "DirectX 8")       ver = 8;
+        else if (d.label == "DirectX 9")  ver = 9;
+        else if (d.label == "DirectX 10" || d.label == "DirectX 10.1") ver = 10;
+        else if (d.label == "DirectX 11") ver = 11;
+        else if (d.label == "DirectX 12" || d.label == "DirectX 12 Core (Agility SDK)") ver = 12;
+        else if (d.label == "Vulkan")  { has_system_vulkan = true; continue; }
+        else if (d.label == "OpenGL")  { has_system_opengl = true; continue; }
+        if (ver) {
+            if (!lowest_system_d3d || ver < lowest_system_d3d) lowest_system_d3d = ver;
+            if (ver > highest_system_d3d) highest_system_d3d = ver;
+        }
+    }
+
+    // second pass: classify
+    for (auto& d : detected) {
+        // overlay tools
+        if (d.label.find("Special K") != std::string::npos) {
+            d.category = "OVERLAY";
+            d.annotation = "overlay renders via DirectX 11";
+            continue;
+        }
+        if (d.label.find("ReShade") != std::string::npos) {
+            d.category = "OVERLAY";
+            if (d.full_path.find("SpecialK") != std::string::npos ||
+                d.full_path.find("PlugIns") != std::string::npos ||
+                d.full_path.find("Special K") != std::string::npos) {
+                d.annotation = "loaded as Special K plugin";
+            }
+            continue;
+        }
+
+        // proxy'd DLLs (translation layers / overlay hooks)
+        if (d.is_proxy) {
+            if (d.proxy_label == "dgVoodoo") {
+                d.category = "TRANSLATION";
+                d.annotation = "translates " + d.label + " -> DirectX 11";
+            } else if (d.proxy_label == "DXVK") {
+                d.category = "TRANSLATION";
+                d.annotation = "translates " + d.label + " -> Vulkan";
+            } else if (d.proxy_label == "VKD3D-proton") {
+                d.category = "TRANSLATION";
+                d.annotation = "translates DirectX 12 -> Vulkan";
+            } else if (d.proxy_label == "d3d8to9") {
+                d.category = "TRANSLATION";
+                d.annotation = "translates DirectX 8 -> DirectX 9";
+            } else if (d.proxy_label == "ENB Series") {
+                d.category = "OVERLAY";
+                d.annotation = "post-processing (hooks " + d.label + ")";
+            } else if (d.proxy_label == "Special K") {
+                d.category = "OVERLAY";
+                d.annotation = "Special K proxy (hooks " + d.label + ")";
+            } else if (d.proxy_label == "ReShade") {
+                d.category = "OVERLAY";
+                d.annotation = "ReShade proxy (hooks " + d.label + ")";
+            } else {
+                d.category = "TRANSLATION";
+                d.annotation = "proxy: " + d.proxy_label;
+            }
+            continue;
+        }
+
+        // infrastructure (never primary renderers)
+        if (d.label == "DXGI") {
+            d.category = "INFRA";
+            continue;
+        }
+        if (d.label == "DirectInput 8") {
+            d.category = "INPUT";
+            continue;
+        }
+        if (d.label == "EGL (ANGLE)" || d.label == "OpenGL ES (ANGLE)") {
+            d.category = "INFRA";
+            continue;
+        }
+
+        // DirectDraw / D3D Immediate Mode from system = legacy, likely game renderer
+        if (d.label == "DirectDraw" || d.label == "Direct3D Immediate Mode") {
+            d.category = "GAME";
+            continue;
+        }
+
+        // Glide from system doesn't exist (no system glide DLL) - should be caught by proxy
+        if (d.label.find("Glide") != std::string::npos) {
+            d.category = "GAME";
+            continue;
+        }
+
+        // system D3D11 when SK is present and the game uses a different renderer
+        // SK always loads D3D11 for its overlay, even in D3D9/D3D12/Vulkan/OpenGL games
+        if (d.label == "DirectX 11" && sk_present &&
+            ((lowest_system_d3d && lowest_system_d3d < 11) ||
+             highest_system_d3d > 11 ||
+             has_system_vulkan || has_system_opengl)) {
+            d.category = "INFRA";
+            d.annotation = "loaded by Special K for overlay rendering";
+            continue;
+        }
+
+        // everything else from system = game renderer
+        d.category = "GAME";
+    }
+
     // build replacement strings for the process tree placeholder (one per line ending style)
+    // helper to format one entry
+    auto format_entry = [](const DetectedRenderer& d, const std::string& indent, const std::string& eol) -> std::string {
+        std::string r = indent + "[" + d.category + "] " + d.label;
+        if (d.is_proxy) r += " [" + d.proxy_label + "]";
+        if (!d.annotation.empty()) r += " (" + d.annotation + ")";
+        r += eol;
+        r += indent + "  " + d.full_path + eol;
+        return r;
+    };
+
     std::string replacement_lf, replacement_crlf;
     if (detected.empty()) {
         replacement_lf = "  Renderers: (none detected)\n";
         replacement_crlf = "  Renderers: (none detected)\r\n";
     } else if (detected.size() == 1) {
-        auto& d = detected[0];
-        std::string r = d.label;
-        if (d.is_proxy) r += " [" + d.proxy_label + "]";
-        replacement_lf = "  Renderers: " + r + "\n";
-        replacement_lf += "    " + d.full_path + "\n";
-        replacement_crlf = "  Renderers: " + r + "\r\n";
-        replacement_crlf += "    " + d.full_path + "\r\n";
+        replacement_lf = "  Renderers:\n" + format_entry(detected[0], "    ", "\n");
+        replacement_crlf = "  Renderers:\r\n" + format_entry(detected[0], "    ", "\r\n");
     } else {
         replacement_lf = "  Renderers:\n";
         replacement_crlf = "  Renderers:\r\n";
         for (auto& d : detected) {
-            std::string r = "    " + d.label;
-            if (d.is_proxy) r += " [" + d.proxy_label + "]";
-            replacement_lf += r + "\n";
-            replacement_lf += "      " + d.full_path + "\n";
-            replacement_crlf += r + "\r\n";
-            replacement_crlf += "      " + d.full_path + "\r\n";
+            replacement_lf += format_entry(d, "    ", "\n");
+            replacement_crlf += format_entry(d, "    ", "\r\n");
         }
     }
 
@@ -1413,21 +1541,18 @@ void append_renderer_info()
         }
     }
 
-    // renderers
-    fprintf(f, "  Renderers:\n");
+    // renderers (categorized)
+    fprintf(f, "  Detected modules:\n");
     if (detected.empty()) {
         fprintf(f, "    (none detected)\n");
     } else {
         for (auto& d : detected) {
-            if (d.is_proxy) {
-                fprintf(f, "    %s [PROXY: %s]\n", d.label.c_str(), d.proxy_label.c_str());
-                fprintf(f, "      %s\n", d.full_path.c_str());
-                PRINT_DEBUG("renderer proxy detected: %s [%s] at %s", d.label.c_str(), d.proxy_label.c_str(), d.full_path.c_str());
-            } else {
-                fprintf(f, "    %s\n", d.label.c_str());
-                fprintf(f, "      %s\n", d.full_path.c_str());
-                PRINT_DEBUG("renderer detected: %s at %s", d.label.c_str(), d.full_path.c_str());
-            }
+            fprintf(f, "    [%s] %s", d.category.c_str(), d.label.c_str());
+            if (d.is_proxy) fprintf(f, " [PROXY: %s]", d.proxy_label.c_str());
+            if (!d.annotation.empty()) fprintf(f, " (%s)", d.annotation.c_str());
+            fprintf(f, "\n");
+            fprintf(f, "      %s\n", d.full_path.c_str());
+            PRINT_DEBUG("detected [%s]: %s at %s", d.category.c_str(), d.label.c_str(), d.full_path.c_str());
         }
     }
     fprintf(f, "\n");
@@ -1997,6 +2122,8 @@ void append_renderer_info()
         std::string full_path;  // full mapped path
         std::string filename;   // just the filename
         bool is_proxy;
+        std::string category;    // GAME, OVERLAY, TRANSLATION, INFRA
+        std::string annotation;
     };
     std::vector<DetectedRenderer> detected;
     FILE* maps = fopen("/proc/self/maps", "r");
@@ -2056,27 +2183,69 @@ void append_renderer_info()
         fclose(maps);
     }
 
+    // --- classify each detected entry ---
+    for (auto& d : detected) {
+        // overlay tools
+        if (d.label == "vkBasalt") {
+            d.category = "OVERLAY";
+            d.annotation = "Vulkan post-processing layer";
+            continue;
+        }
+        if (d.label == "Special K") {
+            d.category = "OVERLAY";
+            continue;
+        }
+        if (d.label == "ReShade") {
+            d.category = "OVERLAY";
+            continue;
+        }
+
+        // DXVK-native translation layers
+        if (d.label.find("DXVK-native") != std::string::npos) {
+            d.category = "TRANSLATION";
+            d.annotation = "translates " + d.label + " -> Vulkan";
+            continue;
+        }
+
+        // infrastructure (windowing / framework, not direct renderers)
+        if (d.label == "Wayland client" || d.label == "X11 client") {
+            d.category = "INFRA";
+            continue;
+        }
+        if (d.label == "SDL2" || d.label == "SDL3") {
+            d.category = "INFRA";
+            continue;
+        }
+        if (d.label == "GLX" || d.label == "EGL") {
+            d.category = "INFRA";
+            continue;
+        }
+
+        // everything else = game renderer
+        d.category = "GAME";
+    }
+
     // build replacement string for the process tree placeholder
+    auto format_entry_linux = [](const DetectedRenderer& d, const std::string& indent) -> std::string {
+        std::string r = indent + "[" + d.category + "] " + d.label;
+        if (d.is_proxy) r += " [PROXY]";
+        if (!d.annotation.empty()) r += " (" + d.annotation + ")";
+        r += "\n";
+        if (!d.full_path.empty()) {
+            r += indent + "  " + d.full_path + "\n";
+        }
+        return r;
+    };
+
     std::string replacement;
     if (detected.empty()) {
         replacement = "  Renderers: (none detected)\n";
     } else if (detected.size() == 1) {
-        auto& d = detected[0];
-        std::string r = d.label;
-        if (d.is_proxy) r += " [PROXY]";
-        replacement = "  Renderers: " + r + "\n";
-        if (!d.full_path.empty()) {
-            replacement += "    " + d.full_path + "\n";
-        }
+        replacement = "  Renderers:\n" + format_entry_linux(detected[0], "    ");
     } else {
         replacement = "  Renderers:\n";
         for (auto& d : detected) {
-            replacement += "    " + d.label;
-            if (d.is_proxy) replacement += " [PROXY]";
-            replacement += "\n";
-            if (!d.full_path.empty()) {
-                replacement += "      " + d.full_path + "\n";
-            }
+            replacement += format_entry_linux(d, "    ");
         }
     }
 
@@ -2144,20 +2313,22 @@ void append_renderer_info()
     }
 
     // renderers
-    fprintf(f, "  Renderers:\n");
+    fprintf(f, "  Detected modules:\n");
     if (detected.empty()) {
         fprintf(f, "    (none detected)\n");
     } else {
         for (auto& d : detected) {
             if (d.is_proxy) {
-                fprintf(f, "    %s [PROXY: custom library]\n", d.label.c_str());
-                fprintf(f, "      %s\n", d.full_path.c_str());
-                PRINT_DEBUG("renderer proxy detected: %s at %s", d.label.c_str(), d.full_path.c_str());
+                fprintf(f, "    [%s] %s [PROXY: custom library]", d.category.c_str(), d.label.c_str());
             } else {
-                fprintf(f, "    %s\n", d.label.c_str());
-                fprintf(f, "      %s\n", d.full_path.c_str());
-                PRINT_DEBUG("renderer detected: %s at %s", d.label.c_str(), d.full_path.c_str());
+                fprintf(f, "    [%s] %s", d.category.c_str(), d.label.c_str());
             }
+            if (!d.annotation.empty()) {
+                fprintf(f, " (%s)", d.annotation.c_str());
+            }
+            fprintf(f, "\n");
+            fprintf(f, "      %s\n", d.full_path.c_str());
+            PRINT_DEBUG("module detected: [%s] %s at %s", d.category.c_str(), d.label.c_str(), d.full_path.c_str());
         }
     }
     fprintf(f, "\n");
