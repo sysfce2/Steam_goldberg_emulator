@@ -758,12 +758,19 @@ static void dump_process_tree()
         std::wstring full_path;
         std::wstring cmdline;
         std::string start_time; // formatted creation timestamp
-        std::vector<std::string> renderers; // loaded renderer DLLs (for parent processes)
+        struct RendererEntry {
+            std::string label;
+            std::wstring full_path;
+            bool is_proxy;
+        };
+        std::vector<RendererEntry> renderers; // loaded renderer/overlay DLLs (for parent processes)
     };
     std::vector<ProcessInfo> tree;
 
-    // renderer DLLs to look for when scanning parent process modules
+    // DLLs to look for when scanning parent process modules
     struct { const wchar_t* dll; const char* label; } renderer_dlls[] = {
+        { L"ddraw.dll",      "DirectDraw" },
+        { L"d3dimm.dll",     "Direct3D Immediate Mode" },
         { L"d3d8.dll",       "DirectX 8" },
         { L"d3d9.dll",       "DirectX 9" },
         { L"d3d10.dll",      "DirectX 10" },
@@ -773,7 +780,23 @@ static void dump_process_tree()
         { L"vulkan-1.dll",   "Vulkan" },
         { L"opengl32.dll",   "OpenGL" },
         { L"dxgi.dll",       "DXGI" },
+        { L"dinput8.dll",    "DirectInput 8" },
+        // 3dfx Glide wrappers (dgVoodoo)
+        { L"glide.dll",      "Glide (3dfx)" },
+        { L"glide2x.dll",    "Glide 2x (3dfx)" },
+        { L"glide3x.dll",    "Glide 3x (3dfx)" },
+        { L"SpecialK32.dll", "Special K (32-bit)" },
+        { L"SpecialK64.dll", "Special K (64-bit)" },
+        { L"ReShade32.dll",  "ReShade (32-bit)" },
+        { L"ReShade64.dll",  "ReShade (64-bit)" },
     };
+
+    // system directories for proxy detection in parent processes
+    wchar_t parent_sys_dir[MAX_PATH]{};
+    GetSystemDirectoryW(parent_sys_dir, MAX_PATH);
+    size_t parent_sys_len = wcslen(parent_sys_dir);
+    wchar_t parent_syswow_dir[MAX_PATH]{};
+    UINT parent_syswow_len = GetSystemWow64DirectoryW(parent_syswow_dir, MAX_PATH);
 
     // snapshot all processes
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -832,7 +855,7 @@ static void dump_process_tree()
             CloseHandle(hProc);
         }
 
-        // scan loaded modules for renderer DLLs (skip current process — renderer not loaded yet at DLL_PROCESS_ATTACH)
+        // scan loaded modules for renderer/overlay DLLs (skip current process — renderer not loaded yet at DLL_PROCESS_ATTACH)
         if (walk_pid != current_pid) {
             HANDLE mod_snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, walk_pid);
             if (mod_snap != INVALID_HANDLE_VALUE) {
@@ -842,7 +865,19 @@ static void dump_process_tree()
                     do {
                         for (auto& rd : renderer_dlls) {
                             if (_wcsicmp(me.szModule, rd.dll) == 0) {
-                                info.renderers.push_back(rd.label);
+                                ProcessInfo::RendererEntry entry{};
+                                entry.label = rd.label;
+                                entry.full_path = me.szExePath;
+                                // proxy detection: compare against system directories
+                                std::wstring mod_dir(me.szExePath);
+                                auto sep = mod_dir.find_last_of(L"\\/");
+                                if (sep != std::wstring::npos) mod_dir.resize(sep);
+                                bool in_system = (_wcsnicmp(mod_dir.c_str(), parent_sys_dir, parent_sys_len) == 0 && mod_dir.size() == parent_sys_len);
+                                if (!in_system && parent_syswow_len > 0) {
+                                    in_system = (_wcsnicmp(mod_dir.c_str(), parent_syswow_dir, parent_syswow_len) == 0 && mod_dir.size() == parent_syswow_len);
+                                }
+                                entry.is_proxy = !in_system;
+                                info.renderers.push_back(std::move(entry));
                                 break;
                             }
                         }
@@ -937,12 +972,31 @@ static void dump_process_tree()
         if (is_current) {
             fprintf(f, "  Renderers: (pending - detected after init)\n");
         } else if (!p.renderers.empty()) {
-            fprintf(f, "  Renderers: ");
-            for (size_t j = 0; j < p.renderers.size(); ++j) {
-                if (j > 0) fprintf(f, ", ");
-                fprintf(f, "%s", p.renderers[j].c_str());
+            if (p.renderers.size() == 1) {
+                auto& r = p.renderers[0];
+                std::wstring san_rpath = sanitize(r.full_path);
+                char rpath_a[MAX_PATH * 2]{};
+                WideCharToMultiByte(CP_UTF8, 0, san_rpath.c_str(), -1, rpath_a, sizeof(rpath_a), nullptr, nullptr);
+                if (r.is_proxy) {
+                    fprintf(f, "  Renderers: %s [PROXY]\n", r.label.c_str());
+                } else {
+                    fprintf(f, "  Renderers: %s\n", r.label.c_str());
+                }
+                fprintf(f, "    %s\n", rpath_a);
+            } else {
+                fprintf(f, "  Renderers:\n");
+                for (auto& r : p.renderers) {
+                    std::wstring san_rpath = sanitize(r.full_path);
+                    char rpath_a[MAX_PATH * 2]{};
+                    WideCharToMultiByte(CP_UTF8, 0, san_rpath.c_str(), -1, rpath_a, sizeof(rpath_a), nullptr, nullptr);
+                    if (r.is_proxy) {
+                        fprintf(f, "    %s [PROXY]\n", r.label.c_str());
+                    } else {
+                        fprintf(f, "    %s\n", r.label.c_str());
+                    }
+                    fprintf(f, "      %s\n", rpath_a);
+                }
             }
-            fprintf(f, "\n");
         }
         fprintf(f, "\n");
 
@@ -1096,8 +1150,59 @@ void append_renderer_info()
         }
     }
 
-    // renderer DLLs to check (name, label)
+    // --- Vulkan layer detection (ReShade, vkBasalt as implicit/explicit Vulkan layers) ---
+    std::vector<std::string> vk_layer_info;
+
+    // check VK_INSTANCE_LAYERS env var (explicit layer activation)
+    char vk_layers_buf[2048]{};
+    if (GetEnvironmentVariableA("VK_INSTANCE_LAYERS", vk_layers_buf, sizeof(vk_layers_buf))) {
+        // colon/semicolon-separated list of layer names
+        if (strstr(vk_layers_buf, "VK_LAYER_reshade"))
+            vk_layer_info.push_back("ReShade (Vulkan layer via VK_INSTANCE_LAYERS)");
+        if (strstr(vk_layers_buf, "VK_LAYER_vkBasalt") || strstr(vk_layers_buf, "vkBasalt"))
+            vk_layer_info.push_back("vkBasalt (Vulkan layer via VK_INSTANCE_LAYERS)");
+    }
+
+    // check ENABLE_VKBASALT env var
+    if (GetEnvironmentVariableA("ENABLE_VKBASALT", env_buf, sizeof(env_buf)))
+        vk_layer_info.push_back("vkBasalt (enabled via ENABLE_VKBASALT)");
+
+    // check Windows registry for ReShade implicit Vulkan layer
+    {
+        HKEY layers_key = nullptr;
+        const wchar_t* reg_paths[] = {
+            L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers",
+            L"SOFTWARE\\Khronos\\Vulkan\\ExplicitLayers",
+        };
+        for (auto& reg_path : reg_paths) {
+            // check both HKLM and HKCU
+            HKEY roots[] = { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER };
+            for (auto root : roots) {
+                if (RegOpenKeyExW(root, reg_path, 0, KEY_READ, &layers_key) == ERROR_SUCCESS) {
+                    DWORD idx = 0;
+                    wchar_t value_name[1024]{};
+                    DWORD name_len = sizeof(value_name) / sizeof(wchar_t);
+                    while (RegEnumValueW(layers_key, idx++, value_name, &name_len, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+                        // value_name is the path to the JSON manifest
+                        if (wcsstr(value_name, L"reshade") || wcsstr(value_name, L"ReShade")) {
+                            bool is_implicit = (wcsstr(reg_path, L"Implicit") != nullptr);
+                            char manifest_a[1024]{};
+                            WideCharToMultiByte(CP_UTF8, 0, value_name, -1, manifest_a, sizeof(manifest_a), nullptr, nullptr);
+                            vk_layer_info.push_back(std::string("ReShade (Vulkan ") +
+                                (is_implicit ? "implicit" : "explicit") + " layer: " + manifest_a + ")");
+                        }
+                        name_len = sizeof(value_name) / sizeof(wchar_t);
+                    }
+                    RegCloseKey(layers_key);
+                }
+            }
+        }
+    }
+
+    // renderer and overlay DLLs to check (name, label)
     struct { const wchar_t* dll; const char* label; } renderers[] = {
+        { L"ddraw.dll",      "DirectDraw" },
+        { L"d3dimm.dll",     "Direct3D Immediate Mode" },
         { L"d3d8.dll",       "DirectX 8" },
         { L"d3d9.dll",       "DirectX 9" },
         { L"d3d10.dll",      "DirectX 10" },
@@ -1110,6 +1215,17 @@ void append_renderer_info()
         { L"dxgi.dll",       "DXGI" },
         { L"libEGL.dll",     "EGL (ANGLE)" },
         { L"libGLESv2.dll",  "OpenGL ES (ANGLE)" },
+        { L"dinput8.dll",    "DirectInput 8" },
+        // 3dfx Glide wrappers (dgVoodoo)
+        { L"glide.dll",      "Glide (3dfx)" },
+        { L"glide2x.dll",    "Glide 2x (3dfx)" },
+        { L"glide3x.dll",    "Glide 3x (3dfx)" },
+        // Special K — global injection (SKIF) or local install
+        { L"SpecialK32.dll", "Special K (32-bit)" },
+        { L"SpecialK64.dll", "Special K (64-bit)" },
+        // ReShade — standalone or loaded as SK plugin
+        { L"ReShade32.dll",  "ReShade (32-bit)" },
+        { L"ReShade64.dll",  "ReShade (64-bit)" },
     };
 
     // get system directory for proxy detection
@@ -1129,8 +1245,13 @@ void append_renderer_info()
     ProxySignature proxy_sigs[] = {
         { "DXVK_GetInstanceExtensions",  "DXVK" },
         { "vkd3d_create_instance",       "VKD3D-proton" },
+        // Special K exports (proxy DLLs like dxgi.dll, d3d11.dll, dinput8.dll replaced by SK)
         { "SK_GetVersionStr",            "Special K" },
+        { "SK_GetDLLRole",               "Special K" },
+        { "SK_GetPlugInDirectory",       "Special K" },
+        // ReShade exports (proxy DLLs or standalone)
         { "ReShadeVersion",              "ReShade" },
+        { "ReShadeRegisterAddon",        "ReShade" },
         { "ENBGetVersion",               "ENB Series" },
         { "dgVoodooVersion",             "dgVoodoo" },
         { "D3D8_GetDirect3D",            "d3d8to9" },
@@ -1197,20 +1318,30 @@ void append_renderer_info()
         detected.push_back(std::move(entry));
     }
 
-    // build inline renderer summary for the process tree placeholder
-    std::string inline_renderers;
-    if (!detected.empty()) {
-        for (size_t i = 0; i < detected.size(); ++i) {
-            if (i > 0) inline_renderers += ", ";
-            inline_renderers += detected[i].label;
-            if (detected[i].is_proxy) {
-                inline_renderers += " [";
-                inline_renderers += detected[i].proxy_label;
-                inline_renderers += "]";
-            }
-        }
+    // build replacement strings for the process tree placeholder (one per line ending style)
+    std::string replacement_lf, replacement_crlf;
+    if (detected.empty()) {
+        replacement_lf = "  Renderers: (none detected)\n";
+        replacement_crlf = "  Renderers: (none detected)\r\n";
+    } else if (detected.size() == 1) {
+        auto& d = detected[0];
+        std::string r = d.label;
+        if (d.is_proxy) r += " [" + d.proxy_label + "]";
+        replacement_lf = "  Renderers: " + r + "\n";
+        replacement_lf += "    " + d.full_path + "\n";
+        replacement_crlf = "  Renderers: " + r + "\r\n";
+        replacement_crlf += "    " + d.full_path + "\r\n";
     } else {
-        inline_renderers = "(none detected)";
+        replacement_lf = "  Renderers:\n";
+        replacement_crlf = "  Renderers:\r\n";
+        for (auto& d : detected) {
+            std::string r = "    " + d.label;
+            if (d.is_proxy) r += " [" + d.proxy_label + "]";
+            replacement_lf += r + "\n";
+            replacement_lf += "      " + d.full_path + "\n";
+            replacement_crlf += r + "\r\n";
+            replacement_crlf += "      " + d.full_path + "\r\n";
+        }
     }
 
     // read-modify-write to replace "(pending - detected after init)" in the process tree
@@ -1227,8 +1358,6 @@ void append_renderer_info()
 
                 const std::string placeholder_crlf = "  Renderers: (pending - detected after init)\r\n";
                 const std::string placeholder_lf = "  Renderers: (pending - detected after init)\n";
-                std::string replacement_crlf = "  Renderers: " + inline_renderers + "\r\n";
-                std::string replacement_lf = "  Renderers: " + inline_renderers + "\n";
 
                 size_t pos = content.find(placeholder_crlf);
                 if (pos != std::string::npos) {
@@ -1272,6 +1401,15 @@ void append_renderer_info()
         for (auto& t : translation_info) {
             fprintf(f, "    %s\n", t.c_str());
             PRINT_DEBUG("translation layer detected: %s", t.c_str());
+        }
+    }
+
+    // Vulkan layers
+    if (!vk_layer_info.empty()) {
+        fprintf(f, "  Vulkan layers:\n");
+        for (auto& v : vk_layer_info) {
+            fprintf(f, "    %s\n", v.c_str());
+            PRINT_DEBUG("vulkan layer detected: %s", v.c_str());
         }
     }
 
@@ -1382,17 +1520,38 @@ static void dump_process_tree()
         std::string full_path;
         std::string cmdline;
         std::string start_time; // formatted creation timestamp
-        std::vector<std::string> renderers; // loaded renderer libs (for parent processes)
+        struct RendererEntry {
+            std::string label;
+            std::string full_path;
+            bool is_proxy;
+        };
+        std::vector<RendererEntry> renderers; // loaded renderer/overlay libs (for parent processes)
     };
     std::vector<ProcessInfo> tree;
 
-    // renderer libraries to look for when scanning parent process maps
+    // libraries to look for when scanning parent process maps
     struct { const char* lib; const char* label; } renderer_libs[] = {
-        { "libvulkan.so",  "Vulkan" },
-        { "libGL.so",      "OpenGL" },
-        { "libGLX.so",     "GLX" },
-        { "libEGL.so",     "EGL" },
-        { "libGLESv2.so",  "OpenGL ES" },
+        { "libvulkan.so",     "Vulkan" },
+        { "libGL.so",         "OpenGL" },
+        { "libGLX.so",        "GLX" },
+        { "libEGL.so",        "EGL" },
+        { "libGLESv2.so",     "OpenGL ES" },
+        { "libvkbasalt.so",   "vkBasalt" },
+        // DXVK-native (D3D -> Vulkan for native Linux games)
+        { "libdxvk_d3d9.so",  "DXVK-native (D3D9)" },
+        { "libdxvk_d3d11.so", "DXVK-native (D3D11)" },
+        { "libdxvk_dxgi.so",  "DXVK-native (DXGI)" },
+        { "SpecialK",         "Special K" },
+        { "ReShade",          "ReShade" },
+    };
+
+    // standard system library paths (libraries here are NOT proxies)
+    const char* parent_system_prefixes[] = {
+        "/usr/lib", "/usr/lib32", "/usr/lib64",
+        "/usr/lib/x86_64-linux-gnu", "/usr/lib/i386-linux-gnu",
+        "/lib/", "/lib64/", "/lib32/",
+        "/usr/local/lib",
+        "/nix/store",
     };
 
     // walk from current process up through parents
@@ -1499,18 +1658,43 @@ static void dump_process_tree()
             }
         }
 
-        // scan /proc/<pid>/maps for renderer libraries (skip current process - renderer not loaded yet)
+        // scan /proc/<pid>/maps for renderer/overlay libraries (skip current process - renderer not loaded yet)
         if (walk_pid != getpid()) {
             char maps_path[64]{};
             snprintf(maps_path, sizeof(maps_path), "/proc/%d/maps", walk_pid);
             FILE* mf = fopen(maps_path, "r");
             if (mf) {
-                char mline[512]{};
+                char mline[1024]{};
                 std::set<std::string> rseen;
                 while (fgets(mline, sizeof(mline), mf)) {
                     for (auto& rl : renderer_libs) {
                         if (strstr(mline, rl.lib) && rseen.insert(rl.label).second) {
-                            info.renderers.push_back(rl.label);
+                            ProcessInfo::RendererEntry entry{};
+                            entry.label = rl.label;
+                            // extract full mapped path from maps line
+                            const char* p = mline;
+                            int fields = 0;
+                            while (*p && fields < 5) {
+                                while (*p == ' ') ++p;
+                                while (*p && *p != ' ') ++p;
+                                ++fields;
+                            }
+                            while (*p == ' ') ++p;
+                            if (*p == '/') {
+                                entry.full_path = p;
+                                while (!entry.full_path.empty() && (entry.full_path.back() == '\n' || entry.full_path.back() == '\r'))
+                                    entry.full_path.pop_back();
+                                // proxy detection: check against system prefixes
+                                bool in_system = false;
+                                for (auto& prefix : parent_system_prefixes) {
+                                    if (strncmp(entry.full_path.c_str(), prefix, strlen(prefix)) == 0) {
+                                        in_system = true;
+                                        break;
+                                    }
+                                }
+                                entry.is_proxy = !in_system;
+                            }
+                            info.renderers.push_back(std::move(entry));
                         }
                     }
                 }
@@ -1574,12 +1758,29 @@ static void dump_process_tree()
         if (is_current) {
             fprintf(f, "  Renderers: (pending - detected after init)\n");
         } else if (!p.renderers.empty()) {
-            fprintf(f, "  Renderers: ");
-            for (size_t j = 0; j < p.renderers.size(); ++j) {
-                if (j > 0) fprintf(f, ", ");
-                fprintf(f, "%s", p.renderers[j].c_str());
+            if (p.renderers.size() == 1) {
+                auto& r = p.renderers[0];
+                if (r.is_proxy) {
+                    fprintf(f, "  Renderers: %s [PROXY]\n", r.label.c_str());
+                } else {
+                    fprintf(f, "  Renderers: %s\n", r.label.c_str());
+                }
+                if (!r.full_path.empty()) {
+                    fprintf(f, "    %s\n", sanitize(r.full_path).c_str());
+                }
+            } else {
+                fprintf(f, "  Renderers:\n");
+                for (auto& r : p.renderers) {
+                    if (r.is_proxy) {
+                        fprintf(f, "    %s [PROXY]\n", r.label.c_str());
+                    } else {
+                        fprintf(f, "    %s\n", r.label.c_str());
+                    }
+                    if (!r.full_path.empty()) {
+                        fprintf(f, "      %s\n", sanitize(r.full_path).c_str());
+                    }
+                }
             }
-            fprintf(f, "\n");
         }
         fprintf(f, "\n");
 
@@ -1691,7 +1892,77 @@ void append_renderer_info()
     const char* vdpau_driver = getenv("VDPAU_DRIVER");
     if (vdpau_driver) driver_info.push_back(std::string("VDPAU driver: ") + vdpau_driver);
 
-    // check /proc/self/maps for renderer libraries
+    // --- Vulkan layer detection ---
+    std::vector<std::string> vk_layer_info;
+
+    // check VK_INSTANCE_LAYERS env var
+    const char* vk_layers = getenv("VK_INSTANCE_LAYERS");
+    if (vk_layers) {
+        if (strstr(vk_layers, "VK_LAYER_reshade"))
+            vk_layer_info.push_back("ReShade (Vulkan layer via VK_INSTANCE_LAYERS)");
+        if (strstr(vk_layers, "VK_LAYER_vkBasalt") || strstr(vk_layers, "vkBasalt"))
+            vk_layer_info.push_back("vkBasalt (Vulkan layer via VK_INSTANCE_LAYERS)");
+        if (strstr(vk_layers, "VK_LAYER_MANGOHUD") || strstr(vk_layers, "MangoHud"))
+            vk_layer_info.push_back("MangoHud (Vulkan layer via VK_INSTANCE_LAYERS)");
+    }
+
+    // check ENABLE_VKBASALT env var
+    if (getenv("ENABLE_VKBASALT"))
+        vk_layer_info.push_back("vkBasalt (enabled via ENABLE_VKBASALT)");
+
+    // scan for installed Vulkan layer manifests
+    const char* vk_layer_dirs[] = {
+        "/usr/share/vulkan/implicit_layer.d",
+        "/usr/share/vulkan/explicit_layer.d",
+        "/etc/vulkan/implicit_layer.d",
+        "/etc/vulkan/explicit_layer.d",
+    };
+    // also check XDG_DATA_HOME and HOME for user-installed layers
+    std::vector<std::string> user_layer_dirs;
+    const char* xdg_data = getenv("XDG_DATA_HOME");
+    if (xdg_data) {
+        user_layer_dirs.push_back(std::string(xdg_data) + "/vulkan/implicit_layer.d");
+        user_layer_dirs.push_back(std::string(xdg_data) + "/vulkan/explicit_layer.d");
+    } else if (home && home_len > 0) {
+        user_layer_dirs.push_back(std::string(home) + "/.local/share/vulkan/implicit_layer.d");
+        user_layer_dirs.push_back(std::string(home) + "/.local/share/vulkan/explicit_layer.d");
+    }
+
+    auto scan_layer_dir = [&vk_layer_info](const char* dir_path, bool is_user) {
+        DIR* dir = opendir(dir_path);
+        if (!dir) return;
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != nullptr) {
+            if (!entry->d_name || entry->d_name[0] == '.') continue;
+            const char* name = entry->d_name;
+            bool is_implicit = (strstr(dir_path, "implicit") != nullptr);
+            if (strstr(name, "reshade") || strstr(name, "ReShade")) {
+                vk_layer_info.push_back(std::string("ReShade (Vulkan ") +
+                    (is_implicit ? "implicit" : "explicit") + " layer: " +
+                    dir_path + "/" + name + (is_user ? " [user]" : "") + ")");
+            }
+            if (strstr(name, "vkbasalt") || strstr(name, "vkBasalt")) {
+                vk_layer_info.push_back(std::string("vkBasalt (Vulkan ") +
+                    (is_implicit ? "implicit" : "explicit") + " layer: " +
+                    dir_path + "/" + name + (is_user ? " [user]" : "") + ")");
+            }
+            if (strstr(name, "mangohud") || strstr(name, "MangoHud")) {
+                vk_layer_info.push_back(std::string("MangoHud (Vulkan ") +
+                    (is_implicit ? "implicit" : "explicit") + " layer: " +
+                    dir_path + "/" + name + (is_user ? " [user]" : "") + ")");
+            }
+        }
+        closedir(dir);
+    };
+
+    for (auto& ld : vk_layer_dirs) {
+        scan_layer_dir(ld, false);
+    }
+    for (auto& uld : user_layer_dirs) {
+        scan_layer_dir(uld.c_str(), true);
+    }
+
+    // check /proc/self/maps for renderer and overlay libraries
     struct { const char* lib; const char* label; } renderers[] = {
         { "libvulkan.so",     "Vulkan" },
         { "libGL.so",         "OpenGL" },
@@ -1703,6 +1974,13 @@ void append_renderer_info()
         { "libSDL3",          "SDL3" },
         { "libwayland-client", "Wayland client" },
         { "libX11.so",        "X11 client" },
+        { "libvkbasalt.so",   "vkBasalt" },
+        // DXVK-native (D3D -> Vulkan for native Linux games)
+        { "libdxvk_d3d9.so",  "DXVK-native (D3D9)" },
+        { "libdxvk_d3d11.so", "DXVK-native (D3D11)" },
+        { "libdxvk_dxgi.so",  "DXVK-native (DXGI)" },
+        { "SpecialK",         "Special K" },
+        { "ReShade",          "ReShade" },
     };
 
     // standard system library paths (libraries here are NOT proxies)
@@ -1778,18 +2056,28 @@ void append_renderer_info()
         fclose(maps);
     }
 
-    // build inline renderer summary for the process tree placeholder
-    std::string inline_renderers;
-    if (!detected.empty()) {
-        for (size_t i = 0; i < detected.size(); ++i) {
-            if (i > 0) inline_renderers += ", ";
-            inline_renderers += detected[i].label;
-            if (detected[i].is_proxy) {
-                inline_renderers += " [PROXY]";
-            }
+    // build replacement string for the process tree placeholder
+    std::string replacement;
+    if (detected.empty()) {
+        replacement = "  Renderers: (none detected)\n";
+    } else if (detected.size() == 1) {
+        auto& d = detected[0];
+        std::string r = d.label;
+        if (d.is_proxy) r += " [PROXY]";
+        replacement = "  Renderers: " + r + "\n";
+        if (!d.full_path.empty()) {
+            replacement += "    " + d.full_path + "\n";
         }
     } else {
-        inline_renderers = "(none detected)";
+        replacement = "  Renderers:\n";
+        for (auto& d : detected) {
+            replacement += "    " + d.label;
+            if (d.is_proxy) replacement += " [PROXY]";
+            replacement += "\n";
+            if (!d.full_path.empty()) {
+                replacement += "      " + d.full_path + "\n";
+            }
+        }
     }
 
     // read-modify-write to replace "(pending - detected after init)" in the process tree
@@ -1805,7 +2093,6 @@ void append_renderer_info()
                 fclose(rf);
 
                 const std::string placeholder = "  Renderers: (pending - detected after init)\n";
-                std::string replacement = "  Renderers: " + inline_renderers + "\n";
 
                 size_t pos = content.find(placeholder);
                 if (pos != std::string::npos) {
@@ -1844,6 +2131,15 @@ void append_renderer_info()
         for (auto& d : driver_info) {
             fprintf(f, "    %s\n", d.c_str());
             PRINT_DEBUG("driver info: %s", d.c_str());
+        }
+    }
+
+    // Vulkan layers
+    if (!vk_layer_info.empty()) {
+        fprintf(f, "  Vulkan layers:\n");
+        for (auto& v : vk_layer_info) {
+            fprintf(f, "    %s\n", v.c_str());
+            PRINT_DEBUG("vulkan layer detected: %s", v.c_str());
         }
     }
 
