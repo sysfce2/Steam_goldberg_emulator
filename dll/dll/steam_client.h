@@ -422,6 +422,12 @@ public:
 
     void report_missing_impl(std::string_view itf, std::string_view caller);
     [[noreturn]] void report_missing_impl_and_exit(std::string_view itf, std::string_view caller);
+    // graceful version: returns nullptr when a third-party injector (e.g. Special K) is detected
+    // instead of terminating the process, matching real steamclient.dll behavior
+    std::nullptr_t report_missing_impl_and_exit_or_null(std::string_view itf, std::string_view caller);
+
+    bool thirdparty_injector_detected = false;
+    void detect_thirdparty_injectors();
 
     HSteamPipe get_pipe_for_user(HSteamUser hUser);
 

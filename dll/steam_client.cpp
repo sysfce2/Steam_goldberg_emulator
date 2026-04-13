@@ -168,6 +168,9 @@ Steam_Client::Steam_Client()
     steamclient_version = 6; // default for C exports
 
     last_cb_run = 0;
+
+    detect_thirdparty_injectors();
+
     PRINT_DEBUG("end *********");
 
     reset_LastError();
