@@ -1068,14 +1068,85 @@ void append_renderer_info()
         { L"libGLESv2.dll",  "OpenGL ES (ANGLE)" },
     };
 
-    struct DetectedRenderer { std::string label; std::string dll_name; };
+    // get system directory for proxy detection
+    wchar_t sys_dir[MAX_PATH]{};
+    GetSystemDirectoryW(sys_dir, MAX_PATH);
+    size_t sys_dir_len = wcslen(sys_dir);
+    // also check SysWOW64 for 32-bit DLLs on 64-bit OS
+    wchar_t syswow_dir[MAX_PATH]{};
+    UINT syswow_len = GetSystemWow64DirectoryW(syswow_dir, MAX_PATH);
+
+    // known proxy identifiers: export name -> proxy label
+    struct ProxySignature { const char* export_name; const char* proxy_label; };
+    ProxySignature proxy_sigs[] = {
+        { "DXVK_GetInstanceExtensions",  "DXVK" },
+        { "vkd3d_create_instance",       "VKD3D-proton" },
+        { "SK_GetVersionStr",            "Special K" },
+        { "ReShadeVersion",              "ReShade" },
+        { "ENBGetVersion",               "ENB Series" },
+        { "dgVoodooVersion",             "dgVoodoo" },
+        { "D3D8_GetDirect3D",            "d3d8to9" },
+    };
+
+    struct DetectedRenderer {
+        std::string label;
+        std::string full_path;
+        bool is_proxy;
+        std::string proxy_label;
+    };
     std::vector<DetectedRenderer> detected;
+
     for (auto& r : renderers) {
-        if (GetModuleHandleW(r.dll)) {
+        HMODULE mod = GetModuleHandleW(r.dll);
+        if (!mod) continue;
+
+        DetectedRenderer entry{};
+        entry.label = r.label;
+
+        // get full path of the loaded DLL
+        wchar_t mod_path[MAX_PATH]{};
+        if (GetModuleFileNameW(mod, mod_path, MAX_PATH)) {
+            // sanitize user profile path
+            std::wstring path_w(mod_path);
+            if (profile_len > 0 && path_w.size() >= profile_len &&
+                _wcsnicmp(path_w.c_str(), profile_w, profile_len) == 0) {
+                path_w = L"%USERPROFILE%" + path_w.substr(profile_len);
+            }
+            char path_a[MAX_PATH * 2]{};
+            WideCharToMultiByte(CP_UTF8, 0, path_w.c_str(), -1, path_a, sizeof(path_a), nullptr, nullptr);
+            entry.full_path = path_a;
+
+            // check if DLL is loaded from outside system directories = proxy
+            // extract directory from the loaded DLL's full path
+            std::wstring mod_dir(mod_path);
+            auto sep = mod_dir.find_last_of(L"\\/");
+            if (sep != std::wstring::npos) mod_dir.resize(sep);
+
+            bool in_system = (_wcsnicmp(mod_dir.c_str(), sys_dir, sys_dir_len) == 0 && mod_dir.size() == sys_dir_len);
+            if (!in_system && syswow_len > 0) {
+                in_system = (_wcsnicmp(mod_dir.c_str(), syswow_dir, syswow_len) == 0 && mod_dir.size() == syswow_len);
+            }
+
+            if (!in_system) {
+                entry.is_proxy = true;
+                // identify the proxy by checking known exports
+                for (auto& sig : proxy_sigs) {
+                    if (GetProcAddress(mod, sig.export_name)) {
+                        entry.proxy_label = sig.proxy_label;
+                        break;
+                    }
+                }
+                if (entry.proxy_label.empty()) {
+                    entry.proxy_label = "unknown proxy";
+                }
+            }
+        } else {
             char dll_a[MAX_PATH]{};
             WideCharToMultiByte(CP_UTF8, 0, r.dll, -1, dll_a, MAX_PATH, nullptr, nullptr);
-            detected.push_back({ r.label, dll_a });
+            entry.full_path = dll_a;
         }
+
+        detected.push_back(std::move(entry));
     }
 
     // append to file
@@ -1108,8 +1179,15 @@ void append_renderer_info()
         fprintf(f, "    (none detected)\n");
     } else {
         for (auto& d : detected) {
-            fprintf(f, "    %s (%s)\n", d.label.c_str(), d.dll_name.c_str());
-            PRINT_DEBUG("renderer detected: %s (%s)", d.label.c_str(), d.dll_name.c_str());
+            if (d.is_proxy) {
+                fprintf(f, "    %s [PROXY: %s]\n", d.label.c_str(), d.proxy_label.c_str());
+                fprintf(f, "      %s\n", d.full_path.c_str());
+                PRINT_DEBUG("renderer proxy detected: %s [%s] at %s", d.label.c_str(), d.proxy_label.c_str(), d.full_path.c_str());
+            } else {
+                fprintf(f, "    %s\n", d.label.c_str());
+                fprintf(f, "      %s\n", d.full_path.c_str());
+                PRINT_DEBUG("renderer detected: %s at %s", d.label.c_str(), d.full_path.c_str());
+            }
         }
     }
     fprintf(f, "\n");
@@ -1482,27 +1560,73 @@ void append_renderer_info()
         { "libX11.so",        "X11 client" },
     };
 
-    struct DetectedRenderer { std::string label; std::string lib_path; };
+    // standard system library paths (libraries here are NOT proxies)
+    const char* system_prefixes[] = {
+        "/usr/lib", "/usr/lib32", "/usr/lib64",
+        "/usr/lib/x86_64-linux-gnu", "/usr/lib/i386-linux-gnu",
+        "/lib/", "/lib64/", "/lib32/",
+        "/usr/local/lib",
+        "/nix/store",
+    };
+
+    struct DetectedRenderer {
+        std::string label;
+        std::string full_path;  // full mapped path
+        std::string filename;   // just the filename
+        bool is_proxy;
+    };
     std::vector<DetectedRenderer> detected;
     FILE* maps = fopen("/proc/self/maps", "r");
     if (maps) {
-        char line[512]{};
+        char line[1024]{};
         std::set<std::string> seen;
         while (fgets(line, sizeof(line), maps)) {
             for (auto& r : renderers) {
                 if (strstr(line, r.lib) && seen.insert(r.label).second) {
-                    // extract the mapped file path (last field after the offset/dev/inode columns)
-                    std::string lib_file;
-                    const char* path_start = strrchr(line, '/');
-                    if (path_start) {
-                        lib_file = path_start + 1;
-                        // trim trailing newline
-                        while (!lib_file.empty() && (lib_file.back() == '\n' || lib_file.back() == '\r'))
-                            lib_file.pop_back();
-                    } else {
-                        lib_file = r.lib;
+                    DetectedRenderer entry{};
+                    entry.label = r.label;
+
+                    // extract the full mapped file path from the line
+                    // maps format: addr perms offset dev inode  pathname
+                    // find the pathname (starts after inode, leading spaces trimmed)
+                    const char* p = line;
+                    int fields = 0;
+                    while (*p && fields < 5) {
+                        while (*p == ' ') ++p;
+                        while (*p && *p != ' ') ++p;
+                        ++fields;
                     }
-                    detected.push_back({ r.label, lib_file });
+                    while (*p == ' ') ++p;
+                    if (*p && *p == '/') {
+                        entry.full_path = p;
+                        // trim trailing newline
+                        while (!entry.full_path.empty() && (entry.full_path.back() == '\n' || entry.full_path.back() == '\r'))
+                            entry.full_path.pop_back();
+
+                        // extract just the filename
+                        auto slash = entry.full_path.find_last_of('/');
+                        entry.filename = (slash != std::string::npos) ? entry.full_path.substr(slash + 1) : entry.full_path;
+
+                        // check if it's in a standard system path
+                        bool in_system = false;
+                        for (auto& prefix : system_prefixes) {
+                            if (strncmp(entry.full_path.c_str(), prefix, strlen(prefix)) == 0) {
+                                in_system = true;
+                                break;
+                            }
+                        }
+                        entry.is_proxy = !in_system;
+                    } else {
+                        entry.filename = r.lib;
+                    }
+
+                    // sanitize home dir in full path
+                    if (!entry.full_path.empty() && home && home_len > 0 &&
+                        strncmp(entry.full_path.c_str(), home, home_len) == 0) {
+                        entry.full_path = "$HOME" + entry.full_path.substr(home_len);
+                    }
+
+                    detected.push_back(std::move(entry));
                 }
             }
         }
@@ -1539,8 +1663,15 @@ void append_renderer_info()
         fprintf(f, "    (none detected)\n");
     } else {
         for (auto& d : detected) {
-            fprintf(f, "    %s (%s)\n", d.label.c_str(), d.lib_path.c_str());
-            PRINT_DEBUG("renderer detected: %s (%s)", d.label.c_str(), d.lib_path.c_str());
+            if (d.is_proxy) {
+                fprintf(f, "    %s [PROXY: custom library]\n", d.label.c_str());
+                fprintf(f, "      %s\n", d.full_path.c_str());
+                PRINT_DEBUG("renderer proxy detected: %s at %s", d.label.c_str(), d.full_path.c_str());
+            } else {
+                fprintf(f, "    %s\n", d.label.c_str());
+                fprintf(f, "      %s\n", d.full_path.c_str());
+                PRINT_DEBUG("renderer detected: %s at %s", d.label.c_str(), d.full_path.c_str());
+            }
         }
     }
     fprintf(f, "\n");
