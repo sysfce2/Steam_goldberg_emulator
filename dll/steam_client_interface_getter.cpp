@@ -1458,7 +1458,7 @@ void Steam_Client::try_start_specialk_injection()
             wcsncpy_s(skif_search_path, path_w.c_str(), MAX_PATH - 1);
         }
 
-        // try default install location: %LOCALAPPDATA%\Programs\Special K\
+        // try default install location: %LOCALAPPDATA%/Programs/Special K/
         if (!skif_search_path[0]) {
             wchar_t local_appdata[MAX_PATH]{};
             if (SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local_appdata) == S_OK) {
