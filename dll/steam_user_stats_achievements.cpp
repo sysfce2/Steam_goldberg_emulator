@@ -978,6 +978,7 @@ void Steam_User_Stats::RequestSteamHuntersData()
                         groups = parse_groups(groups_raw);
                         PRINT_DEBUG("SteamHunters: fetched %zu groups for app %llu", groups.size(), app_id);
                     } catch (const std::exception &e) {
+                        (void)e;
                         PRINT_DEBUG("SteamHunters: groups parse error: %s", e.what());
                     }
                 }
@@ -993,6 +994,7 @@ void Steam_User_Stats::RequestSteamHuntersData()
                         ach_data = parse_achievements(achs_raw);
                         PRINT_DEBUG("SteamHunters: fetched %zu achievements for app %llu", ach_data.size(), app_id);
                     } catch (const std::exception &e) {
+                        (void)e;
                         PRINT_DEBUG("SteamHunters: achievements parse error: %s", e.what());
                     }
                 }

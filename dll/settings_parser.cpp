@@ -964,6 +964,7 @@ static void parse_stats(class Settings *settings_client, class Settings *setting
                 stat_global_value = stats.value("global", std::string("0"));
             }
             catch (const std::exception &e) {
+                (void)e;
                 PRINT_DEBUG("Error reading current stat item in stats.json, reason: %s", e.what());
                 continue;
             }
