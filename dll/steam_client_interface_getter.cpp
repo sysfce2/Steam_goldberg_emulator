@@ -1531,9 +1531,30 @@ void Steam_Client::try_start_specialk_injection()
         return;
     }
 
-    // send "Start Temp" to SKIF to trigger injection service
-    // this works both when SKIF was already running and when we just launched it
+    // check if the SK injection service is already running
+    bool service_already_running = false;
     {
+        HANDLE hSnap2 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnap2 != INVALID_HANDLE_VALUE) {
+            PROCESSENTRY32W pe2{};
+            pe2.dwSize = sizeof(pe2);
+            if (Process32FirstW(hSnap2, &pe2)) {
+                do {
+                    if (_wcsicmp(pe2.szExeFile, L"SKIFsvc64.exe") == 0 ||
+                        _wcsicmp(pe2.szExeFile, L"SKIFsvc32.exe") == 0) {
+                        service_already_running = true;
+                        break;
+                    }
+                } while (Process32NextW(hSnap2, &pe2));
+            }
+            CloseHandle(hSnap2);
+        }
+    }
+
+    if (service_already_running) {
+        PRINT_DEBUG("[SK AUTO-INJECT] SK injection service already running, skipping 'Start Temp'");
+    } else {
+        // send "Start Temp" to SKIF to trigger injection service
         PRINT_DEBUG("[SK AUTO-INJECT] sending 'Start Temp' to SKIF at '%ls'...", skif_path);
 
         SHELLEXECUTEINFOW sei{};
