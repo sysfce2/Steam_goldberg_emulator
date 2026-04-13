@@ -1273,16 +1273,22 @@ std::nullptr_t Steam_Client::report_missing_impl_and_exit_or_null(std::string_vi
         detect_thirdparty_injectors();
     }
 
-    if (thirdparty_injector_detected || 
-        (settings_client && settings_client->graceful_unknown_interfaces)) {
-        // third-party injector or manual setting: log to file and return nullptr
-        // this matches real steamclient.dll behavior for unknown interface versions
-        PRINT_DEBUG("[GRACEFUL] unknown interface '%s' requested by '%s', returning nullptr", itf.data(), caller.data());
+    // Special K caller: always graceful - SK probes interfaces from high versions down
+    if (is_caller_special_k()) {
+        PRINT_DEBUG("[GRACEFUL/SK] unknown interface '%s' requested by '%s', returning nullptr", itf.data(), caller.data());
         report_missing_impl(itf, caller);
         return nullptr;
     }
 
-    // no injector detected: original crash behavior for debugging
+    // config: exit_on_unknown_interface (default true)
+    // when false, return nullptr instead of crashing for any caller
+    if (settings_client && !settings_client->exit_on_unknown_interface) {
+        PRINT_DEBUG("[GRACEFUL/CFG] unknown interface '%s' requested by '%s', returning nullptr", itf.data(), caller.data());
+        report_missing_impl(itf, caller);
+        return nullptr;
+    }
+
+    // default: crash for debugging (non-SK, no config override)
     report_missing_impl_and_exit(itf, caller);
     // unreachable - report_missing_impl_and_exit is [[noreturn]]
     return nullptr;
@@ -1292,24 +1298,17 @@ void Steam_Client::detect_thirdparty_injectors()
 {
     thirdparty_injector_detected = false;
 
-    // check setting first
-    if (settings_client && settings_client->graceful_unknown_interfaces) {
-        PRINT_DEBUG("graceful_unknown_interfaces enabled via settings");
-        thirdparty_injector_detected = true;
-        return;
-    }
-
 #if defined(__WINDOWS__)
     // detect Special K (global injection: SpecialK32/64.dll)
     #if defined(_WIN64)
     if (GetModuleHandleW(L"SpecialK64.dll")) {
-        PRINT_DEBUG("detected Special K (SpecialK64.dll) - enabling graceful interface resolution");
+        PRINT_DEBUG("detected Special K (SpecialK64.dll)");
         thirdparty_injector_detected = true;
         return;
     }
     #else
     if (GetModuleHandleW(L"SpecialK32.dll")) {
-        PRINT_DEBUG("detected Special K (SpecialK32.dll) - enabling graceful interface resolution");
+        PRINT_DEBUG("detected Special K (SpecialK32.dll)");
         thirdparty_injector_detected = true;
         return;
     }
@@ -1324,10 +1323,48 @@ void Steam_Client::detect_thirdparty_injectors()
     for (auto dll_name : proxy_dlls) {
         HMODULE hMod = GetModuleHandleW(dll_name);
         if (hMod && GetProcAddress(hMod, "SK_GetVersionStr")) {
-            PRINT_DEBUG("detected Special K via proxy DLL '%ls' - enabling graceful interface resolution", dll_name);
+            PRINT_DEBUG("detected Special K via proxy DLL '%ls'", dll_name);
             thirdparty_injector_detected = true;
             return;
         }
     }
 #endif
+}
+
+bool Steam_Client::is_caller_special_k()
+{
+#if defined(__WINDOWS__)
+    static const char emu_anchor = 0;
+    HMODULE our_module = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&emu_anchor),
+        &our_module
+    );
+
+    void* stack_frames[12]{};
+    USHORT frame_count = CaptureStackBackTrace(0, 12, stack_frames, nullptr);
+    for (USHORT i = 0; i < frame_count; ++i) {
+        HMODULE frame_module = nullptr;
+        if (GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(stack_frames[i]),
+                &frame_module) && frame_module && frame_module != our_module) {
+            // found the first external caller module - check if it's Special K
+            // check global injection DLLs
+            #if defined(_WIN64)
+            HMODULE sk_global = GetModuleHandleW(L"SpecialK64.dll");
+            #else
+            HMODULE sk_global = GetModuleHandleW(L"SpecialK32.dll");
+            #endif
+            if (sk_global && frame_module == sk_global) return true;
+
+            // check proxy DLLs with SK export
+            if (GetProcAddress(frame_module, "SK_GetVersionStr")) return true;
+
+            return false;
+        }
+    }
+#endif
+    return false;
 }

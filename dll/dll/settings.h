@@ -288,7 +288,7 @@ public:
     
     // gracefully return nullptr for unknown interface versions instead of crashing
     // enabled automatically when third-party injectors (e.g. Special K) are detected
-    bool graceful_unknown_interfaces = false;
+    bool exit_on_unknown_interface = true;
 
     // use new app_ticket auth instead of old one
     bool enable_new_app_ticket = true;

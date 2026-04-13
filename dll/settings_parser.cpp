@@ -1741,8 +1741,8 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->use_32bit_inventory_item_ids = ini.GetBoolValue("main::misc", "use_32bit_inventory_item_ids", settings_client->use_32bit_inventory_item_ids);
     settings_server->use_32bit_inventory_item_ids = ini.GetBoolValue("main::misc", "use_32bit_inventory_item_ids", settings_server->use_32bit_inventory_item_ids);
 
-    settings_client->graceful_unknown_interfaces = ini.GetBoolValue("main::misc", "graceful_unknown_interfaces", settings_client->graceful_unknown_interfaces);
-    settings_server->graceful_unknown_interfaces = ini.GetBoolValue("main::misc", "graceful_unknown_interfaces", settings_server->graceful_unknown_interfaces);
+    settings_client->exit_on_unknown_interface = ini.GetBoolValue("main::misc", "exit_on_unknown_interface", settings_client->exit_on_unknown_interface);
+    settings_server->exit_on_unknown_interface = ini.GetBoolValue("main::misc", "exit_on_unknown_interface", settings_server->exit_on_unknown_interface);
 }
 
 // [main::stats]
