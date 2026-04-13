@@ -392,6 +392,8 @@ static void unload_dlls()
 
 #ifdef __WINDOWS__
 
+#include <TlHelp32.h>
+
 struct ips_test {
     uint32_t ip_from;
     uint32_t ip_to;
@@ -665,11 +667,238 @@ HINTERNET WINAPI Mine_WinHttpOpenRequest(
 
 
 static bool network_functions_attached = false;
+
+// read command line from a remote process via its PEB
+static std::wstring read_process_cmdline(HANDLE hProc, DWORD pid)
+{
+    if (pid == GetCurrentProcessId()) {
+        return GetCommandLineW();
+    }
+
+    // dynamically resolve NtQueryInformationProcess from ntdll
+    typedef LONG(NTAPI* NtQIP_t)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+    static NtQIP_t pNtQIP = (NtQIP_t)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess");
+    if (!pNtQIP) return L"";
+
+    // ProcessBasicInformation (class 0) gives us the PEB address
+    struct { PVOID R1; PVOID PebBaseAddress; PVOID R2[2]; ULONG_PTR UniqueProcessId; PVOID R3; } pbi{};
+    ULONG ret_len = 0;
+    if (pNtQIP(hProc, 0, &pbi, sizeof(pbi), &ret_len) != 0 || !pbi.PebBaseAddress)
+        return L"";
+
+    // PEB.ProcessParameters offset: 0x20 on x64, 0x10 on x86
+    // RTL_USER_PROCESS_PARAMETERS.CommandLine offset: 0x70 on x64, 0x40 on x86
+#ifdef _WIN64
+    constexpr SIZE_T peb_params_off = 0x20;
+    constexpr SIZE_T cmdline_off = 0x70;
+    constexpr SIZE_T us_ptr_off = 8; // UNICODE_STRING: USHORT Len, USHORT MaxLen, 4-pad, PWSTR(8)
+#else
+    constexpr SIZE_T peb_params_off = 0x10;
+    constexpr SIZE_T cmdline_off = 0x40;
+    constexpr SIZE_T us_ptr_off = 4; // UNICODE_STRING: USHORT Len, USHORT MaxLen, PWSTR(4)
+#endif
+
+    // read ProcessParameters pointer from PEB
+    PVOID params_ptr = nullptr;
+    SIZE_T n = 0;
+    if (!ReadProcessMemory(hProc, (BYTE*)pbi.PebBaseAddress + peb_params_off, &params_ptr, sizeof(params_ptr), &n) || !params_ptr)
+        return L"";
+
+    // read CommandLine UNICODE_STRING: { USHORT Length, USHORT MaximumLength, [pad], PWSTR Buffer }
+    BYTE us_buf[16]{};
+    if (!ReadProcessMemory(hProc, (BYTE*)params_ptr + cmdline_off, us_buf, sizeof(us_buf), &n))
+        return L"";
+
+    USHORT length = *(USHORT*)us_buf;
+    PVOID buffer = *(PVOID*)(us_buf + us_ptr_off);
+    if (!buffer || length == 0 || length > 32768) return L"";
+
+    // read the actual command line string
+    std::wstring cmdline(length / sizeof(wchar_t), L'\0');
+    if (!ReadProcessMemory(hProc, buffer, &cmdline[0], length, &n))
+        return L"";
+
+    return cmdline;
+}
+
+// dump the full process tree of the current process to steam_api(64).dll.txt
+// this runs very early in DLL_PROCESS_ATTACH, before any game code or SteamAPI_Init
+static void dump_process_tree()
+{
+    // get our DLL path to determine where to write the file and compute relative paths
+    static const char anchor = 0;
+    HMODULE our_module = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&anchor),
+        &our_module
+    );
+    if (!our_module) return;
+
+    wchar_t dll_path_w[MAX_PATH]{};
+    if (!GetModuleFileNameW(our_module, dll_path_w, MAX_PATH)) return;
+
+    // derive output file path: <dll_name>.txt next to the DLL
+    std::wstring out_path(dll_path_w);
+    out_path += L".txt";
+
+    // derive DLL directory for relative path computation
+    std::wstring dll_dir(dll_path_w);
+    auto last_sep = dll_dir.find_last_of(L"\\/");
+    if (last_sep != std::wstring::npos) dll_dir.resize(last_sep + 1);
+
+    // get DLL filename for the header
+    const wchar_t* dll_name = (last_sep != std::wstring::npos) ? &dll_path_w[last_sep + 1] : dll_path_w;
+
+    // walk the process tree: current → parent → grandparent → ...
+    struct ProcessInfo {
+        DWORD pid;
+        DWORD parent_pid;
+        std::wstring exe_name;
+        std::wstring full_path;
+        std::wstring cmdline;
+    };
+    std::vector<ProcessInfo> tree;
+
+    // snapshot all processes
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+
+    // build a map of pid → (parent_pid, exe_name)
+    std::map<DWORD, std::pair<DWORD, std::wstring>> proc_map;
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            proc_map[pe.th32ProcessID] = { pe.th32ParentProcessID, pe.szExeFile };
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+
+    // walk from current process up
+    DWORD current_pid = GetCurrentProcessId();
+    std::set<DWORD> visited; // prevent infinite loops from pid reuse
+    DWORD walk_pid = current_pid;
+    while (walk_pid && visited.insert(walk_pid).second) {
+        auto it = proc_map.find(walk_pid);
+        if (it == proc_map.end()) break;
+
+        ProcessInfo info{};
+        info.pid = walk_pid;
+        info.parent_pid = it->second.first;
+        info.exe_name = it->second.second;
+
+        // try to get full path and command line
+        // PROCESS_VM_READ needed for PEB command line reading
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, walk_pid);
+        bool full_access = (hProc != nullptr);
+        if (!hProc) hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, walk_pid);
+        if (hProc) {
+            wchar_t path_buf[MAX_PATH]{};
+            DWORD path_size = MAX_PATH;
+            if (QueryFullProcessImageNameW(hProc, 0, path_buf, &path_size)) {
+                info.full_path = path_buf;
+            }
+            if (full_access) {
+                info.cmdline = read_process_cmdline(hProc, walk_pid);
+            }
+            CloseHandle(hProc);
+        }
+
+        tree.push_back(std::move(info));
+        walk_pid = it->second.first;
+    }
+
+    // compute relative path from DLL directory
+    auto make_relative = [&dll_dir](const std::wstring& full_path) -> std::wstring {
+        if (full_path.empty()) return L"(unknown)";
+        // case-insensitive prefix check
+        if (full_path.size() >= dll_dir.size() &&
+            _wcsnicmp(full_path.c_str(), dll_dir.c_str(), dll_dir.size()) == 0) {
+            std::wstring rel = L".\\" + full_path.substr(dll_dir.size());
+            return rel;
+        }
+        return full_path; // different drive/root, return absolute
+    };
+
+    // sanitize user profile path
+    wchar_t profile_w[MAX_PATH]{};
+    DWORD profile_len = GetEnvironmentVariableW(L"USERPROFILE", profile_w, MAX_PATH);
+
+    auto sanitize = [&profile_w, profile_len](const std::wstring& path) -> std::wstring {
+        if (profile_len == 0 || path.size() < profile_len) return path;
+        if (_wcsnicmp(path.c_str(), profile_w, profile_len) == 0) {
+            return L"%USERPROFILE%" + path.substr(profile_len);
+        }
+        return path;
+    };
+
+    // write the file
+    FILE* f = _wfopen(out_path.c_str(), L"w");
+    if (!f) return;
+
+    // timestamp
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    fprintf(f, "=== %ls Process Tree ===\n", dll_name);
+    fprintf(f, "Timestamp: %04d-%02d-%02d %02d:%02d:%02d\n",
+        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+    // sanitize DLL path for display
+    char dll_path_a[MAX_PATH]{};
+    WideCharToMultiByte(CP_UTF8, 0, dll_path_w, -1, dll_path_a, MAX_PATH, nullptr, nullptr);
+    char profile_a[MAX_PATH]{};
+    GetEnvironmentVariableA("USERPROFILE", profile_a, MAX_PATH);
+    size_t plen = strlen(profile_a);
+    std::string dll_display(dll_path_a);
+    if (plen > 0 && dll_display.size() >= plen && _strnicmp(dll_display.c_str(), profile_a, plen) == 0) {
+        dll_display.replace(0, plen, "%USERPROFILE%");
+    }
+    fprintf(f, "DLL Path: %s\n\n", dll_display.c_str());
+
+    // print tree (first entry is current process, last is the topmost ancestor we could reach)
+    for (size_t i = 0; i < tree.size(); ++i) {
+        auto& p = tree[i];
+        bool is_current = (p.pid == current_pid);
+
+        std::wstring sanitized_path = sanitize(p.full_path);
+        std::wstring rel = make_relative(p.full_path);
+        std::wstring sanitized_rel = sanitize(rel);
+
+        char name_a[MAX_PATH]{};
+        WideCharToMultiByte(CP_UTF8, 0, p.exe_name.c_str(), -1, name_a, MAX_PATH, nullptr, nullptr);
+        char path_a[MAX_PATH * 2]{};
+        WideCharToMultiByte(CP_UTF8, 0, sanitized_path.c_str(), -1, path_a, sizeof(path_a), nullptr, nullptr);
+        char rel_a[MAX_PATH * 2]{};
+        WideCharToMultiByte(CP_UTF8, 0, sanitized_rel.c_str(), -1, rel_a, sizeof(rel_a), nullptr, nullptr);
+
+        fprintf(f, "[PID %lu] %s%s\n", p.pid, name_a, is_current ? "  (current process)" : "");
+        fprintf(f, "  Path: %s\n", path_a);
+        fprintf(f, "  Relative: %s\n", rel_a);
+        if (!p.cmdline.empty()) {
+            std::wstring sanitized_cmd = sanitize(p.cmdline);
+            int cmd_size = WideCharToMultiByte(CP_UTF8, 0, sanitized_cmd.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (cmd_size > 0) {
+                std::string cmd_a(cmd_size - 1, '\0');
+                WideCharToMultiByte(CP_UTF8, 0, sanitized_cmd.c_str(), -1, &cmd_a[0], cmd_size, nullptr, nullptr);
+                fprintf(f, "  CmdLine: %s\n", cmd_a.c_str());
+            }
+        }
+        fprintf(f, "\n");
+
+        PRINT_DEBUG("process tree [PID %lu]: %s%s | path: %s", p.pid, name_a,
+            is_current ? " (current)" : "", path_a);
+    }
+
+    fclose(f);
+}
+
 BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
 {
     switch ( dwReason ) {
         case DLL_PROCESS_ATTACH:
             PRINT_DEBUG("experimental DLL_PROCESS_ATTACH");
+            dump_process_tree();
             if (!settings_disable_lan_only()) {
                 PRINT_DEBUG("Hooking lan only functions");
                 DetourTransactionBegin();
@@ -717,6 +946,155 @@ BOOL WINAPI DllMain( HINSTANCE, DWORD dwReason, LPVOID )
 
 #else
 
+// dump the full process tree of the current process to <so_name>.txt
+// uses /proc filesystem for process info, command lines, and parent traversal
+static void dump_process_tree()
+{
+    // get our .so path via dladdr
+    static const char anchor = 0;
+    Dl_info dl_info{};
+    if (!dladdr((void*)&anchor, &dl_info) || !dl_info.dli_fname) return;
+
+    std::string so_path(dl_info.dli_fname);
+    // resolve to absolute path
+    char resolved[PATH_MAX]{};
+    if (realpath(so_path.c_str(), resolved)) so_path = resolved;
+
+    // derive output file path: <so_name>.txt next to the .so
+    std::string out_path = so_path + ".txt";
+
+    // derive directory for relative path computation
+    std::string so_dir = so_path;
+    auto last_sep = so_dir.find_last_of('/');
+    if (last_sep != std::string::npos) so_dir.resize(last_sep + 1);
+
+    // get .so filename for header
+    std::string so_name = (last_sep != std::string::npos) ? so_path.substr(last_sep + 1) : so_path;
+
+    struct ProcessInfo {
+        pid_t pid;
+        pid_t parent_pid;
+        std::string exe_name;
+        std::string full_path;
+        std::string cmdline;
+    };
+    std::vector<ProcessInfo> tree;
+
+    // walk from current process up through parents
+    pid_t walk_pid = getpid();
+    std::set<pid_t> visited;
+    while (walk_pid > 0 && visited.insert(walk_pid).second) {
+        ProcessInfo info{};
+        info.pid = walk_pid;
+
+        // read exe path from /proc/<pid>/exe
+        char link_path[64]{};
+        snprintf(link_path, sizeof(link_path), "/proc/%d/exe", walk_pid);
+        char exe_buf[PATH_MAX]{};
+        ssize_t len = readlink(link_path, exe_buf, sizeof(exe_buf) - 1);
+        if (len > 0) {
+            exe_buf[len] = '\0';
+            info.full_path = exe_buf;
+            auto slash = info.full_path.find_last_of('/');
+            info.exe_name = (slash != std::string::npos) ? info.full_path.substr(slash + 1) : info.full_path;
+        }
+
+        // read command line from /proc/<pid>/cmdline (NUL-separated args)
+        char cmd_path[64]{};
+        snprintf(cmd_path, sizeof(cmd_path), "/proc/%d/cmdline", walk_pid);
+        FILE* cf = fopen(cmd_path, "r");
+        if (cf) {
+            char cmd_buf[4096]{};
+            size_t n = fread(cmd_buf, 1, sizeof(cmd_buf) - 1, cf);
+            fclose(cf);
+            // replace NUL separators with spaces
+            for (size_t i = 0; i < n; ++i) {
+                if (cmd_buf[i] == '\0') cmd_buf[i] = ' ';
+            }
+            if (n > 0 && cmd_buf[n - 1] == ' ') cmd_buf[n - 1] = '\0';
+            info.cmdline = cmd_buf;
+        }
+
+        // read parent PID from /proc/<pid>/stat
+        info.parent_pid = 0;
+        char stat_path[64]{};
+        snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", walk_pid);
+        FILE* sf = fopen(stat_path, "r");
+        if (sf) {
+            char stat_buf[1024]{};
+            fread(stat_buf, 1, sizeof(stat_buf) - 1, sf);
+            fclose(sf);
+            // format: pid (comm) state ppid ...
+            // find the last ')' to skip comm which may contain spaces/parens
+            char* comm_end = strrchr(stat_buf, ')');
+            if (comm_end) {
+                int ppid = 0;
+                char state;
+                if (sscanf(comm_end + 1, " %c %d", &state, &ppid) == 2) {
+                    info.parent_pid = ppid;
+                }
+            }
+        }
+
+        tree.push_back(std::move(info));
+        walk_pid = tree.back().parent_pid;
+    }
+
+    // compute relative path from .so directory
+    auto make_relative = [&so_dir](const std::string& full_path) -> std::string {
+        if (full_path.empty()) return "(unknown)";
+        if (full_path.size() >= so_dir.size() &&
+            strncmp(full_path.c_str(), so_dir.c_str(), so_dir.size()) == 0) {
+            return "./" + full_path.substr(so_dir.size());
+        }
+        return full_path;
+    };
+
+    // sanitize home directory
+    const char* home = getenv("HOME");
+    size_t home_len = home ? strlen(home) : 0;
+    auto sanitize = [home, home_len](const std::string& path) -> std::string {
+        if (!home || home_len == 0 || path.size() < home_len) return path;
+        if (strncmp(path.c_str(), home, home_len) == 0) {
+            return "$HOME" + path.substr(home_len);
+        }
+        return path;
+    };
+
+    // write the file
+    FILE* f = fopen(out_path.c_str(), "w");
+    if (!f) return;
+
+    // timestamp
+    time_t now = time(nullptr);
+    struct tm tm_buf{};
+    localtime_r(&now, &tm_buf);
+    fprintf(f, "=== %s Process Tree ===\n", so_name.c_str());
+    fprintf(f, "Timestamp: %04d-%02d-%02d %02d:%02d:%02d\n",
+        tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday,
+        tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
+    fprintf(f, "SO Path: %s\n\n", sanitize(so_path).c_str());
+
+    pid_t current_pid = getpid();
+    for (size_t i = 0; i < tree.size(); ++i) {
+        auto& p = tree[i];
+        bool is_current = (p.pid == current_pid);
+
+        fprintf(f, "[PID %d] %s%s\n", p.pid, p.exe_name.c_str(), is_current ? "  (current process)" : "");
+        fprintf(f, "  Path: %s\n", sanitize(p.full_path).c_str());
+        fprintf(f, "  Relative: %s\n", sanitize(make_relative(p.full_path)).c_str());
+        if (!p.cmdline.empty()) {
+            fprintf(f, "  CmdLine: %s\n", sanitize(p.cmdline).c_str());
+        }
+        fprintf(f, "\n");
+
+        PRINT_DEBUG("process tree [PID %d]: %s%s | path: %s", p.pid, p.exe_name.c_str(),
+            is_current ? " (current)" : "", sanitize(p.full_path).c_str());
+    }
+
+    fclose(f);
+}
+
 
 // this acts as both an entry and an exit points for the library
 // avoid "__attribute__((__constructor__))" and "__attribute__((__destructor__))"
@@ -726,6 +1104,7 @@ struct CppRuntimeTrick {
     CppRuntimeTrick()
     {
         PRINT_DEBUG_ENTRY();
+        dump_process_tree();
         load_dlls();
     }
 
