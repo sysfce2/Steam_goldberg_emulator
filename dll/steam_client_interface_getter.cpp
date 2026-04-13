@@ -1106,6 +1106,22 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
     // use a static variable as an address anchor in our DLL
     static const char emu_module_anchor = 0;
 
+    // helper: replace user profile prefix with %USERPROFILE% to avoid leaking the username
+    auto sanitize_path = [](const char* path) -> std::string {
+        std::string result(path);
+        char profile[MAX_PATH]{};
+        if (GetEnvironmentVariableA("USERPROFILE", profile, MAX_PATH)) {
+            size_t len = strlen(profile);
+            if (len > 0 && result.size() >= len) {
+                // case-insensitive prefix match
+                if (_strnicmp(result.c_str(), profile, len) == 0) {
+                    result.replace(0, len, "%USERPROFILE%");
+                }
+            }
+        }
+        return result;
+    };
+
     // caller module detection via stack walk
     try {
         HMODULE our_module = nullptr;
@@ -1127,7 +1143,7 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
                 if (GetModuleFileNameW(frame_module, module_path, MAX_PATH)) {
                     char module_path_a[MAX_PATH]{};
                     WideCharToMultiByte(CP_UTF8, 0, module_path, -1, module_path_a, MAX_PATH, nullptr, nullptr);
-                    ss << "CALLER MODULE=" << module_path_a << "\n";
+                    ss << "CALLER MODULE=" << sanitize_path(module_path_a) << "\n";
                     // return address offset within the calling module
                     auto offset = reinterpret_cast<uintptr_t>(stack_frames[i]) - reinterpret_cast<uintptr_t>(frame_module);
                     ss << "CALLER OFFSET=0x" << std::hex << offset << std::dec << "\n";
@@ -1164,7 +1180,7 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
             if (GetModuleFileNameW(our_module, emu_path, MAX_PATH)) {
                 char emu_path_a[MAX_PATH]{};
                 WideCharToMultiByte(CP_UTF8, 0, emu_path, -1, emu_path_a, MAX_PATH, nullptr, nullptr);
-                ss << "EMU DLL=" << emu_path_a << "\n";
+                ss << "EMU DLL=" << sanitize_path(emu_path_a) << "\n";
             }
         }
     }
