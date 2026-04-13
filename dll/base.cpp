@@ -758,8 +758,22 @@ static void dump_process_tree()
         std::wstring full_path;
         std::wstring cmdline;
         std::string start_time; // formatted creation timestamp
+        std::vector<std::string> renderers; // loaded renderer DLLs (for parent processes)
     };
     std::vector<ProcessInfo> tree;
+
+    // renderer DLLs to look for when scanning parent process modules
+    struct { const wchar_t* dll; const char* label; } renderer_dlls[] = {
+        { L"d3d8.dll",       "DirectX 8" },
+        { L"d3d9.dll",       "DirectX 9" },
+        { L"d3d10.dll",      "DirectX 10" },
+        { L"d3d10_1.dll",    "DirectX 10.1" },
+        { L"d3d11.dll",      "DirectX 11" },
+        { L"d3d12.dll",      "DirectX 12" },
+        { L"vulkan-1.dll",   "Vulkan" },
+        { L"opengl32.dll",   "OpenGL" },
+        { L"dxgi.dll",       "DXGI" },
+    };
 
     // snapshot all processes
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -816,6 +830,26 @@ static void dump_process_tree()
                 info.start_time = tbuf;
             }
             CloseHandle(hProc);
+        }
+
+        // scan loaded modules for renderer DLLs (skip current process — renderer not loaded yet at DLL_PROCESS_ATTACH)
+        if (walk_pid != current_pid) {
+            HANDLE mod_snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, walk_pid);
+            if (mod_snap != INVALID_HANDLE_VALUE) {
+                MODULEENTRY32W me{};
+                me.dwSize = sizeof(me);
+                if (Module32FirstW(mod_snap, &me)) {
+                    do {
+                        for (auto& rd : renderer_dlls) {
+                            if (_wcsicmp(me.szModule, rd.dll) == 0) {
+                                info.renderers.push_back(rd.label);
+                                break;
+                            }
+                        }
+                    } while (Module32NextW(mod_snap, &me));
+                }
+                CloseHandle(mod_snap);
+            }
         }
 
         tree.push_back(std::move(info));
@@ -899,6 +933,16 @@ static void dump_process_tree()
                 WideCharToMultiByte(CP_UTF8, 0, sanitized_cmd.c_str(), -1, &cmd_a[0], cmd_size, nullptr, nullptr);
                 fprintf(f, "  CmdLine: %s\n", cmd_a.c_str());
             }
+        }
+        if (is_current) {
+            fprintf(f, "  Renderers: (pending - detected after init)\n");
+        } else if (!p.renderers.empty()) {
+            fprintf(f, "  Renderers: ");
+            for (size_t j = 0; j < p.renderers.size(); ++j) {
+                if (j > 0) fprintf(f, ", ");
+                fprintf(f, "%s", p.renderers[j].c_str());
+            }
+            fprintf(f, "\n");
         }
         fprintf(f, "\n");
 
@@ -1284,8 +1328,18 @@ static void dump_process_tree()
         std::string full_path;
         std::string cmdline;
         std::string start_time; // formatted creation timestamp
+        std::vector<std::string> renderers; // loaded renderer libs (for parent processes)
     };
     std::vector<ProcessInfo> tree;
+
+    // renderer libraries to look for when scanning parent process maps
+    struct { const char* lib; const char* label; } renderer_libs[] = {
+        { "libvulkan.so",  "Vulkan" },
+        { "libGL.so",      "OpenGL" },
+        { "libGLX.so",     "GLX" },
+        { "libEGL.so",     "EGL" },
+        { "libGLESv2.so",  "OpenGL ES" },
+    };
 
     // walk from current process up through parents
     pid_t walk_pid = getpid();
@@ -1391,6 +1445,25 @@ static void dump_process_tree()
             }
         }
 
+        // scan /proc/<pid>/maps for renderer libraries (skip current process - renderer not loaded yet)
+        if (walk_pid != getpid()) {
+            char maps_path[64]{};
+            snprintf(maps_path, sizeof(maps_path), "/proc/%d/maps", walk_pid);
+            FILE* mf = fopen(maps_path, "r");
+            if (mf) {
+                char mline[512]{};
+                std::set<std::string> rseen;
+                while (fgets(mline, sizeof(mline), mf)) {
+                    for (auto& rl : renderer_libs) {
+                        if (strstr(mline, rl.lib) && rseen.insert(rl.label).second) {
+                            info.renderers.push_back(rl.label);
+                        }
+                    }
+                }
+                fclose(mf);
+            }
+        }
+
         tree.push_back(std::move(info));
         walk_pid = tree.back().parent_pid;
     }
@@ -1443,6 +1516,16 @@ static void dump_process_tree()
         }
         if (!p.cmdline.empty()) {
             fprintf(f, "  CmdLine: %s\n", sanitize(p.cmdline).c_str());
+        }
+        if (is_current) {
+            fprintf(f, "  Renderers: (pending - detected after init)\n");
+        } else if (!p.renderers.empty()) {
+            fprintf(f, "  Renderers: ");
+            for (size_t j = 0; j < p.renderers.size(); ++j) {
+                if (j > 0) fprintf(f, ", ");
+                fprintf(f, "%s", p.renderers[j].c_str());
+            }
+            fprintf(f, "\n");
         }
         fprintf(f, "\n");
 
