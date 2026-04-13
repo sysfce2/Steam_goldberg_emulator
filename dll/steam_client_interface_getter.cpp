@@ -1099,12 +1099,15 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
     catch(...) { }
 
 #if defined(__WINDOWS__)
+    // use a static variable as an address anchor in our DLL
+    static const char emu_module_anchor = 0;
+
     // caller module detection via stack walk
     try {
         HMODULE our_module = nullptr;
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&Steam_Client::report_missing_impl),
+            reinterpret_cast<LPCWSTR>(&emu_module_anchor),
             &our_module
         );
 
@@ -1149,7 +1152,7 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
         HMODULE our_module = nullptr;
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&Steam_Client::report_missing_impl),
+            reinterpret_cast<LPCWSTR>(&emu_module_anchor),
             &our_module
         );
         if (our_module) {
