@@ -427,6 +427,8 @@ public:
     std::nullptr_t report_missing_impl_and_exit_or_null(std::string_view itf, std::string_view caller);
 
     bool thirdparty_injector_detected = false;
+    std::string cached_detected_overlays;
+    bool overlays_scanned = false;
     unsigned missing_interface_count = 0;
     void detect_thirdparty_injectors();
     bool is_caller_special_k();

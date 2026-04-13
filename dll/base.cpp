@@ -1445,6 +1445,180 @@ void append_renderer_info()
         d.category = "GAME";
     }
 
+    // --- Third-party tool detection (non-renderer modules) ---
+    struct DetectedTool {
+        std::string label;
+        std::string type;
+    };
+    std::vector<DetectedTool> detected_tools;
+    {
+        struct { const wchar_t* name; const char* label; const char* type; } known_tools[] = {
+            // --- injectors / post-processors ---
+            #if defined(_WIN64)
+            { L"SpecialK64.dll",            "Special K",            "injector" },
+            { L"ReShade64.dll",             "ReShade",              "post-processor" },
+            #else
+            { L"SpecialK32.dll",            "Special K",            "injector" },
+            { L"ReShade32.dll",             "ReShade",              "post-processor" },
+            #endif
+            { L"d3dcompiler_46e.dll",       "ENB Series",           "post-processor" },
+
+            // --- recording / streaming ---
+            #if defined(_WIN64)
+            { L"nvspcap64.dll",             "NVIDIA ShadowPlay",    "recording" },
+            { L"graphics-hook64.dll",       "OBS Game Capture",     "recording" },
+            { L"fraps64.dll",               "Fraps",                "recording" },
+            { L"MedalHook64.dll",           "Medal.tv",             "recording" },
+            { L"bdcam64.dll",               "Bandicam",             "recording" },
+            { L"Action64.dll",              "Mirillis Action",      "recording" },
+            { L"XSplit.Core64.dll",         "XSplit",               "recording" },
+            { L"d3dgear64.dll",             "D3DGear",              "recording" },
+            #else
+            { L"nvspcap.dll",               "NVIDIA ShadowPlay",    "recording" },
+            { L"graphics-hook32.dll",       "OBS Game Capture",     "recording" },
+            { L"fraps32.dll",               "Fraps",                "recording" },
+            { L"MedalHook.dll",             "Medal.tv",             "recording" },
+            { L"bdcam32.dll",               "Bandicam",             "recording" },
+            { L"Action.dll",                "Mirillis Action",      "recording" },
+            { L"XSplit.Core.dll",           "XSplit",               "recording" },
+            { L"d3dgear.dll",               "D3DGear",              "recording" },
+            #endif
+            { L"Streamlabs.dll",            "Streamlabs",           "recording" },
+
+            // --- monitoring ---
+            { L"RTSSHooks64.dll",           "RTSS",                 "monitoring" },
+            { L"RTSSHooks.dll",             "RTSS",                 "monitoring" },
+            #if defined(_WIN64)
+            { L"fpshook64.dll",             "FPS Monitor",          "monitoring" },
+            { L"PresentMon64.dll",          "Intel PresentMon",     "monitoring" },
+            #else
+            { L"fpshook.dll",               "FPS Monitor",          "monitoring" },
+            { L"PresentMon32.dll",          "Intel PresentMon",     "monitoring" },
+            #endif
+
+            // --- store overlays ---
+            { L"GameOverlayRenderer64.dll", "Steam Overlay",        "store overlay" },
+            { L"GameOverlayRenderer.dll",   "Steam Overlay",        "store overlay" },
+            { L"DiscordHook64.dll",         "Discord",              "store overlay" },
+            { L"DiscordHook.dll",           "Discord",              "store overlay" },
+            #if defined(_WIN64)
+            { L"EOSOVH-Win64-Shipping.dll", "Epic Online Services", "store overlay" },
+            { L"Galaxy64.dll",              "GOG Galaxy",           "store overlay" },
+            { L"GalaxyOverlayRenderer64.dll", "GOG Galaxy",         "store overlay" },
+            { L"igo64.dll",                 "EA App / Origin",      "store overlay" },
+            { L"uplay_r2_loader64.dll",     "Ubisoft Connect",      "store overlay" },
+            { L"upc_r2_loader64.dll",       "Ubisoft Connect",      "store overlay" },
+            #else
+            { L"EOSOVH-Win32-Shipping.dll", "Epic Online Services", "store overlay" },
+            { L"Galaxy.dll",                "GOG Galaxy",           "store overlay" },
+            { L"GalaxyOverlayRenderer.dll", "GOG Galaxy",           "store overlay" },
+            { L"igo32.dll",                 "EA App / Origin",      "store overlay" },
+            { L"uplay_r2_loader.dll",       "Ubisoft Connect",      "store overlay" },
+            { L"upc_r2_loader.dll",         "Ubisoft Connect",      "store overlay" },
+            #endif
+
+            // --- GPU vendor software ---
+            #if defined(_WIN64)
+            { L"aaborern64.dll",            "AMD Adrenalin",        "gpu vendor" },
+            { L"atiumd64.dll",              "AMD Display Driver",   "gpu vendor" },
+            #else
+            { L"aaborern.dll",              "AMD Adrenalin",        "gpu vendor" },
+            { L"atiumdag.dll",              "AMD Display Driver",   "gpu vendor" },
+            #endif
+            { L"RadeonSoftware.dll",        "AMD Software",         "gpu vendor" },
+
+            // --- system / platform overlays ---
+            { L"GameBar.dll",               "Xbox Game Bar",        "system overlay" },
+            { L"GameBarPresenceWriter.dll", "Xbox Game Bar",        "system overlay" },
+            { L"SSOverlay64.dll",           "Samsung Gaming Hub",   "system overlay" },
+            { L"SSOverlay.dll",             "Samsung Gaming Hub",   "system overlay" },
+            { L"AcLayer.dll",               "Windows Compatibility","system overlay" },
+
+            // --- gaming platforms / launchers ---
+            { L"OWClient.dll",              "Overwolf",             "platform" },
+            { L"OWExplorer.dll",            "Overwolf",             "platform" },
+            #if defined(_WIN64)
+            { L"ltc_game64.dll",            "Playnite",             "platform" },
+            #else
+            { L"ltc_game32.dll",            "Playnite",             "platform" },
+            #endif
+
+            // --- peripheral software ---
+            #if defined(_WIN64)
+            { L"Nahimic2OSD64.dll",         "Nahimic",              "peripheral" },
+            { L"LogiOverlay64.dll",         "Logitech G Hub",       "peripheral" },
+            { L"iCUEOverlay64.dll",         "Corsair iCUE",         "peripheral" },
+            { L"SteelSeriesGG64.dll",       "SteelSeries GG",       "peripheral" },
+            { L"RzChromaSDK64.dll",         "Razer Chroma",         "peripheral" },
+            #else
+            { L"Nahimic2OSD.dll",           "Nahimic",              "peripheral" },
+            { L"LogiOverlay.dll",           "Logitech G Hub",       "peripheral" },
+            { L"iCUEOverlay.dll",           "Corsair iCUE",         "peripheral" },
+            { L"SteelSeriesGG.dll",         "SteelSeries GG",       "peripheral" },
+            { L"RzChromaSDK.dll",           "Razer Chroma",         "peripheral" },
+            #endif
+            { L"NahimicOSD.dll",            "Nahimic",              "peripheral" },
+
+            // --- communication ---
+            #if defined(_WIN64)
+            { L"mumble_ol_x64.dll",         "Mumble",               "communication" },
+            { L"ts3overlay_hook_x64.dll",   "TeamSpeak",            "communication" },
+            #else
+            { L"mumble_ol.dll",             "Mumble",               "communication" },
+            { L"ts3overlay_hook_x86.dll",   "TeamSpeak",            "communication" },
+            #endif
+
+            // --- VR ---
+            { L"openvr_api.dll",            "SteamVR",              "vr" },
+            #if defined(_WIN64)
+            { L"vrclient_x64.dll",          "SteamVR Client",       "vr" },
+            { L"LibOVRRT64_1.dll",          "Oculus Runtime",       "vr" },
+            #else
+            { L"vrclient.dll",              "SteamVR Client",       "vr" },
+            { L"LibOVRRT32_1.dll",          "Oculus Runtime",       "vr" },
+            #endif
+            { L"OculusXRPlugin.dll",        "Oculus/Meta",          "vr" },
+
+            // --- anti-cheat (informational) ---
+            #if defined(_WIN64)
+            { L"EasyAntiCheat_x64.dll",     "EasyAntiCheat",        "anti-cheat" },
+            { L"BEService_x64.dll",         "BattlEye",             "anti-cheat" },
+            { L"BEClient_x64.dll",          "BattlEye",             "anti-cheat" },
+            #else
+            { L"EasyAntiCheat_x86.dll",     "EasyAntiCheat",        "anti-cheat" },
+            { L"BEService_x86.dll",         "BattlEye",             "anti-cheat" },
+            { L"BEClient_x86.dll",          "BattlEye",             "anti-cheat" },
+            #endif
+            { L"easyanticheat.dll",         "EasyAntiCheat",        "anti-cheat" },
+            { L"vanguard.dll",              "Vanguard",             "anti-cheat" },
+        };
+        std::set<std::string> tool_seen;
+        for (auto& entry : known_tools) {
+            if (GetModuleHandleW(entry.name) && tool_seen.insert(entry.label).second) {
+                detected_tools.push_back({ entry.label, entry.type });
+                PRINT_DEBUG("detected tool [%s]: %s (via %ls)", entry.type, entry.label, entry.name);
+            }
+        }
+
+        // check proxy DLLs for Special K or ReShade exports
+        const wchar_t* proxy_tool_dlls[] = {
+            L"dxgi.dll", L"d3d11.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
+            L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"dinput.dll", L"winmm.dll",
+            L"OpenGL32.dll"
+        };
+        for (auto dll_name : proxy_tool_dlls) {
+            HMODULE hMod = GetModuleHandleW(dll_name);
+            if (!hMod) continue;
+            if (GetProcAddress(hMod, "SK_GetVersionStr") && tool_seen.insert("Special K (proxy)").second) {
+                detected_tools.push_back({ "Special K (proxy)", "injector" });
+                PRINT_DEBUG("detected tool [injector]: Special K (proxy via %ls)", dll_name);
+            } else if (GetProcAddress(hMod, "ReShadeVersion") && tool_seen.insert("ReShade (proxy)").second) {
+                detected_tools.push_back({ "ReShade (proxy)", "post-processor" });
+                PRINT_DEBUG("detected tool [post-processor]: ReShade (proxy via %ls)", dll_name);
+            }
+        }
+    }
+
     // build replacement strings for the process tree placeholder (one per line ending style)
     // helper to format one entry
     auto format_entry = [](const DetectedRenderer& d, const std::string& indent, const std::string& eol) -> std::string {
@@ -1555,6 +1729,16 @@ void append_renderer_info()
             PRINT_DEBUG("detected [%s]: %s at %s", d.category.c_str(), d.label.c_str(), d.full_path.c_str());
         }
     }
+
+    // third-party tools (non-renderer)
+    if (!detected_tools.empty()) {
+        fprintf(f, "  Third-party tools:\n");
+        for (auto& t : detected_tools) {
+            fprintf(f, "    [%s] %s\n", t.type.c_str(), t.label.c_str());
+            PRINT_DEBUG("tool detected: [%s] %s", t.type.c_str(), t.label.c_str());
+        }
+    }
+
     fprintf(f, "\n");
 
     fclose(f);
@@ -2225,6 +2409,91 @@ void append_renderer_info()
         d.category = "GAME";
     }
 
+    // --- Third-party tool detection (non-renderer modules via /proc/self/maps) ---
+    struct DetectedTool {
+        std::string label;
+        std::string type;
+        std::string path;
+    };
+    std::vector<DetectedTool> detected_tools;
+    {
+        struct { const char* lib; const char* label; const char* type; } known_tools[] = {
+            // --- recording / streaming ---
+            { "libobs.so",                  "OBS Studio",           "recording" },
+            { "libobs-opengl.so",           "OBS OpenGL Capture",   "recording" },
+            { "libobs-vulkan.so",           "OBS Vulkan Capture",   "recording" },
+            { "gpu-screen-recorder",        "GPU Screen Recorder",  "recording" },
+
+            // --- monitoring ---
+            { "libMangoHud.so",             "MangoHud",             "monitoring" },
+            { "libMangoHud_dlsym.so",       "MangoHud",             "monitoring" },
+
+            // --- post-processing / overlay ---
+            { "libvkbasalt.so",             "vkBasalt",             "post-processor" },
+            { "libreshade.so",              "ReShade",              "post-processor" },
+
+            // --- store overlays ---
+            { "gameoverlayrenderer.so",     "Steam Overlay",        "store overlay" },
+            { "discord_game_sdk.so",        "Discord Game SDK",     "store overlay" },
+
+            // --- gaming platforms ---
+            { "libgamemodeauto.so",         "GameMode (Feral)",     "platform" },
+            { "libgamemode.so",             "GameMode (Feral)",     "platform" },
+
+            // --- frame limiting ---
+            { "libstrangle.so",             "libstrangle",          "frame limiter" },
+
+            // --- communication ---
+            { "libmumble.so",               "Mumble",               "communication" },
+            { "mumble_ol.so",               "Mumble",               "communication" },
+
+            // --- VR ---
+            { "libopenvr_api.so",           "SteamVR",              "vr" },
+            { "libopenxr_loader.so",        "OpenXR",               "vr" },
+
+            // --- anti-cheat (informational) ---
+            { "libeasyanticheat.so",        "EasyAntiCheat",        "anti-cheat" },
+            { "easyanticheat_x64.so",       "EasyAntiCheat",        "anti-cheat" },
+            { "easyanticheat_x86.so",       "EasyAntiCheat",        "anti-cheat" },
+            { "battleye_client.so",         "BattlEye",             "anti-cheat" },
+            { "beclient_x64.so",            "BattlEye",             "anti-cheat" },
+        };
+        FILE* tool_maps = fopen("/proc/self/maps", "r");
+        if (tool_maps) {
+            char tline[1024]{};
+            std::set<std::string> tool_seen;
+            while (fgets(tline, sizeof(tline), tool_maps)) {
+                for (auto& t : known_tools) {
+                    if (strstr(tline, t.lib) && tool_seen.insert(t.label).second) {
+                        DetectedTool tool_entry{};
+                        tool_entry.label = t.label;
+                        tool_entry.type = t.type;
+                        // extract path from maps line
+                        const char* p = tline;
+                        int fields = 0;
+                        while (*p && fields < 5) {
+                            while (*p == ' ') ++p;
+                            while (*p && *p != ' ') ++p;
+                            ++fields;
+                        }
+                        while (*p == ' ') ++p;
+                        if (*p == '/') {
+                            tool_entry.path = p;
+                            while (!tool_entry.path.empty() && (tool_entry.path.back() == '\n' || tool_entry.path.back() == '\r'))
+                                tool_entry.path.pop_back();
+                            if (home && home_len > 0 && strncmp(tool_entry.path.c_str(), home, home_len) == 0) {
+                                tool_entry.path = "$HOME" + tool_entry.path.substr(home_len);
+                            }
+                        }
+                        detected_tools.push_back(std::move(tool_entry));
+                        PRINT_DEBUG("detected tool [%s]: %s", t.type, t.label);
+                    }
+                }
+            }
+            fclose(tool_maps);
+        }
+    }
+
     // build replacement string for the process tree placeholder
     auto format_entry_linux = [](const DetectedRenderer& d, const std::string& indent) -> std::string {
         std::string r = indent + "[" + d.category + "] " + d.label;
@@ -2331,6 +2600,19 @@ void append_renderer_info()
             PRINT_DEBUG("module detected: [%s] %s at %s", d.category.c_str(), d.label.c_str(), d.full_path.c_str());
         }
     }
+
+    // third-party tools (non-renderer)
+    if (!detected_tools.empty()) {
+        fprintf(f, "  Third-party tools:\n");
+        for (auto& t : detected_tools) {
+            fprintf(f, "    [%s] %s\n", t.type.c_str(), t.label.c_str());
+            if (!t.path.empty()) {
+                fprintf(f, "      %s\n", t.path.c_str());
+            }
+            PRINT_DEBUG("tool detected: [%s] %s", t.type.c_str(), t.label.c_str());
+        }
+    }
+
     fprintf(f, "\n");
 
     fclose(f);
