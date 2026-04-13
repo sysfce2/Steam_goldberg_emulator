@@ -1076,6 +1076,10 @@ void append_renderer_info()
     wchar_t syswow_dir[MAX_PATH]{};
     UINT syswow_len = GetSystemWow64DirectoryW(syswow_dir, MAX_PATH);
 
+    // sanitize user profile path in renderer DLL paths
+    wchar_t profile_w[MAX_PATH]{};
+    DWORD profile_len = GetEnvironmentVariableW(L"USERPROFILE", profile_w, MAX_PATH);
+
     // known proxy identifiers: export name -> proxy label
     struct ProxySignature { const char* export_name; const char* proxy_label; };
     ProxySignature proxy_sigs[] = {
