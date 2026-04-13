@@ -929,16 +929,143 @@ void append_renderer_info()
     std::wstring out_path(dll_path_w);
     out_path += L".txt";
 
+    // --- Environment / compatibility layer detection ---
+    struct EnvCheck { const char* var; const char* label; };
+    // check if running under Wine/Proton by looking for wine_get_version in ntdll
+    bool is_wine = false;
+    std::string wine_version;
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (ntdll) {
+        typedef const char* (*wine_get_version_t)();
+        auto wine_ver = (wine_get_version_t)GetProcAddress(ntdll, "wine_get_version");
+        if (wine_ver) {
+            is_wine = true;
+            const char* v = wine_ver();
+            if (v) wine_version = v;
+        }
+    }
+
+    // detect specific compatibility layers / launchers via environment variables
+    std::vector<std::string> env_info;
+
+    if (is_wine) {
+        std::string wine_label = "Wine";
+        if (!wine_version.empty()) wine_label += " " + wine_version;
+        env_info.push_back(wine_label);
+    }
+
+    // Proton (Steam Play)
+    char env_buf[512]{};
+    if (GetEnvironmentVariableA("STEAM_COMPAT_DATA_PATH", env_buf, sizeof(env_buf))) {
+        std::string proton_label = "Proton (Steam Play)";
+        char proton_ver[256]{};
+        if (GetEnvironmentVariableA("PROTON_VERSION", proton_ver, sizeof(proton_ver)))
+            proton_label += std::string(" ") + proton_ver;
+        env_info.push_back(proton_label);
+    }
+
+    // Lutris
+    if (GetEnvironmentVariableA("LUTRIS_GAME_SLUG", env_buf, sizeof(env_buf)))
+        env_info.push_back("Lutris");
+
+    // Bottles
+    if (GetEnvironmentVariableA("BOTTLES_ENV", env_buf, sizeof(env_buf)) ||
+        GetEnvironmentVariableA("FLATPAK_ID", env_buf, sizeof(env_buf)) && strstr(env_buf, "bottles"))
+        env_info.push_back("Bottles");
+
+    // PlayOnLinux
+    if (GetEnvironmentVariableA("PLAYONLINUX", env_buf, sizeof(env_buf)) ||
+        GetEnvironmentVariableA("POL_WINEVERSION", env_buf, sizeof(env_buf)))
+        env_info.push_back("PlayOnLinux");
+
+    // CrossOver (CodeWeavers)
+    if (GetEnvironmentVariableA("CX_BOTTLE", env_buf, sizeof(env_buf)) ||
+        GetEnvironmentVariableA("CX_ROOT", env_buf, sizeof(env_buf)))
+        env_info.push_back("CrossOver");
+
+    // Heroic Games Launcher
+    if (GetEnvironmentVariableA("HEROIC_APP_NAME", env_buf, sizeof(env_buf)) ||
+        GetEnvironmentVariableA("STORE", env_buf, sizeof(env_buf)) && (strstr(env_buf, "legendary") || strstr(env_buf, "gog")))
+        env_info.push_back("Heroic Games Launcher");
+
+    // GameScope (Steam Deck compositing)
+    if (GetEnvironmentVariableA("GAMESCOPE_WAYLAND_DISPLAY", env_buf, sizeof(env_buf)))
+        env_info.push_back("GameScope");
+
+    // MangoHud
+    if (GetEnvironmentVariableA("MANGOHUD", env_buf, sizeof(env_buf)))
+        env_info.push_back("MangoHud");
+
+    // Steam Runtime
+    if (GetEnvironmentVariableA("STEAM_RUNTIME", env_buf, sizeof(env_buf)))
+        env_info.push_back(std::string("Steam Runtime: ") + env_buf);
+
+    // --- Translation layer detection (DXVK, VKD3D, WineD3D) ---
+    std::vector<std::string> translation_info;
+
+    if (is_wine) {
+        // DXVK: check for DXVK-specific exports on dxgi.dll or env
+        bool dxvk_detected = false;
+        HMODULE dxgi_mod = GetModuleHandleW(L"dxgi.dll");
+        if (dxgi_mod && GetProcAddress(dxgi_mod, "DXVK_GetInstanceExtensions")) {
+            dxvk_detected = true;
+        }
+        if (!dxvk_detected && GetEnvironmentVariableA("DXVK_LOG_LEVEL", env_buf, sizeof(env_buf))) {
+            dxvk_detected = true;
+        }
+        if (!dxvk_detected && GetEnvironmentVariableA("DXVK_STATE_CACHE", env_buf, sizeof(env_buf))) {
+            dxvk_detected = true;
+        }
+        if (dxvk_detected) {
+            translation_info.push_back("DXVK (D3D9/D3D10/D3D11 -> Vulkan)");
+        }
+
+        // VKD3D-proton: D3D12 -> Vulkan
+        bool vkd3d_detected = false;
+        HMODULE d3d12_mod = GetModuleHandleW(L"d3d12.dll");
+        if (d3d12_mod && GetProcAddress(d3d12_mod, "vkd3d_create_instance")) {
+            vkd3d_detected = true;
+        }
+        if (!vkd3d_detected && GetEnvironmentVariableA("VKD3D_LOG_LEVEL", env_buf, sizeof(env_buf))) {
+            vkd3d_detected = true;
+        }
+        if (vkd3d_detected) {
+            translation_info.push_back("VKD3D-proton (D3D12 -> Vulkan)");
+        }
+
+        // WineD3D: if D3D is loaded but neither DXVK nor VKD3D, it's WineD3D (OpenGL-based)
+        bool has_d3d = GetModuleHandleW(L"d3d9.dll") || GetModuleHandleW(L"d3d10.dll") ||
+                       GetModuleHandleW(L"d3d11.dll") || GetModuleHandleW(L"d3d12.dll");
+        if (has_d3d && !dxvk_detected && !vkd3d_detected) {
+            translation_info.push_back("WineD3D (D3D -> OpenGL)");
+        }
+
+        // Gallium Nine: native D3D9 on Mesa
+        if (GetEnvironmentVariableA("WINE_NINE_NATIVE", env_buf, sizeof(env_buf)) ||
+            GetModuleHandleW(L"d3d9-nine.dll")) {
+            translation_info.push_back("Gallium Nine (native D3D9 on Mesa)");
+        }
+
+        // Zink: OpenGL -> Vulkan (Mesa driver)
+        if (GetEnvironmentVariableA("MESA_LOADER_DRIVER_OVERRIDE", env_buf, sizeof(env_buf)) && strstr(env_buf, "zink")) {
+            translation_info.push_back("Zink (OpenGL -> Vulkan via Mesa)");
+        }
+    }
+
     // renderer DLLs to check (name, label)
     struct { const wchar_t* dll; const char* label; } renderers[] = {
+        { L"d3d8.dll",       "DirectX 8" },
         { L"d3d9.dll",       "DirectX 9" },
         { L"d3d10.dll",      "DirectX 10" },
         { L"d3d10_1.dll",    "DirectX 10.1" },
         { L"d3d11.dll",      "DirectX 11" },
         { L"d3d12.dll",      "DirectX 12" },
+        { L"d3d12core.dll",  "DirectX 12 Core (Agility SDK)" },
         { L"vulkan-1.dll",   "Vulkan" },
         { L"opengl32.dll",   "OpenGL" },
         { L"dxgi.dll",       "DXGI" },
+        { L"libEGL.dll",     "EGL (ANGLE)" },
+        { L"libGLESv2.dll",  "OpenGL ES (ANGLE)" },
     };
 
     struct DetectedRenderer { std::string label; std::string dll_name; };
@@ -955,12 +1082,33 @@ void append_renderer_info()
     FILE* f = _wfopen(out_path.c_str(), L"a");
     if (!f) return;
 
-    fprintf(f, "=== Renderer Detection (PID %lu) ===\n", GetCurrentProcessId());
+    fprintf(f, "=== Renderer & Environment Detection (PID %lu) ===\n", GetCurrentProcessId());
+
+    // environment info
+    if (!env_info.empty()) {
+        fprintf(f, "  Environment:\n");
+        for (auto& e : env_info) {
+            fprintf(f, "    %s\n", e.c_str());
+            PRINT_DEBUG("environment detected: %s", e.c_str());
+        }
+    }
+
+    // translation layers
+    if (!translation_info.empty()) {
+        fprintf(f, "  Translation layers:\n");
+        for (auto& t : translation_info) {
+            fprintf(f, "    %s\n", t.c_str());
+            PRINT_DEBUG("translation layer detected: %s", t.c_str());
+        }
+    }
+
+    // renderers
+    fprintf(f, "  Renderers:\n");
     if (detected.empty()) {
-        fprintf(f, "  (none detected)\n");
+        fprintf(f, "    (none detected)\n");
     } else {
         for (auto& d : detected) {
-            fprintf(f, "  %s (%s)\n", d.label.c_str(), d.dll_name.c_str());
+            fprintf(f, "    %s (%s)\n", d.label.c_str(), d.dll_name.c_str());
             PRINT_DEBUG("renderer detected: %s (%s)", d.label.c_str(), d.dll_name.c_str());
         }
     }
@@ -1238,13 +1386,100 @@ void append_renderer_info()
 
     std::string out_path = so_path + ".txt";
 
+    // --- Environment detection ---
+    std::vector<std::string> env_info;
+
+    // display server
+    const char* wayland = getenv("WAYLAND_DISPLAY");
+    const char* x_display = getenv("DISPLAY");
+    const char* session_type = getenv("XDG_SESSION_TYPE");
+    if (session_type) {
+        std::string sess = "Session: ";
+        sess += session_type;
+        if (wayland) { sess += " ("; sess += wayland; sess += ")"; }
+        else if (x_display) { sess += " ("; sess += x_display; sess += ")"; }
+        env_info.push_back(sess);
+    } else {
+        if (wayland) env_info.push_back(std::string("Wayland (") + wayland + ")");
+        else if (x_display) env_info.push_back(std::string("X11 (") + x_display + ")");
+    }
+
+    // Steam runtime / launched from Steam
+    const char* steam_runtime = getenv("STEAM_RUNTIME");
+    if (steam_runtime) env_info.push_back(std::string("Steam Runtime: ") + steam_runtime);
+    const char* steam_appid = getenv("SteamAppId");
+    if (steam_appid) env_info.push_back(std::string("SteamAppId: ") + steam_appid);
+
+    // Proton (when running native .so side-by-side with Proton game)
+    const char* compat_data = getenv("STEAM_COMPAT_DATA_PATH");
+    if (compat_data) {
+        std::string label = "Proton (Steam Play)";
+        const char* proton_ver = getenv("PROTON_VERSION");
+        if (proton_ver) { label += " "; label += proton_ver; }
+        env_info.push_back(label);
+    }
+
+    // Lutris
+    if (getenv("LUTRIS_GAME_SLUG"))
+        env_info.push_back("Lutris");
+
+    // Bottles
+    const char* flatpak_id = getenv("FLATPAK_ID");
+    if (getenv("BOTTLES_ENV") || (flatpak_id && strstr(flatpak_id, "bottles")))
+        env_info.push_back("Bottles");
+
+    // PlayOnLinux
+    if (getenv("PLAYONLINUX") || getenv("POL_WINEVERSION"))
+        env_info.push_back("PlayOnLinux");
+
+    // CrossOver
+    if (getenv("CX_BOTTLE") || getenv("CX_ROOT"))
+        env_info.push_back("CrossOver");
+
+    // Heroic Games Launcher
+    const char* store_env = getenv("STORE");
+    if (getenv("HEROIC_APP_NAME") || (store_env && (strstr(store_env, "legendary") || strstr(store_env, "gog"))))
+        env_info.push_back("Heroic Games Launcher");
+
+    // GameScope
+    if (getenv("GAMESCOPE_WAYLAND_DISPLAY"))
+        env_info.push_back("GameScope");
+
+    // MangoHud
+    if (getenv("MANGOHUD"))
+        env_info.push_back("MangoHud");
+
+    // Flatpak / Snap
+    if (flatpak_id) env_info.push_back(std::string("Flatpak: ") + flatpak_id);
+    if (getenv("SNAP")) env_info.push_back("Snap");
+
+    // --- Mesa / GPU driver detection ---
+    std::vector<std::string> driver_info;
+    const char* mesa_driver = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+    if (mesa_driver) {
+        std::string label = "Mesa driver override: ";
+        label += mesa_driver;
+        if (strstr(mesa_driver, "zink"))
+            label += " (OpenGL -> Vulkan)";
+        driver_info.push_back(label);
+    }
+    const char* libva_driver = getenv("LIBVA_DRIVER_NAME");
+    if (libva_driver) driver_info.push_back(std::string("VA-API driver: ") + libva_driver);
+    const char* vdpau_driver = getenv("VDPAU_DRIVER");
+    if (vdpau_driver) driver_info.push_back(std::string("VDPAU driver: ") + vdpau_driver);
+
     // check /proc/self/maps for renderer libraries
     struct { const char* lib; const char* label; } renderers[] = {
-        { "libvulkan.so",  "Vulkan" },
-        { "libGL.so",      "OpenGL" },
-        { "libGLX.so",     "GLX" },
-        { "libEGL.so",     "EGL" },
-        { "libGLESv2.so",  "OpenGL ES" },
+        { "libvulkan.so",     "Vulkan" },
+        { "libGL.so",         "OpenGL" },
+        { "libGLX.so",        "GLX" },
+        { "libEGL.so",        "EGL" },
+        { "libGLESv1_CM.so",  "OpenGL ES 1.x" },
+        { "libGLESv2.so",     "OpenGL ES 2/3" },
+        { "libSDL2",          "SDL2" },
+        { "libSDL3",          "SDL3" },
+        { "libwayland-client", "Wayland client" },
+        { "libX11.so",        "X11 client" },
     };
 
     struct DetectedRenderer { std::string label; std::string lib_path; };
@@ -1278,12 +1513,33 @@ void append_renderer_info()
     FILE* f = fopen(out_path.c_str(), "a");
     if (!f) return;
 
-    fprintf(f, "=== Renderer Detection (PID %d) ===\n", getpid());
+    fprintf(f, "=== Renderer & Environment Detection (PID %d) ===\n", getpid());
+
+    // environment info
+    if (!env_info.empty()) {
+        fprintf(f, "  Environment:\n");
+        for (auto& e : env_info) {
+            fprintf(f, "    %s\n", e.c_str());
+            PRINT_DEBUG("environment detected: %s", e.c_str());
+        }
+    }
+
+    // driver info
+    if (!driver_info.empty()) {
+        fprintf(f, "  GPU/Driver:\n");
+        for (auto& d : driver_info) {
+            fprintf(f, "    %s\n", d.c_str());
+            PRINT_DEBUG("driver info: %s", d.c_str());
+        }
+    }
+
+    // renderers
+    fprintf(f, "  Renderers:\n");
     if (detected.empty()) {
-        fprintf(f, "  (none detected)\n");
+        fprintf(f, "    (none detected)\n");
     } else {
         for (auto& d : detected) {
-            fprintf(f, "  %s (%s)\n", d.label.c_str(), d.lib_path.c_str());
+            fprintf(f, "    %s (%s)\n", d.label.c_str(), d.lib_path.c_str());
             PRINT_DEBUG("renderer detected: %s (%s)", d.label.c_str(), d.lib_path.c_str());
         }
     }
