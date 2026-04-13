@@ -2473,6 +2473,11 @@ void Steam_Overlay::overlay_render_proc()
         stats.render_stats(current_language);
     }
 
+    // Stats settings window (rendered when overlay is open)
+    if (show_overlay) {
+        stats.render_stats_settings(current_language);
+    }
+
     // Notifications rendered LAST so they always draw on top of everything
     if (notifications.size()) {
         ImGuiIO &io = ImGui::GetIO();
@@ -2826,20 +2831,24 @@ void Steam_Overlay::render_main_window()
         
         ImGui::Spacing();
         ImGui::Spacing();
-        // user clicked on "FPS"
+        // Stats settings button (replaces individual FPS/Frametime/Playtime checkboxes)
         ImGui::SameLine();
-        if (ImGui::Checkbox(translationFpsCheckbox[current_language], &stats.show_fps)) {
-            allow_renderer_frame_processing(stats.show_fps);
+        if (ImGui::Button("Stats Settings")) {
+            stats.show_stats_settings = !stats.show_stats_settings;
         }
-        // user clicked on "Frametime"
         ImGui::SameLine();
-        if (ImGui::Checkbox(translationFrametimeCheckbox[current_language], &stats.show_frametime)) {
-            allow_renderer_frame_processing(stats.show_frametime);
-        }
-        // user clicked on "Playtime"
-        ImGui::SameLine();
-        if (ImGui::Checkbox(translationPlaytimeCheckbox[current_language], &stats.show_playtime)) {
-            allow_renderer_frame_processing(stats.show_playtime);
+        // Quick status indicators
+        {
+            char indicator[64] = {};
+            bool any = false;
+            if (stats.show_fps) { strcat(indicator, "FPS"); any = true; }
+            if (stats.show_frametime) { if (any) strcat(indicator, ", "); strcat(indicator, "FT"); any = true; }
+            if (stats.show_playtime) { if (any) strcat(indicator, ", "); strcat(indicator, "PT"); any = true; }
+            if (any) {
+                char wrapped[72];
+                snprintf(wrapped, sizeof(wrapped), "(%s)", indicator);
+                ImGui::TextDisabled("%s", wrapped);
+            }
         }
 
         // --- Rendering info panel -------------------------------------------
@@ -5376,6 +5385,13 @@ Steam_Overlay::BridgeStatsSnapshot Steam_Overlay::Bridge_GetStatsState() const
     s.show_fps       = stats.show_fps;
     s.show_frametime = stats.show_frametime;
     s.show_playtime  = stats.show_playtime;
+    s.show_fps_graph       = stats.show_fps_graph;
+    s.show_frametime_graph = stats.show_frametime_graph;
+    s.show_min_max_avg     = stats.show_min_max_avg;
+    s.show_percentile_1    = stats.show_percentile_1;
+    s.show_percentile_5    = stats.show_percentile_5;
+    s.show_percentile_01   = stats.show_percentile_01;
+    s.graph_timeframe_sec  = stats.graph_timeframe_sec;
     // Stats values are updated on the render thread; we read them directly.
     // The addon will compute its own FPS/frametime since it has its own frame loop.
     s.fps = 0;
@@ -6160,6 +6176,14 @@ void Steam_Overlay::Bridge_SetShowPlaytime(bool v)
     stats.show_playtime = v;
     allow_renderer_frame_processing(v);
 }
+
+void Steam_Overlay::Bridge_SetShowFpsGraph(bool v)       { stats.show_fps_graph = v; }
+void Steam_Overlay::Bridge_SetShowFrametimeGraph(bool v) { stats.show_frametime_graph = v; }
+void Steam_Overlay::Bridge_SetShowMinMaxAvg(bool v)      { stats.show_min_max_avg = v; }
+void Steam_Overlay::Bridge_SetShowPercentile1(bool v)    { stats.show_percentile_1 = v; }
+void Steam_Overlay::Bridge_SetShowPercentile5(bool v)    { stats.show_percentile_5 = v; }
+void Steam_Overlay::Bridge_SetShowPercentile01(bool v)   { stats.show_percentile_01 = v; }
+void Steam_Overlay::Bridge_SetGraphTimeframe(int sec)    { stats.graph_timeframe_sec = (sec >= 1 && sec <= 30) ? sec : 5; }
 
 /* ── Chat support for ReShade addon ─────────────────────────────────────── */
 

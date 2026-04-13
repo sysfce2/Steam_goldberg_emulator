@@ -1616,6 +1616,27 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
     settings_client->overlay_always_show_playtime = ini.GetBoolValue("overlay::general", "overlay_always_show_playtime", settings_client->overlay_always_show_playtime);
     settings_server->overlay_always_show_playtime = ini.GetBoolValue("overlay::general", "overlay_always_show_playtime", settings_server->overlay_always_show_playtime);
 
+    // detailed stats display options
+    settings_client->overlay_show_fps_graph = ini.GetBoolValue("overlay::general", "overlay_show_fps_graph", settings_client->overlay_show_fps_graph);
+    settings_server->overlay_show_fps_graph = ini.GetBoolValue("overlay::general", "overlay_show_fps_graph", settings_server->overlay_show_fps_graph);
+    settings_client->overlay_show_frametime_graph = ini.GetBoolValue("overlay::general", "overlay_show_frametime_graph", settings_client->overlay_show_frametime_graph);
+    settings_server->overlay_show_frametime_graph = ini.GetBoolValue("overlay::general", "overlay_show_frametime_graph", settings_server->overlay_show_frametime_graph);
+    settings_client->overlay_show_min_max_avg = ini.GetBoolValue("overlay::general", "overlay_show_min_max_avg", settings_client->overlay_show_min_max_avg);
+    settings_server->overlay_show_min_max_avg = ini.GetBoolValue("overlay::general", "overlay_show_min_max_avg", settings_server->overlay_show_min_max_avg);
+    settings_client->overlay_show_percentile_1 = ini.GetBoolValue("overlay::general", "overlay_show_percentile_1", settings_client->overlay_show_percentile_1);
+    settings_server->overlay_show_percentile_1 = ini.GetBoolValue("overlay::general", "overlay_show_percentile_1", settings_server->overlay_show_percentile_1);
+    settings_client->overlay_show_percentile_5 = ini.GetBoolValue("overlay::general", "overlay_show_percentile_5", settings_client->overlay_show_percentile_5);
+    settings_server->overlay_show_percentile_5 = ini.GetBoolValue("overlay::general", "overlay_show_percentile_5", settings_server->overlay_show_percentile_5);
+    settings_client->overlay_show_percentile_01 = ini.GetBoolValue("overlay::general", "overlay_show_percentile_01", settings_client->overlay_show_percentile_01);
+    settings_server->overlay_show_percentile_01 = ini.GetBoolValue("overlay::general", "overlay_show_percentile_01", settings_server->overlay_show_percentile_01);
+    {
+        auto val = ini.GetLongValue("overlay::general", "overlay_graph_timeframe_sec", settings_client->overlay_graph_timeframe_sec);
+        if (val >= 1 && val <= 30) {
+            settings_client->overlay_graph_timeframe_sec = (int)val;
+            settings_server->overlay_graph_timeframe_sec = (int)val;
+        }
+    }
+
     {
         auto val = ini.GetLongValue("overlay::general", "fps_averaging_window", settings_client->overlay_fps_avg_window);
         if (val > 0) {

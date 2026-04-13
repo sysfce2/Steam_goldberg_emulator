@@ -14,6 +14,13 @@ Steam_Overlay_Stats::Steam_Overlay_Stats(class Settings* settings):
     show_fps = settings->overlay_always_show_fps;
     show_frametime = settings->overlay_always_show_frametime;
     show_playtime = settings->overlay_always_show_playtime;
+    show_fps_graph = settings->overlay_show_fps_graph;
+    show_frametime_graph = settings->overlay_show_frametime_graph;
+    show_min_max_avg = settings->overlay_show_min_max_avg;
+    show_percentile_1 = settings->overlay_show_percentile_1;
+    show_percentile_5 = settings->overlay_show_percentile_5;
+    show_percentile_01 = settings->overlay_show_percentile_01;
+    graph_timeframe_sec = settings->overlay_graph_timeframe_sec;
 }
 
 bool Steam_Overlay_Stats::show_any_stats() const
@@ -43,19 +50,23 @@ void Steam_Overlay_Stats::update_frametime(const std::chrono::steady_clock::time
     }
     smoothed_fps = (smoothed_frametime_ms > 0.0f) ? (1000.0f / smoothed_frametime_ms) : 0.0f;
 
-    // Min/max/avg over ring buffer
+    // Min/max/avg over visible window
+    int vis_count = get_visible_frame_count();
     float sum = 0.0f;
     float mn = 1e9f;
     float mx = 0.0f;
-    for (int i = 0; i < frametime_history_count; i++) {
-        float v = frametime_history[i];
+    int ring_start = (frametime_history_idx - vis_count + FRAMETIME_HISTORY_SIZE) % FRAMETIME_HISTORY_SIZE;
+    for (int i = 0; i < vis_count; i++) {
+        float v = frametime_history[(ring_start + i) % FRAMETIME_HISTORY_SIZE];
         sum += v;
         if (v < mn) mn = v;
         if (v > mx) mx = v;
     }
-    avg_frametime_ms = sum / frametime_history_count;
-    min_frametime_ms = mn;
-    max_frametime_ms = mx;
+    if (vis_count > 0) {
+        avg_frametime_ms = sum / vis_count;
+        min_frametime_ms = mn;
+        max_frametime_ms = mx;
+    }
 
     // Snapshot display values every 500ms
     auto display_elapsed = std::chrono::duration<float, std::milli>(now - last_display_update).count();
@@ -67,6 +78,21 @@ void Steam_Overlay_Stats::update_frametime(const std::chrono::steady_clock::time
         display_max_ft = max_frametime_ms;
         display_avg_ft = avg_frametime_ms;
     }
+}
+
+int Steam_Overlay_Stats::get_visible_frame_count() const
+{
+    if (frametime_history_count <= 0) return 0;
+    float budget_ms = graph_timeframe_sec * 1000.0f;
+    float accum = 0.0f;
+    int n = 0;
+    for (int i = 0; i < frametime_history_count; i++) {
+        int idx = (frametime_history_idx - 1 - i + FRAMETIME_HISTORY_SIZE) % FRAMETIME_HISTORY_SIZE;
+        accum += frametime_history[idx];
+        n++;
+        if (accum >= budget_ms) break;
+    }
+    return n;
 }
 
 void Steam_Overlay_Stats::update_playtime(const std::chrono::steady_clock::time_point &now)
@@ -152,19 +178,46 @@ void Steam_Overlay_Stats::render_stats(int current_language)
     }
     const auto stats_txt = stats_txt_buff.str();
 
-    // Determine if we need graph space
-    bool show_graph = (show_fps || show_frametime) && frametime_history_count > 1;
+    // Determine if we need graphs
+    bool want_ft_graph = show_frametime && show_frametime_graph;
+    bool want_fps_graph = show_fps && show_fps_graph;
+    int vis_count = get_visible_frame_count();
+    bool show_graph = (want_ft_graph || want_fps_graph) && vis_count > 1;
     float graph_height = 40.0f;
 
-    // Pre-compute sorted frametimes for percentiles (sort a copy of the ring buffer)
-    float sorted_ft[FRAMETIME_HISTORY_SIZE];
-    int count = frametime_history_count;
-    if (show_graph) {
-        int ring_start = (frametime_history_idx - count + FRAMETIME_HISTORY_SIZE) % FRAMETIME_HISTORY_SIZE;
-        for (int i = 0; i < count; i++)
-            sorted_ft[i] = frametime_history[(ring_start + i) % FRAMETIME_HISTORY_SIZE];
-        std::sort(sorted_ft, sorted_ft + count); // ascending: lowest frametime first
+    // Build data arrays from visible window of ring buffer
+    std::vector<float> ft_data, fps_data, sorted_ft;
+    if (show_graph || show_min_max_avg || show_percentile_1 || show_percentile_5 || show_percentile_01) {
+        ft_data.resize(vis_count);
+        fps_data.resize(vis_count);
+        sorted_ft.resize(vis_count);
+        int ring_start = (frametime_history_idx - vis_count + FRAMETIME_HISTORY_SIZE) % FRAMETIME_HISTORY_SIZE;
+        for (int i = 0; i < vis_count; i++) {
+            float ft = frametime_history[(ring_start + i) % FRAMETIME_HISTORY_SIZE];
+            ft_data[i] = ft;
+            fps_data[i] = (ft > 0.0f) ? (1000.0f / ft) : 0.0f;
+            sorted_ft[i] = ft;
+        }
+        std::sort(sorted_ft.begin(), sorted_ft.end());
     }
+
+    // Percentile helpers
+    auto ft_percentile = [&](float pct) -> float {
+        if (vis_count <= 0) return 0.0f;
+        int idx = (int)(pct * vis_count) - 1;
+        if (idx < 0) idx = 0;
+        if (idx >= vis_count) idx = vis_count - 1;
+        return sorted_ft[idx];
+    };
+    auto fps_low = [&](float pct) -> float {
+        if (vis_count <= 0) return 0.0f;
+        int n = (int)(pct * vis_count);
+        if (n < 1) n = 1;
+        float sum = 0.0f;
+        for (int i = vis_count - n; i < vis_count; i++) sum += sorted_ft[i];
+        float avg_ft = sum / n;
+        return (avg_ft > 0.0f) ? (1000.0f / avg_ft) : 0.0f;
+    };
 
     // Determine minimum content width for graphs
     float min_content_width = show_graph ? 260.0f : 0.0f;
@@ -192,50 +245,9 @@ void Steam_Overlay_Stats::render_stats(int current_language)
 
         ImGui::TextWrapped("%s", stats_txt.c_str());
 
-        if (show_graph) {
-            // Build chronological arrays from ring buffer
-            float ft_data[FRAMETIME_HISTORY_SIZE];
-            float fps_data[FRAMETIME_HISTORY_SIZE];
-            int ring_start = (frametime_history_idx - count + FRAMETIME_HISTORY_SIZE) % FRAMETIME_HISTORY_SIZE;
-            for (int i = 0; i < count; i++) {
-                float ft = frametime_history[(ring_start + i) % FRAMETIME_HISTORY_SIZE];
-                ft_data[i] = ft;
-                fps_data[i] = (ft > 0.0f) ? (1000.0f / ft) : 0.0f;
-            }
-
-            // Compute FPS percentiles from sorted frametimes (ascending ft = descending fps)
-            // 1% low fps = fps at the 99th percentile frametime
-            auto ft_percentile = [&](float pct) -> float {
-                int idx = (int)(pct * count) - 1;
-                if (idx < 0) idx = 0;
-                if (idx >= count) idx = count - 1;
-                return sorted_ft[idx]; // ascending order
-            };
-            // For FPS lows: the worst X% of frames have the highest frametimes
-            auto fps_low = [&](float pct) -> float {
-                // pct = 0.01 means 1% low: average of the worst 1% frametimes, converted to FPS
-                int n = (int)(pct * count);
-                if (n < 1) n = 1;
-                float sum = 0.0f;
-                for (int i = count - n; i < count; i++) sum += sorted_ft[i]; // highest frametimes
-                float avg_ft = sum / n;
-                return (avg_ft > 0.0f) ? (1000.0f / avg_ft) : 0.0f;
-            };
-
-            float fps_1_low = fps_low(0.01f);
-            float fps_5_low = fps_low(0.05f);
-
-            // FPS min/max/avg (use display_ values for stable text)
-            float fps_min = (display_max_ft > 0.0f) ? (1000.0f / display_max_ft) : 0.0f;
-            float fps_max = (display_min_ft > 0.0f) ? (1000.0f / display_min_ft) : 0.0f;
-            float fps_avg = (display_avg_ft > 0.0f) ? (1000.0f / display_avg_ft) : 0.0f;
-
-            // Frametime percentiles (highest = worst)
-            float ft_99 = ft_percentile(0.99f); // 1% worst
-            float ft_95 = ft_percentile(0.95f); // 5% worst
-
-            // ---- Frametime graph ----
-            if (show_frametime) {
+        // ---- Frametime graph + stats ----
+        if (show_frametime && vis_count > 1) {
+            if (show_frametime_graph) {
                 ImGui::Spacing();
                 ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Frametime");
 
@@ -244,20 +256,45 @@ void Steam_Overlay_Stats::render_stats(int current_language)
 
                 ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
-                ImGui::PlotLines("##ft_graph", ft_data, count, 0, nullptr,
+                ImGui::PlotLines("##ft_graph", ft_data.data(), vis_count, 0, nullptr,
                     0.0f, ft_scale_max, ImVec2(content_width, graph_height));
                 ImGui::PopStyleColor(2);
+            }
 
+            if (show_min_max_avg) {
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
                     "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
                     display_min_ft, display_avg_ft, display_max_ft);
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-                    "1%% high: %.1fms  5%% high: %.1fms",
-                    ft_99, ft_95);
             }
 
-            // ---- FPS graph ----
-            if (show_fps) {
+            bool any_pct = show_percentile_01 || show_percentile_1 || show_percentile_5;
+            if (any_pct) {
+                std::string pct_line;
+                if (show_percentile_01) {
+                    char buf[32]; snprintf(buf, sizeof(buf), "0.1%% high: %.1fms", ft_percentile(0.999f));
+                    pct_line += buf;
+                }
+                if (show_percentile_1) {
+                    if (!pct_line.empty()) pct_line += "  ";
+                    char buf[32]; snprintf(buf, sizeof(buf), "1%% high: %.1fms", ft_percentile(0.99f));
+                    pct_line += buf;
+                }
+                if (show_percentile_5) {
+                    if (!pct_line.empty()) pct_line += "  ";
+                    char buf[32]; snprintf(buf, sizeof(buf), "5%% high: %.1fms", ft_percentile(0.95f));
+                    pct_line += buf;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", pct_line.c_str());
+            }
+        }
+
+        // ---- FPS graph + stats ----
+        if (show_fps && vis_count > 1) {
+            float fps_min = (display_max_ft > 0.0f) ? (1000.0f / display_max_ft) : 0.0f;
+            float fps_max = (display_min_ft > 0.0f) ? (1000.0f / display_min_ft) : 0.0f;
+            float fps_avg = (display_avg_ft > 0.0f) ? (1000.0f / display_avg_ft) : 0.0f;
+
+            if (show_fps_graph) {
                 ImGui::Spacing();
                 ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "FPS");
 
@@ -266,16 +303,35 @@ void Steam_Overlay_Stats::render_stats(int current_language)
 
                 ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.6f, 1.0f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
-                ImGui::PlotLines("##fps_graph", fps_data, count, 0, nullptr,
+                ImGui::PlotLines("##fps_graph", fps_data.data(), vis_count, 0, nullptr,
                     0.0f, fps_scale_max, ImVec2(content_width, graph_height));
                 ImGui::PopStyleColor(2);
+            }
 
+            if (show_min_max_avg) {
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
                     "Min: %.0f  Avg: %.0f  Max: %.0f",
                     fps_min, fps_avg, fps_max);
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-                    "1%% Low: %.0f  5%% Low: %.0f",
-                    fps_1_low, fps_5_low);
+            }
+
+            bool any_pct = show_percentile_01 || show_percentile_1 || show_percentile_5;
+            if (any_pct) {
+                std::string pct_line;
+                if (show_percentile_01) {
+                    char buf[32]; snprintf(buf, sizeof(buf), "0.1%% Low: %.0f", fps_low(0.001f));
+                    pct_line += buf;
+                }
+                if (show_percentile_1) {
+                    if (!pct_line.empty()) pct_line += "  ";
+                    char buf[32]; snprintf(buf, sizeof(buf), "1%% Low: %.0f", fps_low(0.01f));
+                    pct_line += buf;
+                }
+                if (show_percentile_5) {
+                    if (!pct_line.empty()) pct_line += "  ";
+                    char buf[32]; snprintf(buf, sizeof(buf), "5%% Low: %.0f", fps_low(0.05f));
+                    pct_line += buf;
+                }
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", pct_line.c_str());
             }
         }
     }
@@ -284,4 +340,54 @@ void Steam_Overlay_Stats::render_stats(int current_language)
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
     ImGui::PopFont();
+}
+
+void Steam_Overlay_Stats::render_stats_settings(int current_language)
+{
+    if (!show_stats_settings) return;
+
+    ImGui::SetNextWindowSize(ImVec2(310.0f, 0.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    if (ImGui::Begin("Performance Stats Settings", &show_stats_settings,
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        // --- Master toggles ---
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Display");
+        ImGui::Separator();
+        ImGui::Checkbox("FPS", &show_fps);
+        ImGui::SameLine();
+        ImGui::Checkbox("Frametime", &show_frametime);
+        ImGui::SameLine();
+        ImGui::Checkbox("Playtime", &show_playtime);
+
+        ImGui::Spacing();
+
+        // --- Graph toggles ---
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Graphs");
+        ImGui::Separator();
+        ImGui::Checkbox("FPS Graph", &show_fps_graph);
+        ImGui::SameLine();
+        ImGui::Checkbox("Frametime Graph", &show_frametime_graph);
+
+        ImGui::Spacing();
+
+        // --- Graph timeframe ---
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Graph Timeframe");
+        ImGui::Separator();
+        ImGui::SliderInt("##timeframe", &graph_timeframe_sec, 1, 30, "%d sec");
+
+        ImGui::Spacing();
+
+        // --- Statistics toggles ---
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Statistics");
+        ImGui::Separator();
+        ImGui::Checkbox("Min / Max / Avg", &show_min_max_avg);
+        ImGui::Checkbox("0.1% Low", &show_percentile_01);
+        ImGui::SameLine();
+        ImGui::Checkbox("1% Low", &show_percentile_1);
+        ImGui::SameLine();
+        ImGui::Checkbox("5% Low", &show_percentile_5);
+    }
+    ImGui::End();
 }

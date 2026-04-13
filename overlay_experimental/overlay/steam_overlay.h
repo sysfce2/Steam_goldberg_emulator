@@ -401,6 +401,13 @@ public:
         bool  show_fps{};
         bool  show_frametime{};
         bool  show_playtime{};
+        bool  show_fps_graph{};
+        bool  show_frametime_graph{};
+        bool  show_min_max_avg{};
+        bool  show_percentile_1{};
+        bool  show_percentile_5{};
+        bool  show_percentile_01{};
+        int   graph_timeframe_sec{};
         float fps{};
         float frametime_ms{};
         float playtime_hr{};
@@ -445,6 +452,13 @@ public:
     void Bridge_SetShowFps(bool v);
     void Bridge_SetShowFrametime(bool v);
     void Bridge_SetShowPlaytime(bool v);
+    void Bridge_SetShowFpsGraph(bool v);
+    void Bridge_SetShowFrametimeGraph(bool v);
+    void Bridge_SetShowMinMaxAvg(bool v);
+    void Bridge_SetShowPercentile1(bool v);
+    void Bridge_SetShowPercentile5(bool v);
+    void Bridge_SetShowPercentile01(bool v);
+    void Bridge_SetGraphTimeframe(int sec);
     
     // Chat support for ReShade addon
     int  Bridge_GetChatState(uint64_t steam_id, struct GSE_ChatState *out);

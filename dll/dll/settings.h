@@ -394,6 +394,14 @@ public:
     bool overlay_always_show_fps = false;
     bool overlay_always_show_frametime = false;
     bool overlay_always_show_playtime = false;
+    // detailed stats display options
+    bool overlay_show_fps_graph = true;
+    bool overlay_show_frametime_graph = true;
+    bool overlay_show_min_max_avg = true;
+    bool overlay_show_percentile_1 = true;
+    bool overlay_show_percentile_5 = true;
+    bool overlay_show_percentile_01 = false;
+    int  overlay_graph_timeframe_sec = 5;  // 1-30 seconds
     // keys used to toggle the overlay, default = Shift + Tab
     std::vector<std::string> overlay_toggle_keys{};
 

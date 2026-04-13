@@ -101,6 +101,13 @@ __declspec(dllexport) int GSE_OverlayBridge_GetState(GSE_OverlayState *out)
     out->show_fps = stats_state.show_fps ? 1 : 0;
     out->show_frametime = stats_state.show_frametime ? 1 : 0;
     out->show_playtime = stats_state.show_playtime ? 1 : 0;
+    out->show_fps_graph = stats_state.show_fps_graph ? 1 : 0;
+    out->show_frametime_graph = stats_state.show_frametime_graph ? 1 : 0;
+    out->show_min_max_avg = stats_state.show_min_max_avg ? 1 : 0;
+    out->show_percentile_1 = stats_state.show_percentile_1 ? 1 : 0;
+    out->show_percentile_5 = stats_state.show_percentile_5 ? 1 : 0;
+    out->show_percentile_01 = stats_state.show_percentile_01 ? 1 : 0;
+    out->graph_timeframe_sec = stats_state.graph_timeframe_sec;
     out->active_fps = stats_state.fps;
     out->active_frametime_ms = stats_state.frametime_ms;
     out->active_playtime_hr = stats_state.playtime_hr;
@@ -320,6 +327,13 @@ __declspec(dllexport) int GSE_OverlayBridge_GetOption(int option_id)
     case GSE_OPT_SHOW_FPS:                     return s->overlay_always_show_fps;
     case GSE_OPT_SHOW_FRAMETIME:               return s->overlay_always_show_frametime;
     case GSE_OPT_SHOW_PLAYTIME:                return s->overlay_always_show_playtime;
+    case GSE_OPT_SHOW_FPS_GRAPH:               return s->overlay_show_fps_graph;
+    case GSE_OPT_SHOW_FRAMETIME_GRAPH:         return s->overlay_show_frametime_graph;
+    case GSE_OPT_SHOW_MIN_MAX_AVG:             return s->overlay_show_min_max_avg;
+    case GSE_OPT_SHOW_PERCENTILE_1:            return s->overlay_show_percentile_1;
+    case GSE_OPT_SHOW_PERCENTILE_5:            return s->overlay_show_percentile_5;
+    case GSE_OPT_SHOW_PERCENTILE_01:           return s->overlay_show_percentile_01;
+    case GSE_OPT_GRAPH_TIMEFRAME_SEC:          return s->overlay_graph_timeframe_sec;
     case GSE_OPT_NOTIF_POS_ACHIEVEMENT:        return bridge_map_notif_pos(s->overlay_appearance.ach_earned_pos);
     case GSE_OPT_NOTIF_POS_INVITE:             return bridge_map_notif_pos(s->overlay_appearance.invite_pos);
     case GSE_OPT_NOTIF_POS_CHAT:               return bridge_map_notif_pos(s->overlay_appearance.chat_msg_pos);
@@ -352,6 +366,20 @@ __declspec(dllexport) void GSE_OverlayBridge_SetOption(int option_id, int value)
                                                if (overlay) overlay->Bridge_SetShowFrametime(!!value); break;
     case GSE_OPT_SHOW_PLAYTIME:                s->overlay_always_show_playtime = !!value;
                                                if (overlay) overlay->Bridge_SetShowPlaytime(!!value); break;
+    case GSE_OPT_SHOW_FPS_GRAPH:               s->overlay_show_fps_graph = !!value;
+                                               if (overlay) overlay->Bridge_SetShowFpsGraph(!!value); break;
+    case GSE_OPT_SHOW_FRAMETIME_GRAPH:         s->overlay_show_frametime_graph = !!value;
+                                               if (overlay) overlay->Bridge_SetShowFrametimeGraph(!!value); break;
+    case GSE_OPT_SHOW_MIN_MAX_AVG:             s->overlay_show_min_max_avg = !!value;
+                                               if (overlay) overlay->Bridge_SetShowMinMaxAvg(!!value); break;
+    case GSE_OPT_SHOW_PERCENTILE_1:            s->overlay_show_percentile_1 = !!value;
+                                               if (overlay) overlay->Bridge_SetShowPercentile1(!!value); break;
+    case GSE_OPT_SHOW_PERCENTILE_5:            s->overlay_show_percentile_5 = !!value;
+                                               if (overlay) overlay->Bridge_SetShowPercentile5(!!value); break;
+    case GSE_OPT_SHOW_PERCENTILE_01:           s->overlay_show_percentile_01 = !!value;
+                                               if (overlay) overlay->Bridge_SetShowPercentile01(!!value); break;
+    case GSE_OPT_GRAPH_TIMEFRAME_SEC:          { int v = value; if (v >= 1 && v <= 30) { s->overlay_graph_timeframe_sec = v;
+                                               if (overlay) overlay->Bridge_SetGraphTimeframe(v); } break; }
     default: break;
     }
 

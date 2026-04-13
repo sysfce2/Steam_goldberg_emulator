@@ -71,7 +71,14 @@ typedef struct GSE_OverlayState {
     uint8_t  show_fps;
     uint8_t  show_frametime;
     uint8_t  show_playtime;
-    uint8_t  _pad[3];
+    uint8_t  show_fps_graph;
+    uint8_t  show_frametime_graph;
+    uint8_t  show_min_max_avg;
+    uint8_t  show_percentile_1;
+    uint8_t  show_percentile_5;
+    uint8_t  show_percentile_01;
+    uint8_t  _pad[1];
+    int32_t  graph_timeframe_sec;
     float    active_fps;
     float    active_frametime_ms;
     float    active_playtime_hr;
@@ -449,6 +456,13 @@ typedef void      (*pfn_GSE_OverlayBridge_SendLobbyChatMsg)(const char *msg);
 #define GSE_OPT_SHOW_FPS                    13  /* bool */
 #define GSE_OPT_SHOW_FRAMETIME              14  /* bool */
 #define GSE_OPT_SHOW_PLAYTIME               15  /* bool */
+#define GSE_OPT_SHOW_FPS_GRAPH              19  /* bool */
+#define GSE_OPT_SHOW_FRAMETIME_GRAPH        20  /* bool */
+#define GSE_OPT_SHOW_MIN_MAX_AVG            21  /* bool */
+#define GSE_OPT_SHOW_PERCENTILE_1           22  /* bool */
+#define GSE_OPT_SHOW_PERCENTILE_5           23  /* bool */
+#define GSE_OPT_SHOW_PERCENTILE_01          24  /* bool */
+#define GSE_OPT_GRAPH_TIMEFRAME_SEC         25  /* int 1-30 */
 #define GSE_OPT_NOTIF_POS_ACHIEVEMENT       16  /* GSE_NotifPosition — per-type override for achievement notifications */
 #define GSE_OPT_NOTIF_POS_INVITE            17  /* GSE_NotifPosition — per-type override for invite/lobby join notifications */
 #define GSE_OPT_NOTIF_POS_CHAT              18  /* GSE_NotifPosition — per-type override for chat message notifications */

@@ -8,7 +8,7 @@
 #include "dll/settings.h"
 #include "InGameOverlay/ImGui/imgui.h"
 
-static constexpr int FRAMETIME_HISTORY_SIZE = 128;
+static constexpr int FRAMETIME_HISTORY_SIZE = 16384;
 
 class Steam_Overlay_Stats {
 private:
@@ -27,7 +27,7 @@ private:
     float smoothed_frametime_ms = 0.0f;
     float smoothed_fps = 0.0f;
 
-    // Min/max/avg over the ring buffer (updated every frame)
+    // Min/max/avg over visible window (updated every frame)
     float min_frametime_ms = 0.0f;
     float max_frametime_ms = 0.0f;
     float avg_frametime_ms = 0.0f;
@@ -53,16 +53,34 @@ private:
     void update_frametime(const std::chrono::steady_clock::time_point &now);
     void update_playtime(const std::chrono::steady_clock::time_point &now);
 
+    // Returns how many ring buffer entries fit within graph_timeframe_sec
+    int get_visible_frame_count() const;
+
 public:
     ImFont *font = nullptr;
+    
+    // Master toggles
     bool show_fps = false;
     bool show_frametime = false;
     bool show_playtime = false;
+    
+    // Detailed settings
+    bool show_fps_graph = true;
+    bool show_frametime_graph = true;
+    bool show_min_max_avg = true;
+    bool show_percentile_1 = true;
+    bool show_percentile_5 = true;
+    bool show_percentile_01 = false;
+    int  graph_timeframe_sec = 5;  // 1-30
+
+    // Stats settings window
+    bool show_stats_settings = false;
 
     Steam_Overlay_Stats(class Settings* settings);
 
     bool show_any_stats() const;
     void render_stats(int current_language);
+    void render_stats_settings(int current_language);
 };
 
 
