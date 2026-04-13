@@ -1194,24 +1194,128 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
 
     // detected third-party modules
     try {
-        struct { const wchar_t* name; const char* label; } known_overlays[] = {
+        struct { const wchar_t* name; const char* label; const char* type; } known_overlays[] = {
+            // --- injectors / post-processors ---
             #if defined(_WIN64)
-            { L"SpecialK64.dll",        "Special K" },
-            { L"ReShade64.dll",         "ReShade" },
+            { L"SpecialK64.dll",            "Special K",            "injector" },
+            { L"ReShade64.dll",             "ReShade",              "post-processor" },
             #else
-            { L"SpecialK32.dll",        "Special K" },
-            { L"ReShade32.dll",         "ReShade" },
+            { L"SpecialK32.dll",            "Special K",            "injector" },
+            { L"ReShade32.dll",             "ReShade",              "post-processor" },
             #endif
-            { L"RTSSHooks64.dll",       "RTSS" },
-            { L"RTSSHooks.dll",         "RTSS" },
-            { L"GameOverlayRenderer.dll",   "Steam Overlay" },
-            { L"GameOverlayRenderer64.dll", "Steam Overlay" },
-            { L"DiscordHook.dll",       "Discord" },
-            { L"DiscordHook64.dll",     "Discord" },
+            { L"d3dcompiler_46e.dll",       "ENB Series",           "post-processor" },
+
+            // --- recording / streaming ---
+            #if defined(_WIN64)
+            { L"nvspcap64.dll",             "NVIDIA ShadowPlay",    "recording" },
+            { L"graphics-hook64.dll",       "OBS Game Capture",     "recording" },
+            { L"fraps64.dll",               "Fraps",                "recording" },
+            { L"MedalHook64.dll",           "Medal.tv",             "recording" },
+            { L"bdcam64.dll",               "Bandicam",             "recording" },
+            { L"Action64.dll",              "Mirillis Action",      "recording" },
+            { L"XSplit.Core64.dll",         "XSplit",               "recording" },
+            #else
+            { L"nvspcap.dll",               "NVIDIA ShadowPlay",    "recording" },
+            { L"graphics-hook32.dll",       "OBS Game Capture",     "recording" },
+            { L"fraps32.dll",               "Fraps",                "recording" },
+            { L"bdcam32.dll",               "Bandicam",             "recording" },
+            { L"Action.dll",                "Mirillis Action",      "recording" },
+            { L"XSplit.Core.dll",           "XSplit",               "recording" },
+            #endif
+            { L"Streamlabs.dll",            "Streamlabs",           "recording" },
+
+            // --- monitoring ---
+            { L"RTSSHooks64.dll",           "RTSS",                 "monitoring" },
+            { L"RTSSHooks.dll",             "RTSS",                 "monitoring" },
+            #if defined(_WIN64)
+            { L"fpshook64.dll",             "FPS Monitor",          "monitoring" },
+            { L"PresentMon64.dll",          "Intel PresentMon",     "monitoring" },
+            #else
+            { L"fpshook.dll",               "FPS Monitor",          "monitoring" },
+            { L"PresentMon32.dll",          "Intel PresentMon",     "monitoring" },
+            #endif
+
+            // --- store overlays ---
+            { L"GameOverlayRenderer64.dll", "Steam Overlay",        "store overlay" },
+            { L"GameOverlayRenderer.dll",   "Steam Overlay",        "store overlay" },
+            { L"DiscordHook64.dll",         "Discord",              "store overlay" },
+            { L"DiscordHook.dll",           "Discord",              "store overlay" },
+            #if defined(_WIN64)
+            { L"EOSOVH-Win64-Shipping.dll", "Epic Online Services", "store overlay" },
+            { L"Galaxy64.dll",              "GOG Galaxy",           "store overlay" },
+            { L"igo64.dll",                 "EA App / Origin",      "store overlay" },
+            #else
+            { L"EOSOVH-Win32-Shipping.dll", "Epic Online Services", "store overlay" },
+            { L"igo32.dll",                 "EA App / Origin",      "store overlay" },
+            #endif
+            { L"GalaxyOverlayRenderer64.dll", "GOG Galaxy",         "store overlay" },
+            { L"uplay_r2_loader64.dll",     "Ubisoft Connect",      "store overlay" },
+            { L"upc_r2_loader64.dll",       "Ubisoft Connect",      "store overlay" },
+
+            // --- GPU vendor software ---
+            { L"aaborern64.dll",            "AMD Adrenalin",        "gpu vendor" },
+            { L"aaborern.dll",              "AMD Adrenalin",        "gpu vendor" },
+            { L"RadeonSoftware.dll",        "AMD Software",         "gpu vendor" },
+            { L"atiumd64.dll",              "AMD Display Driver",   "gpu vendor" },
+
+            // --- system / platform overlays ---
+            { L"GameBar.dll",               "Xbox Game Bar",        "system overlay" },
+            { L"GameBarPresenceWriter.dll", "Xbox Game Bar",        "system overlay" },
+            { L"SSOverlay64.dll",           "Samsung Gaming Hub",   "system overlay" },
+            { L"SSOverlay.dll",             "Samsung Gaming Hub",   "system overlay" },
+            { L"AcLayer.dll",               "Windows Compatibility","system overlay" },
+
+            // --- gaming platforms / launchers ---
+            { L"OWClient.dll",              "Overwolf",             "platform" },
+            { L"OWExplorer.dll",            "Overwolf",             "platform" },
+            { L"ltc_game64.dll",            "Playnite",             "platform" },
+            { L"ltc_game32.dll",            "Playnite",             "platform" },
+
+            // --- peripheral software ---
+            #if defined(_WIN64)
+            { L"Nahimic2OSD64.dll",         "Nahimic",              "peripheral" },
+            { L"LogiOverlay64.dll",         "Logitech G Hub",       "peripheral" },
+            { L"iCUEOverlay64.dll",         "Corsair iCUE",         "peripheral" },
+            { L"SteelSeriesGG64.dll",       "SteelSeries GG",       "peripheral" },
+            { L"RzChromaSDK64.dll",         "Razer Chroma",         "peripheral" },
+            #else
+            { L"Nahimic2OSD.dll",           "Nahimic",              "peripheral" },
+            { L"LogiOverlay.dll",           "Logitech G Hub",       "peripheral" },
+            { L"iCUEOverlay.dll",           "Corsair iCUE",         "peripheral" },
+            { L"RzChromaSDK.dll",           "Razer Chroma",         "peripheral" },
+            #endif
+            { L"NahimicOSD.dll",            "Nahimic",              "peripheral" },
+
+            // --- communication ---
+            #if defined(_WIN64)
+            { L"mumble_ol_x64.dll",         "Mumble",               "communication" },
+            { L"ts3overlay_hook_x64.dll",   "TeamSpeak",            "communication" },
+            #else
+            { L"mumble_ol.dll",             "Mumble",               "communication" },
+            { L"ts3overlay_hook_x86.dll",   "TeamSpeak",            "communication" },
+            #endif
+
+            // --- VR ---
+            { L"openvr_api.dll",            "SteamVR",              "vr" },
+            #if defined(_WIN64)
+            { L"vrclient_x64.dll",          "SteamVR Client",       "vr" },
+            #else
+            { L"vrclient.dll",              "SteamVR Client",       "vr" },
+            #endif
+            { L"OculusXRPlugin.dll",        "Oculus/Meta",          "vr" },
+
+            // --- anti-cheat (informational) ---
+            { L"EasyAntiCheat_x64.dll",     "EasyAntiCheat",        "anti-cheat" },
+            { L"EasyAntiCheat_x86.dll",     "EasyAntiCheat",        "anti-cheat" },
+            { L"BEService_x64.dll",         "BattlEye",             "anti-cheat" },
+            { L"BEClient_x64.dll",          "BattlEye",             "anti-cheat" },
+            { L"vanguard.dll",              "Vanguard",             "anti-cheat" },
         };
         std::string detected;
+        std::set<std::string> seen;
         for (auto& entry : known_overlays) {
-            if (GetModuleHandleW(entry.name)) {
+            if (GetModuleHandleW(entry.name) && seen.insert(entry.label).second) {
+                PRINT_DEBUG("detected [%s]: %s (via %ls)", entry.type, entry.label, entry.name);
                 if (!detected.empty()) detected += ", ";
                 detected += entry.label;
             }
@@ -1223,10 +1327,19 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
         };
         for (auto dll_name : proxy_dlls) {
             HMODULE hMod = GetModuleHandleW(dll_name);
-            if (hMod && GetProcAddress(hMod, "SK_GetVersionStr")) {
-                if (!detected.empty()) detected += ", ";
-                detected += "Special K (proxy)";
-                break;
+            if (!hMod) continue;
+            if (GetProcAddress(hMod, "SK_GetVersionStr")) {
+                PRINT_DEBUG("detected overlay/injector: Special K (proxy via %ls)", dll_name);
+                if (seen.insert("Special K (proxy)").second) {
+                    if (!detected.empty()) detected += ", ";
+                    detected += "Special K (proxy)";
+                }
+            } else if (GetProcAddress(hMod, "ReShadeVersion")) {
+                PRINT_DEBUG("detected overlay/injector: ReShade (proxy via %ls)", dll_name);
+                if (seen.insert("ReShade (proxy)").second) {
+                    if (!detected.empty()) detected += ", ";
+                    detected += "ReShade (proxy)";
+                }
             }
         }
         if (!detected.empty()) {
@@ -1319,35 +1432,153 @@ void Steam_Client::detect_thirdparty_injectors()
     thirdparty_injector_detected = false;
 
 #if defined(__WINDOWS__)
-    // detect Special K (global injection: SpecialK32/64.dll)
-    #if defined(_WIN64)
-    if (GetModuleHandleW(L"SpecialK64.dll")) {
-        PRINT_DEBUG("detected Special K (SpecialK64.dll)");
-        thirdparty_injector_detected = true;
-        return;
-    }
-    #else
-    if (GetModuleHandleW(L"SpecialK32.dll")) {
-        PRINT_DEBUG("detected Special K (SpecialK32.dll)");
-        thirdparty_injector_detected = true;
-        return;
-    }
-    #endif
+    // scan all known overlays/injectors and log each one found
+    struct { const wchar_t* name; const char* label; const char* type; } known_modules[] = {
+        // --- injectors / post-processors ---
+        #if defined(_WIN64)
+        { L"SpecialK64.dll",            "Special K",            "injector" },
+        { L"ReShade64.dll",             "ReShade",              "post-processor" },
+        #else
+        { L"SpecialK32.dll",            "Special K",            "injector" },
+        { L"ReShade32.dll",             "ReShade",              "post-processor" },
+        #endif
+        { L"d3dcompiler_46e.dll",       "ENB Series",           "post-processor" },
 
-    // detect Special K (local/proxy injection) by checking common proxy DLLs
-    // for a known Special K export
+        // --- recording / streaming ---
+        #if defined(_WIN64)
+        { L"nvspcap64.dll",             "NVIDIA ShadowPlay",    "recording" },
+        { L"graphics-hook64.dll",       "OBS Game Capture",     "recording" },
+        { L"fraps64.dll",               "Fraps",                "recording" },
+        { L"MedalHook64.dll",           "Medal.tv",             "recording" },
+        { L"bdcam64.dll",               "Bandicam",             "recording" },
+        { L"Action64.dll",              "Mirillis Action",      "recording" },
+        { L"XSplit.Core64.dll",         "XSplit",               "recording" },
+        #else
+        { L"nvspcap.dll",               "NVIDIA ShadowPlay",    "recording" },
+        { L"graphics-hook32.dll",       "OBS Game Capture",     "recording" },
+        { L"fraps32.dll",               "Fraps",                "recording" },
+        { L"bdcam32.dll",               "Bandicam",             "recording" },
+        { L"Action.dll",                "Mirillis Action",      "recording" },
+        { L"XSplit.Core.dll",           "XSplit",               "recording" },
+        #endif
+        { L"Streamlabs.dll",            "Streamlabs",           "recording" },
+
+        // --- monitoring ---
+        { L"RTSSHooks64.dll",           "RTSS",                 "monitoring" },
+        { L"RTSSHooks.dll",             "RTSS",                 "monitoring" },
+        #if defined(_WIN64)
+        { L"fpshook64.dll",             "FPS Monitor",          "monitoring" },
+        { L"PresentMon64.dll",          "Intel PresentMon",     "monitoring" },
+        #else
+        { L"fpshook.dll",               "FPS Monitor",          "monitoring" },
+        { L"PresentMon32.dll",          "Intel PresentMon",     "monitoring" },
+        #endif
+
+        // --- store overlays ---
+        { L"GameOverlayRenderer64.dll", "Steam Overlay",        "store overlay" },
+        { L"GameOverlayRenderer.dll",   "Steam Overlay",        "store overlay" },
+        { L"DiscordHook64.dll",         "Discord",              "store overlay" },
+        { L"DiscordHook.dll",           "Discord",              "store overlay" },
+        #if defined(_WIN64)
+        { L"EOSOVH-Win64-Shipping.dll", "Epic Online Services", "store overlay" },
+        { L"Galaxy64.dll",              "GOG Galaxy",           "store overlay" },
+        { L"igo64.dll",                 "EA App / Origin",      "store overlay" },
+        #else
+        { L"EOSOVH-Win32-Shipping.dll", "Epic Online Services", "store overlay" },
+        { L"igo32.dll",                 "EA App / Origin",      "store overlay" },
+        #endif
+        { L"GalaxyOverlayRenderer64.dll", "GOG Galaxy",         "store overlay" },
+        { L"uplay_r2_loader64.dll",     "Ubisoft Connect",      "store overlay" },
+        { L"upc_r2_loader64.dll",       "Ubisoft Connect",      "store overlay" },
+
+        // --- GPU vendor software ---
+        { L"aaborern64.dll",            "AMD Adrenalin",        "gpu vendor" },
+        { L"aaborern.dll",              "AMD Adrenalin",        "gpu vendor" },
+        { L"RadeonSoftware.dll",        "AMD Software",         "gpu vendor" },
+        { L"atiumd64.dll",              "AMD Display Driver",   "gpu vendor" },
+
+        // --- system / platform overlays ---
+        { L"GameBar.dll",               "Xbox Game Bar",        "system overlay" },
+        { L"GameBarPresenceWriter.dll", "Xbox Game Bar",        "system overlay" },
+        { L"SSOverlay64.dll",           "Samsung Gaming Hub",   "system overlay" },
+        { L"SSOverlay.dll",             "Samsung Gaming Hub",   "system overlay" },
+        { L"AcLayer.dll",               "Windows Compatibility","system overlay" },
+
+        // --- gaming platforms / launchers ---
+        { L"OWClient.dll",              "Overwolf",             "platform" },
+        { L"OWExplorer.dll",            "Overwolf",             "platform" },
+        { L"ltc_game64.dll",            "Playnite",             "platform" },
+        { L"ltc_game32.dll",            "Playnite",             "platform" },
+
+        // --- peripheral software ---
+        #if defined(_WIN64)
+        { L"Nahimic2OSD64.dll",         "Nahimic",              "peripheral" },
+        { L"LogiOverlay64.dll",         "Logitech G Hub",       "peripheral" },
+        { L"iCUEOverlay64.dll",         "Corsair iCUE",         "peripheral" },
+        { L"SteelSeriesGG64.dll",       "SteelSeries GG",       "peripheral" },
+        { L"RzChromaSDK64.dll",         "Razer Chroma",         "peripheral" },
+        #else
+        { L"Nahimic2OSD.dll",           "Nahimic",              "peripheral" },
+        { L"LogiOverlay.dll",           "Logitech G Hub",       "peripheral" },
+        { L"iCUEOverlay.dll",           "Corsair iCUE",         "peripheral" },
+        { L"RzChromaSDK.dll",           "Razer Chroma",         "peripheral" },
+        #endif
+        { L"NahimicOSD.dll",            "Nahimic",              "peripheral" },
+
+        // --- communication ---
+        #if defined(_WIN64)
+        { L"mumble_ol_x64.dll",         "Mumble",               "communication" },
+        { L"ts3overlay_hook_x64.dll",   "TeamSpeak",            "communication" },
+        #else
+        { L"mumble_ol.dll",             "Mumble",               "communication" },
+        { L"ts3overlay_hook_x86.dll",   "TeamSpeak",            "communication" },
+        #endif
+
+        // --- VR ---
+        { L"openvr_api.dll",            "SteamVR",              "vr" },
+        #if defined(_WIN64)
+        { L"vrclient_x64.dll",          "SteamVR Client",       "vr" },
+        #else
+        { L"vrclient.dll",              "SteamVR Client",       "vr" },
+        #endif
+        { L"OculusXRPlugin.dll",        "Oculus/Meta",          "vr" },
+
+        // --- anti-cheat (informational) ---
+        { L"EasyAntiCheat_x64.dll",     "EasyAntiCheat",        "anti-cheat" },
+        { L"EasyAntiCheat_x86.dll",     "EasyAntiCheat",        "anti-cheat" },
+        { L"BEService_x64.dll",         "BattlEye",             "anti-cheat" },
+        { L"BEClient_x64.dll",          "BattlEye",             "anti-cheat" },
+        { L"vanguard.dll",              "Vanguard",             "anti-cheat" },
+    };
+    std::set<std::string> seen;
+    for (auto& entry : known_modules) {
+        if (GetModuleHandleW(entry.name) && seen.insert(entry.label).second) {
+            PRINT_DEBUG("detected [%s]: %s (via %ls)", entry.type, entry.label, entry.name);
+        }
+    }
+
+    // check proxy DLLs for Special K or ReShade exports
     const wchar_t* proxy_dlls[] = {
         L"dxgi.dll", L"d3d11.dll", L"d3d9.dll",
         L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"OpenGL32.dll"
     };
     for (auto dll_name : proxy_dlls) {
         HMODULE hMod = GetModuleHandleW(dll_name);
-        if (hMod && GetProcAddress(hMod, "SK_GetVersionStr")) {
+        if (!hMod) continue;
+        if (GetProcAddress(hMod, "SK_GetVersionStr")) {
             PRINT_DEBUG("detected Special K via proxy DLL '%ls'", dll_name);
             thirdparty_injector_detected = true;
-            return;
+        } else if (GetProcAddress(hMod, "ReShadeVersion")) {
+            PRINT_DEBUG("detected ReShade via proxy DLL '%ls'", dll_name);
         }
     }
+
+    // Special K (global injection) sets the flag
+    #if defined(_WIN64)
+    if (GetModuleHandleW(L"SpecialK64.dll")) thirdparty_injector_detected = true;
+    #else
+    if (GetModuleHandleW(L"SpecialK32.dll")) thirdparty_injector_detected = true;
+    #endif
 #endif
 }
 
