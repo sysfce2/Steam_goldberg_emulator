@@ -430,6 +430,7 @@ public:
     unsigned missing_interface_count = 0;
     void detect_thirdparty_injectors();
     bool is_caller_special_k();
+    void try_start_specialk_injection();
 
     HSteamPipe get_pipe_for_user(HSteamUser hUser);
 

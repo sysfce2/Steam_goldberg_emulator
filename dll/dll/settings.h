@@ -290,6 +290,14 @@ public:
     // enabled automatically when third-party injectors (e.g. Special K) are detected
     bool exit_on_unknown_interface = true;
 
+    // automatically start Special K injection service if SKIF is running
+    // waits for SK to inject before continuing initialization
+    bool auto_inject_specialk = false;
+
+    // path to SKIF.exe for auto-injection when SKIF is not already running
+    // if empty, the emu will try to find SKIF in the default install location
+    std::string specialk_install_path{};
+
     // use new app_ticket auth instead of old one
     bool enable_new_app_ticket = true;
     // can use GC token for generation

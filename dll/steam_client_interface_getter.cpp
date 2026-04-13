@@ -17,6 +17,10 @@
 
 #include "dll/steam_client.h"
 
+#if defined(__WINDOWS__)
+#include <TlHelp32.h>
+#endif
+
 
 // retrieves the ISteamBilling interface associated with the handle
 ISteamBilling *Steam_Client::GetISteamBilling( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion )
@@ -1367,4 +1371,187 @@ bool Steam_Client::is_caller_special_k()
     }
 #endif
     return false;
+}
+
+void Steam_Client::try_start_specialk_injection()
+{
+#if defined(__WINDOWS__)
+    if (!settings_client || !settings_client->auto_inject_specialk) return;
+
+    // check if Special K is already loaded
+    #if defined(_WIN64)
+    if (GetModuleHandleW(L"SpecialK64.dll")) {
+        PRINT_DEBUG("[SK AUTO-INJECT] Special K already loaded, skipping");
+        return;
+    }
+    #else
+    if (GetModuleHandleW(L"SpecialK32.dll")) {
+        PRINT_DEBUG("[SK AUTO-INJECT] Special K already loaded, skipping");
+        return;
+    }
+    #endif
+
+    // also check proxy DLLs for SK
+    const wchar_t* proxy_dlls[] = {
+        L"dxgi.dll", L"d3d11.dll", L"d3d9.dll",
+        L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"OpenGL32.dll"
+    };
+    for (auto dll_name : proxy_dlls) {
+        HMODULE hMod = GetModuleHandleW(dll_name);
+        if (hMod && GetProcAddress(hMod, "SK_GetVersionStr")) {
+            PRINT_DEBUG("[SK AUTO-INJECT] Special K already loaded via proxy '%ls', skipping", dll_name);
+            return;
+        }
+    }
+
+    // find SKIF.exe in running processes and get its path
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap == INVALID_HANDLE_VALUE) {
+        PRINT_DEBUG("[SK AUTO-INJECT] CreateToolhelp32Snapshot failed");
+        return;
+    }
+
+    wchar_t skif_path[MAX_PATH]{};
+    bool found_skif = false;
+    bool already_started_service = false;
+
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(hSnap, &pe)) {
+        do {
+            if (_wcsicmp(pe.szExeFile, L"SKIF.exe") == 0) {
+                // found SKIF process, get its full executable path
+                HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+                if (hProc) {
+                    DWORD path_len = MAX_PATH;
+                    if (QueryFullProcessImageNameW(hProc, 0, skif_path, &path_len)) {
+                        found_skif = true;
+                    }
+                    CloseHandle(hProc);
+                }
+                break;
+            }
+        } while (Process32NextW(hSnap, &pe));
+    }
+    CloseHandle(hSnap);
+
+    if (!found_skif) {
+        // SKIF not running — try to find and start it
+        wchar_t skif_search_path[MAX_PATH]{};
+
+        // check user-configured path first
+        if (settings_client && !settings_client->specialk_install_path.empty()) {
+            MultiByteToWideChar(CP_UTF8, 0, settings_client->specialk_install_path.c_str(), -1, skif_search_path, MAX_PATH);
+            // append SKIF.exe if the path doesn't end with it
+            std::wstring path_w(skif_search_path);
+            if (path_w.size() >= 8) {
+                std::wstring tail = path_w.substr(path_w.size() - 8);
+                for (auto& c : tail) c = towlower(c);
+                if (tail != L"skif.exe") {
+                    if (path_w.back() != L'\\' && path_w.back() != L'/') path_w += L'\\';
+                    path_w += L"SKIF.exe";
+                }
+            } else {
+                if (!path_w.empty() && path_w.back() != L'\\' && path_w.back() != L'/') path_w += L'\\';
+                path_w += L"SKIF.exe";
+            }
+            wcsncpy_s(skif_search_path, path_w.c_str(), MAX_PATH - 1);
+        }
+
+        // try default install location: %LOCALAPPDATA%\Programs\Special K\
+        if (!skif_search_path[0]) {
+            wchar_t local_appdata[MAX_PATH]{};
+            if (SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local_appdata) == S_OK) {
+                std::wstring default_path = std::wstring(local_appdata) + L"\\Programs\\Special K\\SKIF.exe";
+                wcsncpy_s(skif_search_path, default_path.c_str(), MAX_PATH - 1);
+            }
+        }
+
+        if (skif_search_path[0] && GetFileAttributesW(skif_search_path) != INVALID_FILE_ATTRIBUTES) {
+            PRINT_DEBUG("[SK AUTO-INJECT] SKIF not running, starting from '%ls'", skif_search_path);
+            
+            // start SKIF minimized first
+            SHELLEXECUTEINFOW sei_skif{};
+            sei_skif.cbSize = sizeof(sei_skif);
+            sei_skif.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+            sei_skif.lpFile = skif_search_path;
+            sei_skif.lpParameters = L"Start Temp Minimize";
+            sei_skif.nShow = SW_HIDE;
+
+            if (ShellExecuteExW(&sei_skif)) {
+                if (sei_skif.hProcess) CloseHandle(sei_skif.hProcess);
+                found_skif = true;
+                already_started_service = true;
+                wcsncpy_s(skif_path, skif_search_path, MAX_PATH - 1);
+                PRINT_DEBUG("[SK AUTO-INJECT] SKIF launched successfully");
+            } else {
+                PRINT_DEBUG("[SK AUTO-INJECT] failed to launch SKIF (error %lu)", GetLastError());
+            }
+        } else {
+            PRINT_DEBUG("[SK AUTO-INJECT] SKIF not found at '%ls'", skif_search_path[0] ? skif_search_path : L"(no path)");
+        }
+    }
+
+    if (!found_skif) {
+        PRINT_DEBUG("[SK AUTO-INJECT] SKIF.exe not found, skipping auto-injection");
+        return;
+    }
+
+    // launch SKIF with "Start Temp" to start injection service (auto-stops after injection)
+    // skip if we already started SKIF with the service flag
+    if (!already_started_service) {
+        PRINT_DEBUG("[SK AUTO-INJECT] found SKIF at '%ls', starting injection service...", skif_path);
+
+        SHELLEXECUTEINFOW sei{};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+        sei.lpFile = skif_path;
+        sei.lpParameters = L"Start Temp";
+        sei.nShow = SW_HIDE;
+
+        if (!ShellExecuteExW(&sei)) {
+            PRINT_DEBUG("[SK AUTO-INJECT] failed to launch SKIF injection service (error %lu)", GetLastError());
+            return;
+        }
+
+        if (sei.hProcess) {
+            CloseHandle(sei.hProcess);
+        }
+    }
+
+    // wait for Special K DLL to appear in our process (timeout: 10 seconds)
+    PRINT_DEBUG("[SK AUTO-INJECT] waiting for Special K to inject...");
+    const int timeout_ms = 10000;
+    const int poll_ms = 100;
+    int elapsed = 0;
+    bool injected = false;
+
+    while (elapsed < timeout_ms) {
+        #if defined(_WIN64)
+        if (GetModuleHandleW(L"SpecialK64.dll")) { injected = true; break; }
+        #else
+        if (GetModuleHandleW(L"SpecialK32.dll")) { injected = true; break; }
+        #endif
+
+        // also check proxy DLLs
+        for (auto dll_name : proxy_dlls) {
+            HMODULE hMod = GetModuleHandleW(dll_name);
+            if (hMod && GetProcAddress(hMod, "SK_GetVersionStr")) {
+                injected = true;
+                break;
+            }
+        }
+        if (injected) break;
+
+        Sleep(poll_ms);
+        elapsed += poll_ms;
+    }
+
+    if (injected) {
+        PRINT_DEBUG("[SK AUTO-INJECT] Special K successfully injected after %d ms", elapsed);
+        thirdparty_injector_detected = true;
+    } else {
+        PRINT_DEBUG("[SK AUTO-INJECT] timed out waiting for Special K injection (%d ms)", timeout_ms);
+    }
+#endif
 }

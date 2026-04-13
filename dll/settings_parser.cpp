@@ -1743,6 +1743,17 @@ static void parse_simple_features(class Settings *settings_client, class Setting
 
     settings_client->exit_on_unknown_interface = ini.GetBoolValue("main::misc", "exit_on_unknown_interface", settings_client->exit_on_unknown_interface);
     settings_server->exit_on_unknown_interface = ini.GetBoolValue("main::misc", "exit_on_unknown_interface", settings_server->exit_on_unknown_interface);
+
+    settings_client->auto_inject_specialk = ini.GetBoolValue("main::misc", "auto_inject_specialk", settings_client->auto_inject_specialk);
+    settings_server->auto_inject_specialk = ini.GetBoolValue("main::misc", "auto_inject_specialk", settings_server->auto_inject_specialk);
+
+    {
+        const char *val = ini.GetValue("main::misc", "specialk_install_path");
+        if (val && val[0]) {
+            settings_client->specialk_install_path = val;
+            settings_server->specialk_install_path = val;
+        }
+    }
 }
 
 // [main::stats]
