@@ -190,7 +190,13 @@ static int   s_ft_history_count = 0;
 static float s_ft_min = 0.0f;
 static float s_ft_max = 0.0f;
 static float s_ft_avg = 0.0f;
+static float s_display_fps = 0.0f;
+static float s_display_frametime = 0.0f;
+static float s_display_min_ft = 0.0f;
+static float s_display_max_ft = 0.0f;
+static float s_display_avg_ft = 0.0f;
 static std::chrono::steady_clock::time_point s_last_frame_time = std::chrono::steady_clock::now();
+static std::chrono::steady_clock::time_point s_last_display_update = std::chrono::steady_clock::now();
 
 static void update_fps()
 {
@@ -226,6 +232,17 @@ static void update_fps()
     s_ft_avg = sum / s_ft_history_count;
     s_ft_min = mn;
     s_ft_max = mx;
+
+    // Snapshot display values every 500ms for stable text
+    auto display_elapsed = std::chrono::duration<float, std::milli>(now - s_last_display_update).count();
+    if (display_elapsed >= 500.0f || s_display_fps <= 0.0f) {
+        s_last_display_update = now;
+        s_display_fps = s_addon_fps;
+        s_display_frametime = s_addon_frametime;
+        s_display_min_ft = s_ft_min;
+        s_display_max_ft = s_ft_max;
+        s_display_avg_ft = s_ft_avg;
+    }
 }
 
 /* ── Playtime tracking (addon-side) ───────────────────────────────────── */
@@ -1152,20 +1169,20 @@ static void render_stats_hud()
     bool any_stats = state.show_fps || state.show_frametime || state.show_playtime;
     if (!any_stats) return;
 
-    // Build the stats line matching native format: "FPS: XX | Frametime: X.Xms | Playtime: HH:MM:SS"
+    // Build the stats line
     char stats_text[256] = {};
     bool need_sep = false;
 
     if (state.show_fps) {
         char tmp[32];
-        snprintf(tmp, sizeof(tmp), "FPS: %.1f", s_addon_fps);
+        snprintf(tmp, sizeof(tmp), "FPS: %.1f", s_display_fps);
         strcat(stats_text, tmp);
         need_sep = true;
     }
     if (state.show_frametime) {
         if (need_sep) strcat(stats_text, " | ");
         char tmp[64];
-        snprintf(tmp, sizeof(tmp), "Frametime: %.1fms", s_addon_frametime);
+        snprintf(tmp, sizeof(tmp), "Frametime: %.1fms", s_display_frametime);
         strcat(stats_text, tmp);
         need_sep = true;
     }
@@ -1181,43 +1198,20 @@ static void render_stats_hud()
     bool show_graph = (state.show_fps || state.show_frametime) && s_ft_history_count > 1;
     float graph_height = 40.0f;
 
-    // Calculate text size to auto-fit the window
-    ImVec2 text_sz = ImGui::CalcTextSize(stats_text);
-    ImVec2 padding = ImGui::GetStyle().WindowPadding;
-
-    // Min/max line sizing
-    float min_max_line_h = 0.0f;
-    float min_width = 0.0f;
+    // Pre-compute sorted frametimes for percentiles
+    float sorted_ft[ADDON_FT_HISTORY_SIZE];
+    int count = s_ft_history_count;
     if (show_graph) {
-        char mm_buf[128];
-        snprintf(mm_buf, sizeof(mm_buf), "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
-            s_ft_min, s_ft_avg, s_ft_max);
-        ImVec2 mm_sz = ImGui::CalcTextSize(mm_buf);
-        min_max_line_h = mm_sz.y + 2.0f;
-        min_width = mm_sz.x;
+        int ring_start = (s_ft_history_idx - count + ADDON_FT_HISTORY_SIZE) % ADDON_FT_HISTORY_SIZE;
+        for (int i = 0; i < count; i++)
+            sorted_ft[i] = s_ft_history[(ring_start + i) % ADDON_FT_HISTORY_SIZE];
+        std::sort(sorted_ft, sorted_ft + count);
     }
 
-    float content_width = text_sz.x;
-    if (show_graph && min_width > content_width) content_width = min_width;
-    if (show_graph && content_width < 200.0f) content_width = 200.0f;
-
-    float total_height = text_sz.y + padding.y * 2.0f;
-    if (show_graph) total_height += 4.0f + graph_height + 2.0f + min_max_line_h;
-
-    ImVec2 box_sz = ImVec2(content_width + padding.x * 2.0f, total_height);
-
-    // Position: use the stats_pos from bridge state (normalized 0..1), default top-left
-    float pos_x = 0.0f, pos_y = 0.0f;
-    float anchor_x = box_sz.x * pos_x;
-    float anchor_y = box_sz.y * pos_y;
-    float screen_x = ImGui::GetIO().DisplaySize.x * pos_x - anchor_x;
-    float screen_y = ImGui::GetIO().DisplaySize.y * pos_y - anchor_y;
-
-    ImGui::SetNextWindowPos(ImVec2(screen_x, screen_y));
-    ImGui::SetNextWindowSize(box_sz);
+    float min_content_width = show_graph ? 260.0f : 0.0f;
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoScrollWithMouse;
@@ -1228,29 +1222,97 @@ static void render_stats_hud()
     ImGui::PushStyleColor(ImGuiCol_Text, COL_STATS_TEXT);
 
     if (ImGui::Begin("##gse_stats", nullptr, flags)) {
+        // Anchor position based on actual window size (top-left default)
+        ImVec2 win_sz = ImGui::GetWindowSize();
+        float pos_x = 0.0f, pos_y = 0.0f;
+        ImGui::SetWindowPos(ImVec2(
+            ImGui::GetIO().DisplaySize.x * pos_x - win_sz.x * pos_x,
+            ImGui::GetIO().DisplaySize.y * pos_y - win_sz.y * pos_y
+        ));
+
+        float content_width = ImGui::GetContentRegionAvail().x;
+        if (content_width < min_content_width) content_width = min_content_width;
+
         ImGui::TextUnformatted(stats_text);
 
-        // Frametime graph
         if (show_graph) {
-            float graph_data[ADDON_FT_HISTORY_SIZE];
-            int count = s_ft_history_count;
-            int start = (s_ft_history_idx - count + ADDON_FT_HISTORY_SIZE) % ADDON_FT_HISTORY_SIZE;
+            // Build chronological arrays from ring buffer
+            float ft_data[ADDON_FT_HISTORY_SIZE];
+            float fps_data[ADDON_FT_HISTORY_SIZE];
+            int ring_start = (s_ft_history_idx - count + ADDON_FT_HISTORY_SIZE) % ADDON_FT_HISTORY_SIZE;
             for (int i = 0; i < count; i++) {
-                graph_data[i] = s_ft_history[(start + i) % ADDON_FT_HISTORY_SIZE];
+                float ft = s_ft_history[(ring_start + i) % ADDON_FT_HISTORY_SIZE];
+                ft_data[i] = ft;
+                fps_data[i] = (ft > 0.0f) ? (1000.0f / ft) : 0.0f;
             }
 
-            float scale_max = s_ft_max * 1.2f;
-            if (scale_max < 1.0f) scale_max = 1.0f;
+            // Percentile helpers
+            auto fps_low = [&](float pct) -> float {
+                int n = (int)(pct * count);
+                if (n < 1) n = 1;
+                float sum = 0.0f;
+                for (int i = count - n; i < count; i++) sum += sorted_ft[i];
+                float avg_ft = sum / n;
+                return (avg_ft > 0.0f) ? (1000.0f / avg_ft) : 0.0f;
+            };
+            auto ft_percentile = [&](float pct) -> float {
+                int idx = (int)(pct * count) - 1;
+                if (idx < 0) idx = 0;
+                if (idx >= count) idx = count - 1;
+                return sorted_ft[idx];
+            };
 
-            ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
-            ImGui::PlotLines("##ft_graph", graph_data, count, 0, nullptr,
-                0.0f, scale_max, ImVec2(content_width, graph_height));
-            ImGui::PopStyleColor(2);
+            float fps_1_low = fps_low(0.01f);
+            float fps_5_low = fps_low(0.05f);
+            float fps_min = (s_display_max_ft > 0.0f) ? (1000.0f / s_display_max_ft) : 0.0f;
+            float fps_max = (s_display_min_ft > 0.0f) ? (1000.0f / s_display_min_ft) : 0.0f;
+            float fps_avg = (s_display_avg_ft > 0.0f) ? (1000.0f / s_display_avg_ft) : 0.0f;
+            float ft_99 = ft_percentile(0.99f);
+            float ft_95 = ft_percentile(0.95f);
 
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-                "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
-                s_ft_min, s_ft_avg, s_ft_max);
+            // ---- Frametime graph ----
+            if (state.show_frametime) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Frametime");
+
+                float ft_scale_max = s_ft_max * 1.2f;
+                if (ft_scale_max < 1.0f) ft_scale_max = 1.0f;
+
+                ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
+                ImGui::PlotLines("##ft_graph", ft_data, count, 0, nullptr,
+                    0.0f, ft_scale_max, ImVec2(content_width, graph_height));
+                ImGui::PopStyleColor(2);
+
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                    "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
+                    s_display_min_ft, s_display_avg_ft, s_display_max_ft);
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                    "1%% high: %.1fms  5%% high: %.1fms",
+                    ft_99, ft_95);
+            }
+
+            // ---- FPS graph ----
+            if (state.show_fps) {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "FPS");
+
+                float fps_scale_max = fps_max * 1.2f;
+                if (fps_scale_max < 1.0f) fps_scale_max = 1.0f;
+
+                ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.6f, 1.0f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
+                ImGui::PlotLines("##fps_graph", fps_data, count, 0, nullptr,
+                    0.0f, fps_scale_max, ImVec2(content_width, graph_height));
+                ImGui::PopStyleColor(2);
+
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                    "Min: %.0f  Avg: %.0f  Max: %.0f",
+                    fps_min, fps_avg, fps_max);
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                    "1%% Low: %.0f  5%% Low: %.0f",
+                    fps_1_low, fps_5_low);
+            }
         }
     }
     ImGui::End();

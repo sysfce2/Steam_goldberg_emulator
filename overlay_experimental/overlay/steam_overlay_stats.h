@@ -23,14 +23,23 @@ private:
     int   frametime_history_idx = 0;
     int   frametime_history_count = 0; // how many valid entries (up to FRAMETIME_HISTORY_SIZE)
 
-    // Smoothed display values (EMA)
+    // EMA-smoothed values (updated every frame)
     float smoothed_frametime_ms = 0.0f;
     float smoothed_fps = 0.0f;
 
-    // Min/max/avg over the ring buffer
+    // Min/max/avg over the ring buffer (updated every frame)
     float min_frametime_ms = 0.0f;
     float max_frametime_ms = 0.0f;
     float avg_frametime_ms = 0.0f;
+
+    // Display values (snapshotted every 500ms for stable text)
+    std::chrono::steady_clock::time_point last_display_update =
+        std::chrono::steady_clock::now();
+    float display_fps = 0.0f;
+    float display_frametime_ms = 0.0f;
+    float display_min_ft = 0.0f;
+    float display_max_ft = 0.0f;
+    float display_avg_ft = 0.0f;
 
     // Playtime
     std::chrono::steady_clock::time_point initial_time =
