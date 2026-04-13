@@ -757,6 +757,7 @@ static void dump_process_tree()
         std::wstring exe_name;
         std::wstring full_path;
         std::wstring cmdline;
+        std::string start_time; // formatted creation timestamp
     };
     std::vector<ProcessInfo> tree;
 
@@ -788,7 +789,7 @@ static void dump_process_tree()
         info.parent_pid = it->second.first;
         info.exe_name = it->second.second;
 
-        // try to get full path and command line
+        // try to get full path, command line, and creation time
         // PROCESS_VM_READ needed for PEB command line reading
         HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, walk_pid);
         bool full_access = (hProc != nullptr);
@@ -801,6 +802,18 @@ static void dump_process_tree()
             }
             if (full_access) {
                 info.cmdline = read_process_cmdline(hProc, walk_pid);
+            }
+            // get process creation time
+            FILETIME ft_create{}, ft_exit{}, ft_kernel{}, ft_user{};
+            if (GetProcessTimes(hProc, &ft_create, &ft_exit, &ft_kernel, &ft_user) && (ft_create.dwHighDateTime || ft_create.dwLowDateTime)) {
+                SYSTEMTIME st_utc{}, st_local{};
+                FileTimeToSystemTime(&ft_create, &st_utc);
+                SystemTimeToTzSpecificLocalTime(nullptr, &st_utc, &st_local);
+                char tbuf[64]{};
+                snprintf(tbuf, sizeof(tbuf), "%04d-%02d-%02d %02d:%02d:%02d",
+                    st_local.wYear, st_local.wMonth, st_local.wDay,
+                    st_local.wHour, st_local.wMinute, st_local.wSecond);
+                info.start_time = tbuf;
             }
             CloseHandle(hProc);
         }
@@ -875,6 +888,9 @@ static void dump_process_tree()
         fprintf(f, "[PID %lu] %s%s\n", p.pid, name_a, is_current ? "  (current process)" : "");
         fprintf(f, "  Path: %s\n", path_a);
         fprintf(f, "  Relative: %s\n", rel_a);
+        if (!p.start_time.empty()) {
+            fprintf(f, "  Started: %s\n", p.start_time.c_str());
+        }
         if (!p.cmdline.empty()) {
             std::wstring sanitized_cmd = sanitize(p.cmdline);
             int cmd_size = WideCharToMultiByte(CP_UTF8, 0, sanitized_cmd.c_str(), -1, nullptr, 0, nullptr, nullptr);
@@ -977,6 +993,7 @@ static void dump_process_tree()
         std::string exe_name;
         std::string full_path;
         std::string cmdline;
+        std::string start_time; // formatted creation timestamp
     };
     std::vector<ProcessInfo> tree;
 
@@ -1015,16 +1032,16 @@ static void dump_process_tree()
             info.cmdline = cmd_buf;
         }
 
-        // read parent PID from /proc/<pid>/stat
+        // read parent PID and start time from /proc/<pid>/stat
         info.parent_pid = 0;
         char stat_path[64]{};
         snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", walk_pid);
         FILE* sf = fopen(stat_path, "r");
         if (sf) {
-            char stat_buf[1024]{};
+            char stat_buf[4096]{};
             fread(stat_buf, 1, sizeof(stat_buf) - 1, sf);
             fclose(sf);
-            // format: pid (comm) state ppid ...
+            // format: pid (comm) state ppid ... field22=starttime
             // find the last ')' to skip comm which may contain spaces/parens
             char* comm_end = strrchr(stat_buf, ')');
             if (comm_end) {
@@ -1032,6 +1049,54 @@ static void dump_process_tree()
                 char state;
                 if (sscanf(comm_end + 1, " %c %d", &state, &ppid) == 2) {
                     info.parent_pid = ppid;
+                }
+                // parse starttime (field 22, which is field 20 after comm_end)
+                // fields after ')': state(1) ppid(2) pgrp(3) session(4) tty_nr(5) tpgid(6)
+                //   flags(7) minflt(8) cminflt(9) majflt(10) cmajflt(11) utime(12) stime(13)
+                //   cutime(14) cstime(15) priority(16) nice(17) num_threads(18) itrealvalue(19)
+                //   starttime(20)
+                unsigned long long starttime = 0;
+                char* p = comm_end + 2; // skip ') '
+                int field = 0;
+                while (*p && field < 19) {
+                    while (*p == ' ') ++p;
+                    if (!*p) break;
+                    if (field == 19) break;
+                    while (*p && *p != ' ') ++p;
+                    ++field;
+                }
+                while (*p == ' ') ++p;
+                if (*p) {
+                    sscanf(p, "%llu", &starttime);
+                    if (starttime > 0) {
+                        // convert clock ticks since boot to wall clock time
+                        long hz = sysconf(_SC_CLK_TCK);
+                        if (hz > 0) {
+                            // read boot time from /proc/stat
+                            FILE* bf = fopen("/proc/stat", "r");
+                            unsigned long long btime = 0;
+                            if (bf) {
+                                char line[256]{};
+                                while (fgets(line, sizeof(line), bf)) {
+                                    if (strncmp(line, "btime ", 6) == 0) {
+                                        sscanf(line + 6, "%llu", &btime);
+                                        break;
+                                    }
+                                }
+                                fclose(bf);
+                            }
+                            if (btime > 0) {
+                                time_t proc_start = (time_t)(btime + starttime / hz);
+                                struct tm tm_start{};
+                                localtime_r(&proc_start, &tm_start);
+                                char tbuf[64]{};
+                                snprintf(tbuf, sizeof(tbuf), "%04d-%02d-%02d %02d:%02d:%02d",
+                                    tm_start.tm_year + 1900, tm_start.tm_mon + 1, tm_start.tm_mday,
+                                    tm_start.tm_hour, tm_start.tm_min, tm_start.tm_sec);
+                                info.start_time = tbuf;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1083,6 +1148,9 @@ static void dump_process_tree()
         fprintf(f, "[PID %d] %s%s\n", p.pid, p.exe_name.c_str(), is_current ? "  (current process)" : "");
         fprintf(f, "  Path: %s\n", sanitize(p.full_path).c_str());
         fprintf(f, "  Relative: %s\n", sanitize(make_relative(p.full_path)).c_str());
+        if (!p.start_time.empty()) {
+            fprintf(f, "  Started: %s\n", p.start_time.c_str());
+        }
         if (!p.cmdline.empty()) {
             fprintf(f, "  CmdLine: %s\n", sanitize(p.cmdline).c_str());
         }
