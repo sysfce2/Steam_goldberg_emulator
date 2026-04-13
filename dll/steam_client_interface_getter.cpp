@@ -1450,12 +1450,14 @@ void Steam_Client::detect_thirdparty_injectors()
         if (GetProcAddress(hMod, "SK_GetVersionStr")) {
             PRINT_DEBUG("detected Special K via proxy DLL '%ls'", dll_name);
             thirdparty_injector_detected = true;
+            specialk_proxy_detected = true;
             if (seen.insert("Special K (proxy)").second) {
                 if (!detected.empty()) detected += ", ";
                 detected += "Special K (proxy)";
             }
         } else if (GetProcAddress(hMod, "ReShadeVersion")) {
             PRINT_DEBUG("detected ReShade via proxy DLL '%ls'", dll_name);
+            reshade_proxy_detected = true;
             if (seen.insert("ReShade (proxy)").second) {
                 if (!detected.empty()) detected += ", ";
                 detected += "ReShade (proxy)";
@@ -1518,6 +1520,98 @@ void Steam_Client::try_start_specialk_injection()
 {
 #if defined(__WINDOWS__)
     if (!settings_client || !settings_client->auto_inject_specialk) return;
+
+    // run detection first if not done yet
+    if (!overlays_scanned) {
+        detect_thirdparty_injectors();
+    }
+
+    // Special K is already loaded as a local proxy DLL — do not start SKIF (global injection would conflict)
+    if (specialk_proxy_detected) {
+        PRINT_DEBUG("[SK AUTO-INJECT] Special K detected as local proxy DLL, skipping SKIF global injection");
+        // if SKIF is running, stop its injection service to avoid double-injection
+        HANDLE hSnap0 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnap0 != INVALID_HANDLE_VALUE) {
+            wchar_t skif_path_buf[MAX_PATH]{};
+            bool skif_running = false;
+            PROCESSENTRY32W pe0{};
+            pe0.dwSize = sizeof(pe0);
+            if (Process32FirstW(hSnap0, &pe0)) {
+                do {
+                    if (_wcsicmp(pe0.szExeFile, L"SKIF.exe") == 0) {
+                        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe0.th32ProcessID);
+                        if (hProc) {
+                            DWORD path_len = MAX_PATH;
+                            if (QueryFullProcessImageNameW(hProc, 0, skif_path_buf, &path_len)) {
+                                skif_running = true;
+                            }
+                            CloseHandle(hProc);
+                        }
+                        break;
+                    }
+                } while (Process32NextW(hSnap0, &pe0));
+            }
+            CloseHandle(hSnap0);
+            if (skif_running) {
+                PRINT_DEBUG("[SK AUTO-INJECT] SKIF is running, sending Stop to prevent global injection conflict");
+                SHELLEXECUTEINFOW sei_stop{};
+                sei_stop.cbSize = sizeof(sei_stop);
+                sei_stop.fMask = SEE_MASK_NOASYNC;
+                sei_stop.lpFile = skif_path_buf;
+                sei_stop.lpParameters = L"Stop";
+                sei_stop.nShow = SW_HIDE;
+                ShellExecuteExW(&sei_stop);
+            }
+        }
+
+        // SK is already a local proxy — if ReShade is also a proxy, disable SK's ReShade plugin
+        if (reshade_proxy_detected) {
+            wchar_t exe_path[MAX_PATH]{};
+            if (GetModuleFileNameW(nullptr, exe_path, MAX_PATH)) {
+                const wchar_t* exe_name = wcsrchr(exe_path, L'\\');
+                exe_name = exe_name ? exe_name + 1 : exe_path;
+
+                // find SK install root from configured path or default location
+                std::wstring sk_root;
+                if (settings_client && !settings_client->specialk_install_path.empty()) {
+                    wchar_t tmp[MAX_PATH]{};
+                    MultiByteToWideChar(CP_UTF8, 0, settings_client->specialk_install_path.c_str(), -1, tmp, MAX_PATH);
+                    sk_root = tmp;
+                    // strip SKIF.exe if present
+                    auto last_sep = sk_root.find_last_of(L"\\/");
+                    if (last_sep != std::wstring::npos) {
+                        std::wstring tail = sk_root.substr(last_sep + 1);
+                        for (auto& c : tail) c = towlower(c);
+                        if (tail == L"skif.exe") sk_root = sk_root.substr(0, last_sep);
+                    }
+                }
+                if (sk_root.empty()) {
+                    wchar_t local_appdata[MAX_PATH]{};
+                    if (SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local_appdata) == S_OK) {
+                        sk_root = std::wstring(local_appdata) + L"\\Programs\\Special K";
+                    }
+                }
+                if (!sk_root.empty()) {
+                    std::wstring ini_dir = sk_root + L"\\Profiles\\" + exe_name;
+                    CreateDirectoryW((sk_root + L"\\Profiles").c_str(), nullptr);
+                    CreateDirectoryW(ini_dir.c_str(), nullptr);
+                    std::wstring ini_path = ini_dir + L"\\SpecialK.ini";
+                    if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
+                        PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
+                    } else {
+                        PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+    // ReShade is loaded as a local proxy — disable SK's ReShade plugin to prevent double-load
+    if (reshade_proxy_detected) {
+        PRINT_DEBUG("[SK AUTO-INJECT] ReShade detected as local proxy DLL, will disable SK ReShade plugin loading");
+    }
 
     // check if Special K is already loaded
     #if defined(_WIN64)
@@ -1671,6 +1765,35 @@ void Steam_Client::try_start_specialk_injection()
     if (!found_skif) {
         PRINT_DEBUG("[SK AUTO-INJECT] SKIF.exe not found, skipping auto-injection");
         return;
+    }
+
+    // if ReShade is loaded as a local proxy, disable SK's ReShade plugin loading
+    // by writing ReShade=false to the per-game SK profile before triggering injection
+    if (reshade_proxy_detected) {
+        wchar_t exe_path[MAX_PATH]{};
+        if (GetModuleFileNameW(nullptr, exe_path, MAX_PATH)) {
+            const wchar_t* exe_name = wcsrchr(exe_path, L'\\');
+            exe_name = exe_name ? exe_name + 1 : exe_path;
+
+            // determine SK install root from SKIF path (strip SKIF.exe)
+            std::wstring sk_root(skif_path);
+            auto last_sep = sk_root.find_last_of(L"\\/");
+            if (last_sep != std::wstring::npos) {
+                sk_root = sk_root.substr(0, last_sep);
+            }
+
+            // build profile INI path: <SK root>/Profiles/<game.exe>/SpecialK.ini
+            std::wstring ini_dir = sk_root + L"\\Profiles\\" + exe_name;
+            CreateDirectoryW((sk_root + L"\\Profiles").c_str(), nullptr);
+            CreateDirectoryW(ini_dir.c_str(), nullptr);
+            std::wstring ini_path = ini_dir + L"\\SpecialK.ini";
+
+            if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
+                PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
+            } else {
+                PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+            }
+        }
     }
 
     // check if the SK injection service is already running
