@@ -1642,15 +1642,25 @@ void Steam_Client::try_start_specialk_injection()
                 }
             }
             if (!sk_root_rd.empty()) {
-                std::wstring ini_path_rd = sk_root_rd + L"\\Profiles\\" + exe_name_rd + L"\\SpecialK.ini";
-                if (GetFileAttributesW(ini_path_rd.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                    if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path_rd.c_str())) {
-                        PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path_rd.c_str());
-                    } else {
-                        PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+                std::wstring ini_dir_rd = sk_root_rd + L"\\Profiles\\" + exe_name_rd;
+                std::wstring ini_path_rd = ini_dir_rd + L"\\SpecialK.ini";
+                // if the profile INI doesn't exist yet, create it with a UTF-16LE BOM
+                // so WritePrivateProfileStringW writes in the same encoding SK uses
+                if (GetFileAttributesW(ini_path_rd.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                    CreateDirectoryW(ini_dir_rd.c_str(), nullptr);
+                    HANDLE hFile = CreateFileW(ini_path_rd.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+                    if (hFile != INVALID_HANDLE_VALUE) {
+                        const unsigned char bom[] = { 0xFF, 0xFE };
+                        DWORD written = 0;
+                        WriteFile(hFile, bom, sizeof(bom), &written, nullptr);
+                        CloseHandle(hFile);
+                        PRINT_DEBUG("[SK AUTO-INJECT] created SK profile with UTF-16LE BOM: '%ls'", ini_path_rd.c_str());
                     }
+                }
+                if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path_rd.c_str())) {
+                    PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path_rd.c_str());
                 } else {
-                    PRINT_DEBUG("[SK AUTO-INJECT] SK profile not found at '%ls', skipping ReShade disable (SK will create it on first run)", ini_path_rd.c_str());
+                    PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
                 }
             }
         }
@@ -1829,16 +1839,23 @@ void Steam_Client::try_start_specialk_injection()
             std::wstring ini_dir = sk_root + L"\\Profiles\\" + exe_name;
             std::wstring ini_path = ini_dir + L"\\SpecialK.ini";
 
-            // only modify if the profile already exists — creating a minimal INI
-            // prevents SK from writing its defaults and breaks initialization
-            if (GetFileAttributesW(ini_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
-                    PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
-                } else {
-                    PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
+            // if the profile INI doesn't exist yet, create it with a UTF-16LE BOM
+            // so WritePrivateProfileStringW writes in the same encoding SK uses
+            if (GetFileAttributesW(ini_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                CreateDirectoryW(ini_dir.c_str(), nullptr);
+                HANDLE hFile = CreateFileW(ini_path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (hFile != INVALID_HANDLE_VALUE) {
+                    const unsigned char bom[] = { 0xFF, 0xFE };
+                    DWORD written = 0;
+                    WriteFile(hFile, bom, sizeof(bom), &written, nullptr);
+                    CloseHandle(hFile);
+                    PRINT_DEBUG("[SK AUTO-INJECT] created SK profile with UTF-16LE BOM: '%ls'", ini_path.c_str());
                 }
+            }
+            if (WritePrivateProfileStringW(L"SpecialK.Plugins", L"ReShade", L"false", ini_path.c_str())) {
+                PRINT_DEBUG("[SK AUTO-INJECT] disabled ReShade plugin in SK profile: '%ls'", ini_path.c_str());
             } else {
-                PRINT_DEBUG("[SK AUTO-INJECT] SK profile not found at '%ls', skipping ReShade disable (SK will create it on first run)", ini_path.c_str());
+                PRINT_DEBUG("[SK AUTO-INJECT] failed to write SK profile INI (error %lu)", GetLastError());
             }
         }
     }
