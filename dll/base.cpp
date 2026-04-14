@@ -1591,6 +1591,17 @@ void append_renderer_info()
             #endif
             { L"easyanticheat.dll",         "EasyAntiCheat",        "anti-cheat" },
             { L"vanguard.dll",              "Vanguard",             "anti-cheat" },
+
+            // --- modding / script hooks ---
+            { L"ScriptHookV.dll",           "ScriptHookV",          "modding" },
+            { L"ScriptHookRDR2.dll",        "ScriptHookRDR2",       "modding" },
+            { L"ScriptHook.dll",            "ScriptHook",           "modding" },
+            { L"ScriptHookDotNet.dll",      "ScriptHookDotNet",     "modding" },
+            #if defined(_WIN64)
+            { L"version.dll",               "ASI Loader",           "modding" },
+            #else
+            { L"version.dll",               "ASI Loader",           "modding" },
+            #endif
         };
         std::set<std::string> tool_seen;
         for (auto& entry : known_tools) {
@@ -1602,9 +1613,13 @@ void append_renderer_info()
 
         // check proxy DLLs for Special K or ReShade exports
         const wchar_t* proxy_tool_dlls[] = {
-            L"dxgi.dll", L"d3d11.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
+            L"dxgi.dll", L"d3d11.dll", L"d3d12.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
             L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"dinput.dll", L"winmm.dll",
-            L"OpenGL32.dll"
+            L"OpenGL32.dll", L"version.dll", L"dsound.dll", L"wininet.dll", L"winhttp.dll",
+            L"xinput1_1.dll", L"xinput1_2.dll", L"xinput1_3.dll", L"xinput1_4.dll",
+            L"xinput9_1_0.dll", L"xinputuap.dll",
+            L"binkw32.dll", L"bink2w32.dll", L"binkw64.dll", L"bink2w64.dll",
+            L"vorbisFile.dll", L"msacm32.dll", L"msvfw32.dll", L"xlive.dll"
         };
         for (auto dll_name : proxy_tool_dlls) {
             HMODULE hMod = GetModuleHandleW(dll_name);
@@ -1615,6 +1630,9 @@ void append_renderer_info()
             } else if (GetProcAddress(hMod, "ReShadeVersion") && tool_seen.insert("ReShade (proxy)").second) {
                 detected_tools.push_back({ "ReShade (proxy)", "post-processor" });
                 PRINT_DEBUG("detected tool [post-processor]: ReShade (proxy via %ls)", dll_name);
+            } else if (GetProcAddress(hMod, "GetASILoadLibrary") && tool_seen.insert("Ultimate ASI Loader (proxy)").second) {
+                detected_tools.push_back({ "Ultimate ASI Loader (proxy)", "modding" });
+                PRINT_DEBUG("detected tool [modding]: Ultimate ASI Loader (proxy via %ls)", dll_name);
             }
         }
     }

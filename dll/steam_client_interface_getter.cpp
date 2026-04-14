@@ -1427,6 +1427,17 @@ void Steam_Client::detect_thirdparty_injectors()
         #endif
         { L"easyanticheat.dll",         "EasyAntiCheat",        "anti-cheat" },
         { L"vanguard.dll",              "Vanguard",             "anti-cheat" },
+
+        // --- modding / script hooks ---
+        { L"ScriptHookV.dll",           "ScriptHookV",          "modding" },
+        { L"ScriptHookRDR2.dll",        "ScriptHookRDR2",       "modding" },
+        { L"ScriptHook.dll",            "ScriptHook",           "modding" },
+        { L"ScriptHookDotNet.dll",      "ScriptHookDotNet",     "modding" },
+        #if defined(_WIN64)
+        { L"version.dll",               "ASI Loader",           "modding" },
+        #else
+        { L"version.dll",               "ASI Loader",           "modding" },
+        #endif
     };
     std::set<std::string> seen;
     std::string detected;
@@ -1440,9 +1451,13 @@ void Steam_Client::detect_thirdparty_injectors()
 
     // check proxy DLLs for Special K or ReShade exports
     const wchar_t* proxy_dlls[] = {
-        L"dxgi.dll", L"d3d11.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
+        L"dxgi.dll", L"d3d11.dll", L"d3d12.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
         L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"dinput.dll", L"winmm.dll",
-        L"OpenGL32.dll"
+        L"OpenGL32.dll", L"version.dll", L"dsound.dll", L"wininet.dll", L"winhttp.dll",
+        L"xinput1_1.dll", L"xinput1_2.dll", L"xinput1_3.dll", L"xinput1_4.dll",
+        L"xinput9_1_0.dll", L"xinputuap.dll",
+        L"binkw32.dll", L"bink2w32.dll", L"binkw64.dll", L"bink2w64.dll",
+        L"vorbisFile.dll", L"msacm32.dll", L"msvfw32.dll", L"xlive.dll"
     };
     for (auto dll_name : proxy_dlls) {
         HMODULE hMod = GetModuleHandleW(dll_name);
@@ -1461,6 +1476,12 @@ void Steam_Client::detect_thirdparty_injectors()
             if (seen.insert("ReShade (proxy)").second) {
                 if (!detected.empty()) detected += ", ";
                 detected += "ReShade (proxy)";
+            }
+        } else if (GetProcAddress(hMod, "GetASILoadLibrary")) {
+            PRINT_DEBUG("detected Ultimate ASI Loader via proxy DLL '%ls'", dll_name);
+            if (seen.insert("Ultimate ASI Loader (proxy)").second) {
+                if (!detected.empty()) detected += ", ";
+                detected += "Ultimate ASI Loader (proxy)";
             }
         }
     }
@@ -1756,9 +1777,13 @@ void Steam_Client::try_start_specialk_injection()
 
     // also check proxy DLLs for SK
     const wchar_t* proxy_dlls[] = {
-        L"dxgi.dll", L"d3d11.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
+        L"dxgi.dll", L"d3d11.dll", L"d3d12.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
         L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"dinput.dll", L"winmm.dll",
-        L"OpenGL32.dll"
+        L"OpenGL32.dll", L"version.dll", L"dsound.dll", L"wininet.dll", L"winhttp.dll",
+        L"xinput1_1.dll", L"xinput1_2.dll", L"xinput1_3.dll", L"xinput1_4.dll",
+        L"xinput9_1_0.dll", L"xinputuap.dll",
+        L"binkw32.dll", L"bink2w32.dll", L"binkw64.dll", L"bink2w64.dll",
+        L"vorbisFile.dll", L"msacm32.dll", L"msvfw32.dll", L"xlive.dll"
     };
     for (auto dll_name : proxy_dlls) {
         HMODULE hMod = GetModuleHandleW(dll_name);
