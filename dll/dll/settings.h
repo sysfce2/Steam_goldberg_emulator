@@ -303,6 +303,12 @@ public:
     // >0 = keep service running for this many seconds then stop (for games with launchers)
     unsigned specialk_service_duration = 0;
 
+    // disable ReShade startup banner (writes ShowStartupBanner=0 to ReShade.ini in game dir)
+    bool disable_reshade_banner = false;
+
+    // disable Special K startup notification (writes Silent=true to per-game SpecialK.ini)
+    bool disable_specialk_notification = false;
+
     // use new app_ticket auth instead of old one
     bool enable_new_app_ticket = true;
     // can use GC token for generation

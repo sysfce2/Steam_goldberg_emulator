@@ -1519,12 +1519,87 @@ bool Steam_Client::is_caller_special_k()
 void Steam_Client::try_start_specialk_injection()
 {
 #if defined(__WINDOWS__)
-    if (!settings_client || !settings_client->auto_inject_specialk) return;
+    if (!settings_client) return;
 
     // run detection first if not done yet
     if (!overlays_scanned) {
         detect_thirdparty_injectors();
     }
+
+    // --- notification/banner disables (independent of auto_inject_specialk) ---
+
+    // disable ReShade startup banner by writing to ReShade.ini in the game directory
+    // takes effect on next launch (ReShade reads its config during DLL init before our code runs)
+    if (settings_client->disable_reshade_banner && reshade_proxy_detected) {
+        wchar_t game_dir[MAX_PATH]{};
+        if (GetModuleFileNameW(nullptr, game_dir, MAX_PATH)) {
+            wchar_t* last_sep = wcsrchr(game_dir, L'\\');
+            if (last_sep) *(last_sep + 1) = L'\0';
+            std::wstring reshade_ini = std::wstring(game_dir) + L"ReShade.ini";
+            if (WritePrivateProfileStringW(L"OVERLAY", L"ShowStartupBanner", L"0", reshade_ini.c_str())) {
+                PRINT_DEBUG("[NOTIFICATION] disabled ReShade startup banner in '%ls'", reshade_ini.c_str());
+            }
+        }
+    }
+
+    // disable Special K startup notification by writing Silent=true to the per-game SK profile
+    // takes effect on next launch (SK reads its config during init before our code runs)
+    if (settings_client->disable_specialk_notification) {
+        // check if SK is present (proxy, global injection, or about to be auto-injected)
+        bool sk_present = specialk_proxy_detected || settings_client->auto_inject_specialk;
+        #if defined(_WIN64)
+        if (!sk_present) sk_present = (GetModuleHandleW(L"SpecialK64.dll") != nullptr);
+        #else
+        if (!sk_present) sk_present = (GetModuleHandleW(L"SpecialK32.dll") != nullptr);
+        #endif
+        if (sk_present) {
+            wchar_t exe_path_sn[MAX_PATH]{};
+            if (GetModuleFileNameW(nullptr, exe_path_sn, MAX_PATH)) {
+                const wchar_t* exe_name_sn = wcsrchr(exe_path_sn, L'\\');
+                exe_name_sn = exe_name_sn ? exe_name_sn + 1 : exe_path_sn;
+
+                std::wstring sk_root_sn;
+                if (!settings_client->specialk_install_path.empty()) {
+                    wchar_t tmp[MAX_PATH]{};
+                    MultiByteToWideChar(CP_UTF8, 0, settings_client->specialk_install_path.c_str(), -1, tmp, MAX_PATH);
+                    sk_root_sn = tmp;
+                    auto sep = sk_root_sn.find_last_of(L"\\/");
+                    if (sep != std::wstring::npos) {
+                        std::wstring tail = sk_root_sn.substr(sep + 1);
+                        for (auto& c : tail) c = towlower(c);
+                        if (tail == L"skif.exe") sk_root_sn = sk_root_sn.substr(0, sep);
+                    }
+                }
+                if (sk_root_sn.empty()) {
+                    wchar_t local_appdata[MAX_PATH]{};
+                    if (SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local_appdata) == S_OK) {
+                        sk_root_sn = std::wstring(local_appdata) + L"\\Programs\\Special K";
+                    }
+                }
+                if (!sk_root_sn.empty()) {
+                    std::wstring ini_dir_sn = sk_root_sn + L"\\Profiles\\" + exe_name_sn;
+                    std::wstring ini_path_sn = ini_dir_sn + L"\\SpecialK.ini";
+                    // create with UTF-16LE BOM if it doesn't exist yet
+                    if (GetFileAttributesW(ini_path_sn.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                        CreateDirectoryW(ini_dir_sn.c_str(), nullptr);
+                        HANDLE hFile = CreateFileW(ini_path_sn.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+                        if (hFile != INVALID_HANDLE_VALUE) {
+                            const unsigned char bom[] = { 0xFF, 0xFE };
+                            DWORD written = 0;
+                            WriteFile(hFile, bom, sizeof(bom), &written, nullptr);
+                            CloseHandle(hFile);
+                        }
+                    }
+                    if (WritePrivateProfileStringW(L"SpecialK.System", L"Silent", L"true", ini_path_sn.c_str())) {
+                        PRINT_DEBUG("[NOTIFICATION] disabled SK startup notification in '%ls'", ini_path_sn.c_str());
+                    }
+                }
+            }
+        }
+    }
+
+    // --- auto-injection logic (requires auto_inject_specialk=1) ---
+    if (!settings_client->auto_inject_specialk) return;
 
     // Special K is already loaded as a local proxy DLL — do not start SKIF (global injection would conflict)
     if (specialk_proxy_detected) {

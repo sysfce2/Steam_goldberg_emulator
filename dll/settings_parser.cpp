@@ -1557,8 +1557,8 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
     settings_client->disable_overlay = !ini.GetBoolValue("overlay::general", "enable_experimental_overlay", !settings_client->disable_overlay);
     settings_server->disable_overlay = !ini.GetBoolValue("overlay::general", "enable_experimental_overlay", !settings_server->disable_overlay);
 
-    settings_client->enable_overlay_bridge = ini.GetBoolValue("overlay::general", "enable_experimental_bridge", settings_client->enable_overlay_bridge);
-    settings_server->enable_overlay_bridge = ini.GetBoolValue("overlay::general", "enable_experimental_bridge", settings_server->enable_overlay_bridge);
+    settings_client->enable_overlay_bridge = ini.GetBoolValue("overlay::reshade", "enable_experimental_bridge", settings_client->enable_overlay_bridge);
+    settings_server->enable_overlay_bridge = ini.GetBoolValue("overlay::reshade", "enable_experimental_bridge", settings_server->enable_overlay_bridge);
 
     settings_client->disable_overlay_activated_callback = ini.GetBoolValue("overlay::general", "disable_overlay_activated_callback", settings_client->disable_overlay_activated_callback);
     settings_server->disable_overlay_activated_callback = ini.GetBoolValue("overlay::general", "disable_overlay_activated_callback", settings_server->disable_overlay_activated_callback);
@@ -1745,11 +1745,17 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->exit_on_unknown_interface = ini.GetBoolValue("main::misc", "exit_on_unknown_interface", settings_client->exit_on_unknown_interface);
     settings_server->exit_on_unknown_interface = ini.GetBoolValue("main::misc", "exit_on_unknown_interface", settings_server->exit_on_unknown_interface);
 
-    settings_client->auto_inject_specialk = ini.GetBoolValue("main::misc", "auto_inject_specialk", settings_client->auto_inject_specialk);
-    settings_server->auto_inject_specialk = ini.GetBoolValue("main::misc", "auto_inject_specialk", settings_server->auto_inject_specialk);
+    settings_client->auto_inject_specialk = ini.GetBoolValue("overlay::specialk", "auto_inject_specialk", settings_client->auto_inject_specialk);
+    settings_server->auto_inject_specialk = ini.GetBoolValue("overlay::specialk", "auto_inject_specialk", settings_server->auto_inject_specialk);
+
+    settings_client->disable_specialk_notification = ini.GetBoolValue("overlay::specialk", "disable_specialk_notification", settings_client->disable_specialk_notification);
+    settings_server->disable_specialk_notification = ini.GetBoolValue("overlay::specialk", "disable_specialk_notification", settings_server->disable_specialk_notification);
+
+    settings_client->disable_reshade_banner = ini.GetBoolValue("overlay::reshade", "disable_reshade_banner", settings_client->disable_reshade_banner);
+    settings_server->disable_reshade_banner = ini.GetBoolValue("overlay::reshade", "disable_reshade_banner", settings_server->disable_reshade_banner);
 
     {
-        const char *val = ini.GetValue("main::misc", "specialk_install_path");
+        const char *val = ini.GetValue("overlay::specialk", "specialk_install_path");
         if (val && val[0]) {
             settings_client->specialk_install_path = val;
             settings_server->specialk_install_path = val;
@@ -1757,7 +1763,7 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     }
 
     {
-        long dur = ini.GetLongValue("main::misc", "specialk_service_duration", settings_client->specialk_service_duration);
+        long dur = ini.GetLongValue("overlay::specialk", "specialk_service_duration", settings_client->specialk_service_duration);
         if (dur >= 0) {
             settings_client->specialk_service_duration = static_cast<unsigned>(dur);
             settings_server->specialk_service_duration = static_cast<unsigned>(dur);
