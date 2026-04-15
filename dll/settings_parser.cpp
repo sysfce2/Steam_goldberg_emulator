@@ -444,6 +444,17 @@ static void load_overlay_appearance(class Settings *settings_client, class Setti
                 settings_client->overlay_appearance.image_gamma = mode;
                 settings_server->overlay_appearance.image_gamma = mode;
             // Image gamma correction END <<<
+            // >>> Swapchain colour-space override
+            } else if (name.compare("Swapchain_Override") == 0) {
+                using SO = Overlay_Appearance::SwapchainOverride;
+                SO mode = SO::Auto;
+                if      (value == "linear_hdr") mode = SO::LinearHDR;
+                else if (value == "hdr10_pq")   mode = SO::HDR10PQ;
+                else if (value == "srgb_rtv")   mode = SO::SrgbRTV;
+                else if (value == "sdr")        mode = SO::SDR;
+                settings_client->overlay_appearance.swapchain_override = mode;
+                settings_server->overlay_appearance.swapchain_override = mode;
+            // Swapchain colour-space override END <<<
             // >>> FPS position
             } else if (name.compare("Stats_Pos_x") == 0) {
                 auto pos = std::stof(value);

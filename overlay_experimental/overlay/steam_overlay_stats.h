@@ -59,6 +59,11 @@ private:
 public:
     ImFont *font = nullptr;
     
+    // Optional colour-space transform callback.  When non-null, every PushStyleColor call
+    // in the stats HUD is routed through this to match the current swapchain colour space.
+    // Set by the overlay render proc each frame (may be null for SDR).
+    ImVec4 (*color_transform)(ImVec4) = nullptr;
+
     // Master toggles
     bool show_fps = false;
     bool show_frametime = false;

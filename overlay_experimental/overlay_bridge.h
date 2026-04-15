@@ -399,6 +399,8 @@ typedef struct GSE_NotifAppearance {
     float stats_text_b;             /* stats HUD text blue  (0-1) */
     float stats_text_a;             /* stats HUD text alpha (0-1) */
     float width_percent;            /* minimum notification width as fraction of screen (0.25 = 25%) */
+    int32_t swapchain_override;     /* SwapchainOverride enum: 0=Auto, 1=LinearHDR, 2=HDR10PQ, 3=SrgbRTV, 4=SDR */
+    int32_t image_gamma;            /* SrgbDecode enum: 0=Auto, 1=Enabled, 2=Disabled */
 } GSE_NotifAppearance;
 
 typedef int       (*pfn_GSE_OverlayBridge_GetNotifAppearance)(GSE_NotifAppearance *out);  /* returns 1 on success */

@@ -186,15 +186,24 @@ struct Overlay_Appearance {
     NotificationPosition invite_pos = default_pos; // lobby/game invitation
     NotificationPosition chat_msg_pos = NotificationPosition::top_center; // chat message from a friend
 
-    // sRGB->linear decode before GPU upload.
-    // ingame_overlay forces UNORM on its own RTV so there is no hardware sRGB encoding at the
-    // overlay render pass.  Decode is only needed for FP16/scRGB swap chains where sRGB bytes
-    // end up stored as linear-space floats and appear over-bright on the HDR display.
-    // auto = decode only when swap chain is confirmed R16G16B16A16_FLOAT.
-    // on   = always decode.
-    // off  = never decode (original behaviour).
+    // sRGB / gamma correction before GPU upload.
+    // Controls per-pixel colour-space transforms applied to overlay images and UI colours.
+    //   auto = detect from swap chain format: linear-HDR, PQ, _SRGB, or plain SDR.
+    //   on   = always apply the transform selected by Swapchain_Override (or auto-detect).
+    //   off  = never transform (original behaviour, raw sRGB bytes pass through).
     enum class SrgbDecode { Auto, On, Off };
     SrgbDecode image_gamma = SrgbDecode::Auto;
+
+    // Manual override for the detected swap chain colour space.
+    // Useful when auto-detection produces the wrong result (e.g. OpenGL with GL_FRAMEBUFFER_SRGB,
+    // or a game that creates an SDR swap chain but applies its own HDR tone-mapping shader).
+    //   auto       = rely on screenshot-based format detection (default).
+    //   linear_hdr = force scRGB / FP16 / linear treatment  (sRGB→linear + SDR-white scale).
+    //   hdr10_pq   = force HDR10 PQ (ST.2084) treatment     (sRGB→linear→PQ encode).
+    //   srgb_rtv   = force _SRGB back-buffer treatment      (sRGB→linear, hw re-encodes).
+    //   sdr        = force standard SDR UNORM               (no decode, optional contrast).
+    enum class SwapchainOverride { Auto, LinearHDR, HDR10PQ, SrgbRTV, SDR };
+    SwapchainOverride swapchain_override = SwapchainOverride::Auto;
 
     static NotificationPosition translate_notification_position(const std::string &str);
 };

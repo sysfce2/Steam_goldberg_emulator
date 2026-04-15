@@ -131,18 +131,21 @@ void Steam_Overlay_Stats::render_stats(int current_language)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, settings->overlay_appearance.notification_rounding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(
+    // Local shorthand: apply swapchain colour transform if one is set.
+    auto tc = [this](const ImVec4 &c) -> ImVec4 { return color_transform ? color_transform(c) : c; };
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, tc(ImVec4(
         settings->overlay_appearance.stats_background_r,
         settings->overlay_appearance.stats_background_g,
         settings->overlay_appearance.stats_background_b,
         settings->overlay_appearance.stats_background_a
-    ));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(
+    )));
+    ImGui::PushStyleColor(ImGuiCol_Text, tc(ImVec4(
         settings->overlay_appearance.stats_text_r,
         settings->overlay_appearance.stats_text_g,
         settings->overlay_appearance.stats_text_b,
         settings->overlay_appearance.stats_text_a
-    ));
+    )));
     
     // Build the main stats text line
     std::stringstream stats_txt_buff{};
@@ -249,20 +252,20 @@ void Steam_Overlay_Stats::render_stats(int current_language)
         if (show_frametime && vis_count > 1) {
             if (show_frametime_graph) {
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Frametime");
+                ImGui::TextColored(tc(ImVec4(0.8f, 0.8f, 0.4f, 1.0f)), "Frametime");
 
                 float ft_scale_max = max_frametime_ms * 1.2f;
                 if (ft_scale_max < 1.0f) ft_scale_max = 1.0f;
 
-                ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
+                ImGui::PushStyleColor(ImGuiCol_PlotLines, tc(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, tc(ImVec4(0.0f, 0.0f, 0.0f, 0.3f)));
                 ImGui::PlotLines("##ft_graph", ft_data.data(), vis_count, 0, nullptr,
                     0.0f, ft_scale_max, ImVec2(content_width, graph_height));
                 ImGui::PopStyleColor(2);
             }
 
             if (show_min_max_avg) {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                ImGui::TextColored(tc(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)),
                     "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
                     display_min_ft, display_avg_ft, display_max_ft);
             }
@@ -284,7 +287,7 @@ void Steam_Overlay_Stats::render_stats(int current_language)
                     char buf[32]; snprintf(buf, sizeof(buf), "5%% high: %.1fms", ft_percentile(0.95f));
                     pct_line += buf;
                 }
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", pct_line.c_str());
+                ImGui::TextColored(tc(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "%s", pct_line.c_str());
             }
         }
 
@@ -296,20 +299,20 @@ void Steam_Overlay_Stats::render_stats(int current_language)
 
             if (show_fps_graph) {
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "FPS");
+                ImGui::TextColored(tc(ImVec4(0.8f, 0.8f, 0.4f, 1.0f)), "FPS");
 
                 float fps_scale_max = fps_max * 1.2f;
                 if (fps_scale_max < 1.0f) fps_scale_max = 1.0f;
 
-                ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.4f, 0.6f, 1.0f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
+                ImGui::PushStyleColor(ImGuiCol_PlotLines, tc(ImVec4(0.4f, 0.6f, 1.0f, 1.0f)));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, tc(ImVec4(0.0f, 0.0f, 0.0f, 0.3f)));
                 ImGui::PlotLines("##fps_graph", fps_data.data(), vis_count, 0, nullptr,
                     0.0f, fps_scale_max, ImVec2(content_width, graph_height));
                 ImGui::PopStyleColor(2);
             }
 
             if (show_min_max_avg) {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                ImGui::TextColored(tc(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)),
                     "Min: %.0f  Avg: %.0f  Max: %.0f",
                     fps_min, fps_avg, fps_max);
             }
@@ -331,7 +334,7 @@ void Steam_Overlay_Stats::render_stats(int current_language)
                     char buf[32]; snprintf(buf, sizeof(buf), "5%% Low: %.0f", fps_low(0.05f));
                     pct_line += buf;
                 }
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", pct_line.c_str());
+                ImGui::TextColored(tc(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "%s", pct_line.c_str());
             }
         }
     }

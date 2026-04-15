@@ -45,21 +45,49 @@ static void format_ip_address(uint32 ip, char *buf, size_t len);
   #define EMU_BUILD_DATE_STRING "unknown"
 #endif
 
-// Swapchain format detection for sRGB decode decision.
-// KEY INSIGHT: ingame_overlay always forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV,
-// so there is NO hardware sRGB encoding at the overlay render-pass level.
-// sRGB-encoded PNG bytes write directly to the back buffer as raw UNORM values.
-//   8-bit SDR swap chain  : hardware presents the UNORM bytes; display interprets correctly.
-//   FP16/scRGB swap chain : sRGB bytes end up stored as linear-space floats in the FP16 buffer
-//                           and appear over-bright/over-saturated without pre-decode.
-//   HDR10 R10G10B10A2     : PQ-encoded; sRGB decode would make colours wrong.
-// Therefore decode is ONLY correct for FP16/scRGB (R16G16B16A16_FLOAT).
+// Swapchain colour-space classification for overlay gamma correction.
 //
-// s_swapchain_is_linear values:
-//   -1 = not yet detected
-//    0 = FP16/scRGB (R16G16B16A16_FLOAT) -> sRGB decode IS needed
-//    1 = any other format (8-bit SDR, HDR10, unknown) -> no decode needed
-static int         s_swapchain_is_linear = -1;
+// The overlay renders into the game's back-buffer.  Depending on the swap chain
+// format the GPU interprets pixel values differently, so we must pre-transform
+// sRGB image bytes and ImGui colours to match.
+//
+// Classification:
+//   SCS_UNKNOWN       (-1)  Not yet detected — treated as SDR (no transform).
+//   SCS_LINEAR_HDR    ( 0)  FP16 scRGB / FP32 / 16-bit linear UNORM.
+//                            Needs:  sRGB→linear decode  +  SDR-white scale.
+//   SCS_SDR_UNORM     ( 1)  Standard 8- or 16-bit SDR (no hw sRGB encoding).
+//                            Needs:  optional mild contrast boost.
+//   SCS_HDR10_PQ      ( 2)  10-bit HDR10 with PQ (ST.2084) transfer.
+//                            Needs:  sRGB→linear→PQ encode  +  nit scaling.
+//   SCS_SDR_SRGB_RTV  ( 3)  _SRGB back-buffer (hw applies sRGB on RTV write).
+//                            Needs:  sRGB→linear decode (NO SDR-white scale)
+//                            so the hardware re-encodes it back correctly.
+enum SwapchainColorSpace : int {
+    SCS_UNKNOWN      = -1,
+    SCS_LINEAR_HDR   =  0,   // FP16 scRGB, FP32, 16-bit linear UNORM
+    SCS_SDR_UNORM    =  1,   // Standard SDR 8/16-bit
+    SCS_HDR10_PQ     =  2,   // HDR10 PQ (ST.2084, R10G10B10A2)
+    SCS_SDR_SRGB_RTV =  3,   // _SRGB back-buffer (hw sRGB encoding)
+};
+static SwapchainColorSpace s_swapchain_cs = SCS_UNKNOWN;
+// File-scope pointer to the current Overlay_Appearance, set once per frame in overlay_render_proc.
+static const Overlay_Appearance *s_ov_app = nullptr;
+
+// Resolve the effective colour space, respecting the user's Swapchain_Override setting.
+static SwapchainColorSpace effective_swapchain_cs()
+{
+    if (s_ov_app) {
+        using SO = Overlay_Appearance::SwapchainOverride;
+        switch (s_ov_app->swapchain_override) {
+            case SO::LinearHDR: return SCS_LINEAR_HDR;
+            case SO::HDR10PQ:   return SCS_HDR10_PQ;
+            case SO::SrgbRTV:   return SCS_SDR_SRGB_RTV;
+            case SO::SDR:       return SCS_SDR_UNORM;
+            default: break; // Auto — fall through to detected
+        }
+    }
+    return s_swapchain_cs;
+}
 static const char* s_swapchain_fmt_str   = "Detecting..."; // DXGI format name
 static const char* s_swapchain_type_str  = "Detecting..."; // HDR/SDR type  |  gamma  |  colour gamut
 // SDR white level scale for HDR colour correction.
@@ -77,7 +105,7 @@ static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale();
 // Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
 static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
 {
-    s_swapchain_is_linear = -1;
+    s_swapchain_cs = SCS_UNKNOWN;
     s_swapchain_fmt_str   = "Detecting...";
     s_swapchain_type_str  = "Detecting...";
     r->SetScreenshotCallback([](InGameOverlay::ScreenshotCallbackParameter_t const* sc, void* user) {
@@ -85,102 +113,117 @@ static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
         if (!sc || sc->Format == F::Unknown) {
             s_swapchain_fmt_str  = "Unknown";
             s_swapchain_type_str = "Unknown";
-            s_swapchain_is_linear = 1;
+            s_swapchain_cs = SCS_SDR_UNORM;
         } else {
             switch (sc->Format) {
-                // ---- HDR / float formats -------------------------------------------
+                // ---- HDR / linear float formats ------------------------------------
                 case F::R16G16B16A16_FLOAT:
                     s_swapchain_fmt_str  = "R16G16B16A16_FLOAT";
                     s_swapchain_type_str = "HDR  |  scRGB / Linear  |  BT.709+";
-                    s_swapchain_is_linear = 0; // FP16: sRGB decode needed
+                    s_swapchain_cs = SCS_LINEAR_HDR;
                     break;
                 case F::R16G16B16A16_UNORM:
                     s_swapchain_fmt_str  = "R16G16B16A16_UNORM";
                     s_swapchain_type_str = "HDR  |  Linear UNORM  |  BT.2020";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_LINEAR_HDR;
                     break;
                 case F::R32G32B32A32_FLOAT:
                     s_swapchain_fmt_str  = "R32G32B32A32_FLOAT";
                     s_swapchain_type_str = "HDR  |  Linear FP32  |  wide gamut";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_LINEAR_HDR;
                     break;
-                // ---- 10-bit HDR10 formats ------------------------------------------
+                // ---- 10-bit HDR10 / PQ formats -------------------------------------
                 case F::R10G10B10A2:
                     s_swapchain_fmt_str  = "R10G10B10A2_UNORM";
                     s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_HDR10_PQ;
                     break;
                 case F::A2R10G10B10:
                     s_swapchain_fmt_str  = "A2R10G10B10_UNORM";
                     s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_HDR10_PQ;
                     break;
                 case F::A2B10G10R10:
                     s_swapchain_fmt_str  = "A2B10G10R10_UNORM";
                     s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_HDR10_PQ;
                     break;
-                // ---- 8-bit SDR formats ---------------------------------------------
+                // ---- 8-bit SDR formats (_SRGB = hardware sRGB encoding on RTV) -----
+                case F::R8G8B8A8_SRGB:
+                    s_swapchain_fmt_str  = "R8G8B8A8_UNORM_SRGB";
+                    s_swapchain_type_str = "SDR  |  sRGB (hw decode)  |  Rec.709";
+                    s_swapchain_cs = SCS_SDR_SRGB_RTV;
+                    break;
+                case F::B8G8R8A8_SRGB:
+                    s_swapchain_fmt_str  = "B8G8R8A8_UNORM_SRGB";
+                    s_swapchain_type_str = "SDR  |  sRGB (hw decode)  |  Rec.709";
+                    s_swapchain_cs = SCS_SDR_SRGB_RTV;
+                    break;
+                case F::B8G8R8X8_SRGB:
+                    s_swapchain_fmt_str  = "B8G8R8X8_UNORM_SRGB";
+                    s_swapchain_type_str = "SDR  |  sRGB (hw decode)  |  Rec.709  (no alpha)";
+                    s_swapchain_cs = SCS_SDR_SRGB_RTV;
+                    break;
                 case F::R8G8B8A8:
                     s_swapchain_fmt_str  = "R8G8B8A8_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::B8G8R8A8:
                     s_swapchain_fmt_str  = "B8G8R8A8_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::B8G8R8X8:
                     s_swapchain_fmt_str  = "B8G8R8X8_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709  (no alpha)";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::R8G8B8:
                     s_swapchain_fmt_str  = "R8G8B8";
                     s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709  (24-bit packed)";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::X8R8G8B8:
                     s_swapchain_fmt_str  = "X8R8G8B8";
                     s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::A8R8G8B8:
                     s_swapchain_fmt_str  = "A8R8G8B8";
                     s_swapchain_type_str = "SDR  |  sRGB  |  Rec.709";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 // ---- 16-bit SDR formats (legacy/DX9) -------------------------------
                 case F::R5G6B5:
                     s_swapchain_fmt_str  = "R5G6B5_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  16-bit RGB565";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::B5G6R5:
                     s_swapchain_fmt_str  = "B5G6R5_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  16-bit BGR565";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::X1R5G5B5:
                     s_swapchain_fmt_str  = "X1R5G5B5_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  16-bit 1555";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::A1R5G5B5:
                     s_swapchain_fmt_str  = "A1R5G5B5_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  16-bit 1555";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 case F::B5G5R5A1:
                     s_swapchain_fmt_str  = "B5G5R5A1_UNORM";
                     s_swapchain_type_str = "SDR  |  sRGB  |  16-bit 5551";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
                 default:
                     s_swapchain_fmt_str  = "Unknown format";
                     s_swapchain_type_str = "Unknown";
-                    s_swapchain_is_linear = 1;
+                    s_swapchain_cs = SCS_SDR_UNORM;
                     break;
             }
         }
@@ -470,7 +513,7 @@ bool Steam_Overlay::renderer_hook_proc()
                 _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::None);
                 // One-shot screenshot to detect the actual back-buffer format.
                 // BeforeOverlay fires before OverlayProc in the same frame,
-                // so s_swapchain_is_linear is set before any AttachResource call.
+                // so s_swapchain_cs is set before any AttachResource call.
                 arm_swapchain_format_detect(_renderer);
             }
         }
@@ -1743,9 +1786,9 @@ void Steam_Overlay::build_notifications(float width, float height)
             ? settings->overlay_appearance.notification_a
             : 1.0f;
         
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, settings_noti_alpha));
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, get_notification_bg_rgba_safe());
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(255, 255, 255, settings_noti_alpha * 2));
+        ImGui::PushStyleColor(ImGuiCol_Border, adjust_imgui_color_for_swapchain(ImVec4(0, 0, 0, settings_noti_alpha)));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, adjust_imgui_color_for_swapchain(get_notification_bg_rgba_safe()));
+        ImGui::PushStyleColor(ImGuiCol_Text, adjust_imgui_color_for_swapchain(ImVec4(1.0f, 1.0f, 1.0f, settings_noti_alpha)));
        
         // some extra window flags for each notification type
         ImGuiWindowFlags extra_flags = ImGuiWindowFlags_NoFocusOnAppearing;
@@ -2184,32 +2227,20 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
     using RHT = InGameOverlay::RendererHookType_t;
     using SD  = Overlay_Appearance::SrgbDecode;
 
-    bool should_decode = false;
-    if (mode == SD::On) {
-        should_decode = true;
-    } else if (mode == SD::Auto && renderer) {
-        // Only decode for modern APIs that have sRGB-encoded framebuffers
-        switch (renderer->GetRendererHookType()) {
-            case RHT::DirectX10:
-            case RHT::DirectX11:
-            case RHT::DirectX12:
-            case RHT::Vulkan:
-            case RHT::Metal:
-                should_decode = true;
-                break;
-            default:
-                break; // DX9, OpenGL: linear framebuffer -> no decode needed
-        }
-        // Only decode when explicitly confirmed FP16/scRGB (s_swapchain_is_linear == 0).
-        // When unknown (-1) or confirmed non-FP16 (1): skip decode.
-        if (should_decode && s_swapchain_is_linear != 0)
-            should_decode = false;
-    }
+    // Determine which transform path to take based on the swap chain classification.
+    // Possible paths:
+    //   decode_linear_hdr  : sRGB→linear + SDR-white scale  (scRGB / FP16 / FP32 / 16-bit linear)
+    //   decode_pq          : sRGB→linear→PQ encode + nit scale  (HDR10 PQ swap chains)
+    //   decode_srgb_rtv    : sRGB→linear only (no scale)  (_SRGB back-buffer with hw encoding)
+    //   sdr_contrast       : mild 1.15× contrast boost  (SDR UNORM, modern APIs)
+    //   (none)             : raw pass-through
+    bool decode_linear_hdr = false;
+    bool decode_pq         = false;
+    bool decode_srgb_rtv   = false;
+    bool sdr_contrast      = false;
 
-    // SDR contrast boost: on modern APIs when swap chain is confirmed SDR and mode != Off.
-    bool should_sdr_contrast = false;
-    if (!should_decode && mode != SD::Off && renderer) {
-        bool modern_api = false;
+    bool modern_api = false;
+    if (renderer) {
         switch (renderer->GetRendererHookType()) {
             case RHT::DirectX10:
             case RHT::DirectX11:
@@ -2221,20 +2252,37 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
             default:
                 break;
         }
-        if (modern_api && s_swapchain_is_linear == 1)
-            should_sdr_contrast = true;
     }
 
-    if (!should_decode && !should_sdr_contrast) return;
+    const SwapchainColorSpace ecs = effective_swapchain_cs();
 
-    if (should_decode) {
-        // HDR / FP16-scRGB path: sRGB->linear decode scaled by s_sdr_white_scale.
+    if (mode == SD::On) {
+        // Forced on: pick path based on effective colour space, or fall back to linear HDR decode.
+        switch (ecs) {
+            case SCS_HDR10_PQ:     decode_pq = true;         break;
+            case SCS_SDR_SRGB_RTV: decode_srgb_rtv = true;   break;
+            default:               decode_linear_hdr = true;  break;
+        }
+    } else if (mode == SD::Auto && modern_api) {
+        switch (ecs) {
+            case SCS_LINEAR_HDR:   decode_linear_hdr = true;  break;
+            case SCS_HDR10_PQ:     decode_pq = true;          break;
+            case SCS_SDR_SRGB_RTV: decode_srgb_rtv = true;    break;
+            case SCS_SDR_UNORM:    sdr_contrast = true;       break;
+            default: break; // SCS_UNKNOWN: no transform
+        }
+    }
+
+    if (!decode_linear_hdr && !decode_pq && !decode_srgb_rtv && !sdr_contrast) return;
+
+    if (decode_linear_hdr) {
+        // HDR / FP16-scRGB path: sRGB→linear decode scaled by s_sdr_white_scale.
         // s_sdr_white_scale = sdr_white_nits / 80.0f (queried from the OS display API).
         // scRGB convention: 1.0 = 80 nits.  If Windows SDR white is 200 nits, the OS
-        // scales SDR content by 2.5x when compositing.  We apply the same factor so our
+        // scales SDR content by 2.5× when compositing.  We apply the same factor so our
         // overlay sits at the same perceived brightness as the game's own SDR UI.
-        // Values beyond (1.0 / scale) saturate at uint8 255 (= 1.0 in the UNORM RTV),
-        // which is an acceptable trade-off for near-white highlights.
+        // To mitigate the uint8 saturation problem for high SDR-white scales, we use a
+        // soft shoulder (Reinhard-like) that compresses highlights instead of hard-clipping.
         static uint8_t hdr_lut[256];
         static float   hdr_lut_built_for = -1.0f;
         if (hdr_lut_built_for != s_sdr_white_scale) {
@@ -2243,17 +2291,78 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
                 float s = i / 255.0f;
                 float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
                 l *= s_sdr_white_scale; // lift to match display SDR white brightness
+                // Soft shoulder: Reinhard tone-map when scale > 1 to avoid hard clipping.
+                // Maps [0, ∞) → [0, 1).  At scale=1 it's close to identity below 1.0.
+                if (s_sdr_white_scale > 1.0f)
+                    l = l / (1.0f + l);
                 hdr_lut[i] = (uint8_t)(fminf(l * 255.0f + 0.5f, 255.0f));
             }
         }
-        // Apply to R, G, B channels; leave A linear (correct for RGBA PNG)
         for (size_t i = 0; i < npixels; ++i, rgba += 4) {
             rgba[0] = hdr_lut[rgba[0]];
             rgba[1] = hdr_lut[rgba[1]];
             rgba[2] = hdr_lut[rgba[2]];
         }
+    } else if (decode_pq) {
+        // HDR10 PQ path: sRGB → linear → PQ (ST.2084) encode.
+        // PQ reference: ITU-R BT.2100, SMPTE ST 2084.
+        //   m1 = 2610 / 16384 = 0.1593017578125
+        //   m2 = 2523 / 32    = 78.84375
+        //   c1 = 3424 / 4096  = 0.8359375    (= c3 − c2 + 1)
+        //   c2 = 2413 / 128   = 18.8515625
+        //   c3 = 2392 / 128   = 18.6875
+        // Input:  linear light normalised to 10000 nits  →  L = linear_nits / 10000.
+        // Output: PQ value [0, 1] → scale to uint8 [0, 255].
+        // SDR UI at s_sdr_white_scale*80 nits (e.g. 200 nits) → PQ ≈ 0.509 → uint8 ≈ 130.
+        static uint8_t pq_lut[256];
+        static float   pq_lut_built_for = -1.0f;
+        if (pq_lut_built_for != s_sdr_white_scale) {
+            pq_lut_built_for = s_sdr_white_scale;
+            constexpr float m1 = 0.1593017578125f;
+            constexpr float m2 = 78.84375f;
+            constexpr float c1 = 0.8359375f;
+            constexpr float c2 = 18.8515625f;
+            constexpr float c3 = 18.6875f;
+            for (int i = 0; i < 256; ++i) {
+                float s = i / 255.0f;
+                // sRGB EOTF → linear [0,1] where 1 = diffuse white
+                float lin = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
+                // Scale to absolute nits, then normalise to 10000.
+                float nits = lin * s_sdr_white_scale * 80.0f; // e.g. 1.0 * 2.5 * 80 = 200 nits
+                float Y = fminf(nits / 10000.0f, 1.0f);
+                // PQ OETF
+                float Ym1 = powf(Y, m1);
+                float pq  = powf((c1 + c2 * Ym1) / (1.0f + c3 * Ym1), m2);
+                pq_lut[i] = (uint8_t)(fminf(pq * 255.0f + 0.5f, 255.0f));
+            }
+        }
+        for (size_t i = 0; i < npixels; ++i, rgba += 4) {
+            rgba[0] = pq_lut[rgba[0]];
+            rgba[1] = pq_lut[rgba[1]];
+            rgba[2] = pq_lut[rgba[2]];
+        }
+    } else if (decode_srgb_rtv) {
+        // _SRGB back-buffer path: the RTV has hardware sRGB encoding, so the GPU will
+        // apply sRGB OETF on write.  If we feed sRGB bytes, they get double-encoded
+        // (too dark).  Fix: decode to linear first; the hardware re-encodes to sRGB.
+        // No SDR-white scale — this is an SDR display path.
+        static uint8_t srgb_rtv_lut[256];
+        static bool srgb_rtv_lut_ready = false;
+        if (!srgb_rtv_lut_ready) {
+            for (int i = 0; i < 256; ++i) {
+                float s = i / 255.0f;
+                float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
+                srgb_rtv_lut[i] = (uint8_t)(fminf(l * 255.0f + 0.5f, 255.0f));
+            }
+            srgb_rtv_lut_ready = true;
+        }
+        for (size_t i = 0; i < npixels; ++i, rgba += 4) {
+            rgba[0] = srgb_rtv_lut[rgba[0]];
+            rgba[1] = srgb_rtv_lut[rgba[1]];
+            rgba[2] = srgb_rtv_lut[rgba[2]];
+        }
     } else {
-        // SDR path: mild contrast boost (~1.15x) in the sRGB domain around mid-grey.
+        // SDR path: mild contrast boost (~1.15×) in the sRGB domain around mid-grey.
         static uint8_t sdr_lut[256];
         static bool sdr_lut_ready = false;
         if (!sdr_lut_ready) {
@@ -2266,7 +2375,6 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
             }
             sdr_lut_ready = true;
         }
-        // Apply to R, G, B channels; leave A unchanged
         for (size_t i = 0; i < npixels; ++i, rgba += 4) {
             rgba[0] = sdr_lut[rgba[0]];
             rgba[1] = sdr_lut[rgba[1]];
@@ -2276,22 +2384,51 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
 }
 
 // Decode an sRGB float channel to linear and scale by s_sdr_white_scale.
-// Used to adjust ImGui style colors for FP16/scRGB (HDR) swap chains.
-// Float ImGui values are not clamped, so values above 1.0 are valid in the FP16
-// framebuffer and will appear brighter than SDR reference white — correct for HDR.
+// Used to adjust ImGui style colors for linear-HDR and PQ swap chains.
+// For _SRGB back-buffers, decode to linear only (no scale).
 static float srgb_ch_decode_scale(float c)
 {
     float l = (c <= 0.04045f) ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
     return l * s_sdr_white_scale;
 }
-static ImVec4 adjust_imgui_color_for_hdr(ImVec4 c)
+// PQ OETF for a single float channel (used for ImGui colours on HDR10 PQ swap chains).
+static float srgb_ch_to_pq(float c)
 {
-    // Only transform when confirmed FP16/scRGB; alpha is preserved as-is.
-    if (s_swapchain_is_linear != 0) return c;
-    return ImVec4(srgb_ch_decode_scale(c.x),
-                  srgb_ch_decode_scale(c.y),
-                  srgb_ch_decode_scale(c.z),
-                  c.w);
+    constexpr float m1 = 0.1593017578125f;
+    constexpr float m2 = 78.84375f;
+    constexpr float c1 = 0.8359375f;
+    constexpr float c2 = 18.8515625f;
+    constexpr float c3 = 18.6875f;
+    float lin = (c <= 0.04045f) ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+    float nits = lin * s_sdr_white_scale * 80.0f;
+    float Y = fminf(nits / 10000.0f, 1.0f);
+    float Ym1 = powf(Y, m1);
+    return powf((c1 + c2 * Ym1) / (1.0f + c3 * Ym1), m2);
+}
+// sRGB→linear only (no scale) — for _SRGB back-buffer.
+static float srgb_ch_decode_only(float c)
+{
+    return (c <= 0.04045f) ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+}
+static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c)
+{
+    // Only transform when a non-SDR-UNORM colour space is confirmed.  Alpha preserved as-is.
+    switch (effective_swapchain_cs()) {
+        case SCS_LINEAR_HDR:
+            return ImVec4(srgb_ch_decode_scale(c.x),
+                          srgb_ch_decode_scale(c.y),
+                          srgb_ch_decode_scale(c.z), c.w);
+        case SCS_HDR10_PQ:
+            return ImVec4(srgb_ch_to_pq(c.x),
+                          srgb_ch_to_pq(c.y),
+                          srgb_ch_to_pq(c.z), c.w);
+        case SCS_SDR_SRGB_RTV:
+            return ImVec4(srgb_ch_decode_only(c.x),
+                          srgb_ch_decode_only(c.y),
+                          srgb_ch_decode_only(c.z), c.w);
+        default:
+            return c;
+    }
 }
 
 bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, bool upload_new_icon_to_gpu)
@@ -2426,6 +2563,10 @@ void Steam_Overlay::overlay_render_proc()
 
     if (!Ready()) return;
 
+    // Give the file-scope helper access to the current appearance settings
+    // so effective_swapchain_cs() can resolve the user's Swapchain_Override.
+    s_ov_app = &settings->overlay_appearance;
+
     // Deferred SCE texture cleanup - do this BEFORE any ImGui rendering
     // to avoid deleting resources mid-frame (which crashes DX9)
     if (sce_textures_pending_free) {
@@ -2450,17 +2591,19 @@ void Steam_Overlay::overlay_render_proc()
     // HDR style color normalisation.
     // ingame_overlay forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV, so ImGui vertex
     // colours (authored as sRGB 0-1 floats) are stored as raw UNORM floats when the
-    // overlay is composited into an FP16/scRGB swap chain.  That makes every UI element
-    // appear too dark and over-saturated in HDR.  We apply sRGB->linear + brightness
-    // lift to all style colours for the duration of this frame and restore afterwards.
+    // overlay is composited into the game's swap chain.  Depending on the colour space
+    // (scRGB, HDR10 PQ, or _SRGB), ImGui style colours (authored as sRGB 0-1 floats)
+    // must be transformed to match.  We patch all style colours for the duration of
+    // this frame and restore them afterwards.
     ImVec4 saved_imgui_colors[ImGuiCol_COUNT];
     bool imgui_colors_patched = false;
-    if (s_swapchain_is_linear == 0) {
+    const SwapchainColorSpace ecs = effective_swapchain_cs();
+    if (ecs == SCS_LINEAR_HDR || ecs == SCS_HDR10_PQ || ecs == SCS_SDR_SRGB_RTV) {
         ImVec4 *cols = ImGui::GetStyle().Colors;
         memcpy(saved_imgui_colors, cols, sizeof(saved_imgui_colors));
         for (int i = 0; i < ImGuiCol_COUNT; ++i) {
             if (cols[i].w <= 0.f) continue; // skip fully transparent
-            cols[i] = adjust_imgui_color_for_hdr(cols[i]);
+            cols[i] = adjust_imgui_color_for_swapchain(cols[i]);
         }
         imgui_colors_patched = true;
     }
@@ -2470,6 +2613,8 @@ void Steam_Overlay::overlay_render_proc()
     }
 
     if (stats.show_any_stats()) {
+        // Give the stats HUD the same swapchain colour transform as the main overlay
+        stats.color_transform = imgui_colors_patched ? adjust_imgui_color_for_swapchain : nullptr;
         stats.render_stats(current_language);
     }
 
@@ -2498,7 +2643,7 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.background_g >= 0) &&
         (settings->overlay_appearance.background_b >= 0) &&
         (settings->overlay_appearance.background_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
             settings->overlay_appearance.background_r,
             settings->overlay_appearance.background_g,
             settings->overlay_appearance.background_b,
@@ -2512,7 +2657,7 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_g >= 0) &&
         (settings->overlay_appearance.element_b >= 0) &&
         (settings->overlay_appearance.element_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
             settings->overlay_appearance.element_r,
             settings->overlay_appearance.element_g,
             settings->overlay_appearance.element_b,
@@ -2529,7 +2674,7 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_hovered_g >= 0) &&
         (settings->overlay_appearance.element_hovered_b >= 0) &&
         (settings->overlay_appearance.element_hovered_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
             settings->overlay_appearance.element_hovered_r,
             settings->overlay_appearance.element_hovered_g,
             settings->overlay_appearance.element_hovered_b,
@@ -2546,7 +2691,7 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_active_g >= 0) &&
         (settings->overlay_appearance.element_active_b >= 0) &&
         (settings->overlay_appearance.element_active_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_hdr(ImVec4(
+        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
             settings->overlay_appearance.element_active_r,
             settings->overlay_appearance.element_active_g,
             settings->overlay_appearance.element_active_b,
@@ -2903,18 +3048,41 @@ void Steam_Overlay::render_main_window()
                 corr_reason = "Image_Gamma=off in config";
             } else if (!hdr_api) {
                 corr_str    = "OFF";
-                corr_reason = "DX9/OpenGL — linear, no sRGB encoding";
-            } else if (s_swapchain_is_linear == 0) {
-                corr_str    = "ON ";
-                corr_reason = "FP16/scRGB detected — pre-decoding sRGB -> linear";
-            } else if (s_swapchain_is_linear == 1) {
-                corr_str    = "OFF";
-                corr_reason = "non-FP16 swap chain — UNORM bytes pass through unchanged";
+                corr_reason = "DX9/OpenGL — legacy, no colour-space transform";
             } else {
-                corr_str    = "OFF";
-                corr_reason = "awaiting swap chain format detection";
+                const SwapchainColorSpace ecs = effective_swapchain_cs();
+                switch (ecs) {
+                    case SCS_LINEAR_HDR:
+                        corr_str    = "ON ";
+                        corr_reason = "linear HDR (FP16/FP32/UNORM16) — sRGB->linear + SDR-white scale";
+                        break;
+                    case SCS_HDR10_PQ:
+                        corr_str    = "ON ";
+                        corr_reason = "HDR10 PQ — sRGB->linear->PQ (ST.2084) encode";
+                        break;
+                    case SCS_SDR_SRGB_RTV:
+                        corr_str    = "ON ";
+                        corr_reason = "_SRGB back-buffer — sRGB->linear (hw re-encodes)";
+                        break;
+                    case SCS_SDR_UNORM:
+                        corr_str    = "OFF";
+                        corr_reason = "SDR UNORM — bytes pass through unchanged";
+                        break;
+                    default:
+                        corr_str    = "OFF";
+                        corr_reason = "awaiting swap chain format detection";
+                        break;
+                }
             }
             ImGui::TextDisabled("sRGB corr. : %s  — %s", corr_str, corr_reason);
+            {
+                int so = static_cast<int>(settings->overlay_appearance.swapchain_override);
+                if (so > 0) {
+                    static const char* ov_names[] = { "auto", "linear_hdr", "hdr10_pq", "srgb_rtv", "sdr" };
+                    const char* ov_name = (so >= 1 && so <= 4) ? ov_names[so] : "?";
+                    ImGui::TextDisabled("           : Swapchain_Override=%s (user config)", ov_name);
+                }
+            }
 
             // -- Per-display info (queried once per launch; also updates s_sdr_white_scale) --
             static bool displays_queried = false;
@@ -2952,9 +3120,11 @@ void Steam_Overlay::render_main_window()
                 if (_renderer)
                     arm_swapchain_format_detect(_renderer);
             }
-            if (s_swapchain_is_linear == 0)
+            { const auto ecs = effective_swapchain_cs();
+            if (ecs == SCS_LINEAR_HDR || ecs == SCS_HDR10_PQ)
                 ImGui::TextDisabled("HDR scale  : %.2fx  (SDR white = %d nits)",
                     s_sdr_white_scale, (int)(s_sdr_white_scale * 80.f + 0.5f));
+            }
         }
         ImGui::Separator();
         // -------------------------------------------------------------------
