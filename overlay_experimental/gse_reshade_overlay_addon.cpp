@@ -559,8 +559,8 @@ static bool try_connect_bridge()
 {
     if (s_bridge_ok) return true;
 
-    // Try common emu DLL names
-    const char *names[] = { "steam_api64.dll", "steam_api.dll" };
+    // Try common emu DLL names (includes steamclient for coldloader/steamclient_loader mode)
+    const char *names[] = { "steam_api64.dll", "steam_api.dll", "steamclient64.dll", "steamclient.dll" };
     for (auto name : names) {
         s_emu_dll = GetModuleHandleA(name);
         if (s_emu_dll) break;
@@ -670,6 +670,29 @@ static void on_destroy_device(device *dev)
             free_icon(dev, icon);
         dev->destroy_private_data<addon_device_data>();
     }
+}
+
+// Called before D3D9 Reset / DXGI ResizeBuffers / vkDestroySwapchain etc.
+// D3D9 D3DPOOL_DEFAULT resources become invalid on Reset — must release them.
+// D3D11/D3D12/Vulkan/OpenGL textures are device-level and survive resize, so skip.
+static void on_destroy_swapchain(swapchain *sc, bool)
+{
+    device *dev = sc->get_device();
+    if (!dev) return;
+    if (dev->get_api() != device_api::d3d9) return;
+
+    auto *data = dev->get_private_data<addon_device_data>();
+    if (!data) return;
+
+    for (auto &[key, icon] : data->icon_cache)
+        free_icon(dev, icon);
+    data->icon_cache.clear();
+    for (auto &[key, icon] : data->avatar_cache)
+        free_icon(dev, icon);
+    data->avatar_cache.clear();
+    for (auto &icon : data->pending_destroy)
+        free_icon(dev, icon);
+    data->pending_destroy.clear();
 }
 
 /* ── Helper: get or upload a cached icon by key ───────────────────────── */
@@ -4006,6 +4029,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         // Device lifecycle for texture management
         reshade::register_event<reshade::addon_event::init_device>(on_init_device);
         reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
+        reshade::register_event<reshade::addon_event::destroy_swapchain>(on_destroy_swapchain);
 
         // The reshade_overlay event fires between ImGui::NewFrame and EndFrame
         // EVERY frame, regardless of whether the ReShade overlay panel is open.
