@@ -121,7 +121,7 @@ jobs:
         shell: "cmd"
         working-directory: "${{ github.workspace }}/build/project/vs2022/win"
         run: |
-          msbuild /nologo /target:${{ matrix.prj }} /m:1 -p:CL_MPCount=${{ env.MAX_PARALLEL_JOBS }} /v:n /p:Configuration=${{ matrix.cfg }},Platform=${{ matrix.arch }} gbe.sln
+          msbuild /nologo /target:${{ matrix.prj }} /m:1 -p:CL_MPCount=${{ env.MAX_PARALLEL_JOBS }} /v:n /p:Configuration=${{ matrix.cfg }},Platform=${{ matrix.arch }} gse.sln
 
       # upload artifact/package to github Actions
       - name: "Upload target package"

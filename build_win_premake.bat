@@ -90,7 +90,7 @@ set /a "BUILD_JOBS=-1"
 :gen_project_end
 
   :: check .sln
-  set "SLN_FILE=build\project\vs2022\win\gbe.sln"
+  set "SLN_FILE=build\project\vs2022\win\gse.sln"
   if not exist "%SLN_FILE%" (
     1>&2 echo:.sln file wasn't found
     goto :end_script_with_err
