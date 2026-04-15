@@ -328,7 +328,6 @@ local deps_link = {
     "mbedtls"            .. static_postfix,
     "mbedx509"           .. static_postfix,
     "opus"               .. static_postfix,
-    "portaudio"          .. static_postfix,
 }
 -- add protobuf libs
 table_append(deps_link, {
@@ -447,6 +446,10 @@ local common_link_win = {
 }
 -- add deps to win
 table_append(common_link_win, deps_link)
+
+-- portaudio installs platform-suffixed static libs
+local x32_portaudio_link = { "portaudio_static_x86" .. static_postfix }
+local x64_portaudio_link = { "portaudio_static_x64" .. static_postfix }
 
 local common_link_linux = {
     -- os specific
@@ -840,11 +843,13 @@ project "api_regular"
     ---------
     -- x32 libs search dir
     filter { "platforms:x32", }
+        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
+        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
         }
@@ -970,12 +975,14 @@ project "api_experimental"
     ---------
     -- x32 libs search dir
     filter { "platforms:x32", }
+        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
             x32_deps_overlay_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
+        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
             x64_deps_overlay_libdir,
@@ -1107,12 +1114,14 @@ project "steamclient_experimental"
     ---------
     -- x32 libs search dir
     filter { "platforms:x32", }
+        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
             x32_deps_overlay_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
+        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
             x64_deps_overlay_libdir,
@@ -1200,11 +1209,13 @@ project "tool_lobby_connect"
     ---------
     -- x32 libs search dir
     filter { "platforms:x32", }
+        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
+        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
         }
@@ -1684,11 +1695,13 @@ project "steamclient_regular"
     ---------
     -- x32 libs search dir
     filter { "platforms:x32", }
+        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
+        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
         }
