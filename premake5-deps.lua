@@ -666,7 +666,7 @@ if _OPTIONS["build-curl"] or _OPTIONS["all-build"] then
         
         "CURL_USE_MBEDTLS=ON",
         -- "CURL_USE_SCHANNEL=ON",
-        "CURL_CA_FALLBACK=ON",
+        -- "CURL_CA_FALLBACK=ON", -- removed: only works with OpenSSL since curl 8.19.0
 
         -- fix building on Arch Linux
         "CURL_USE_LIBSSH2=OFF",
