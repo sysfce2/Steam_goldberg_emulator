@@ -654,6 +654,9 @@ filter { "system:windows", }
     defines {
         "_CRT_SECURE_NO_WARNINGS",
     }
+    disablewarnings {
+        "4834", -- C4834: discarding return value of [[nodiscard]] (protobuf SerializeToArray)
+    }
 -- Linux defines
 filter { "system:not windows" }
     defines {
