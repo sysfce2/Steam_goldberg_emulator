@@ -317,7 +317,7 @@ end
 
 local zlib_archive_name = 'z'
 if os.target() == 'windows' then
-    zlib_archive_name = 'zlibstatic' -- even on MinGw we need this name
+    zlib_archive_name = 'zs' -- zlib v1.3.2+ uses OUTPUT_NAME 'zs' on Windows
 end
 
 local deps_link = {

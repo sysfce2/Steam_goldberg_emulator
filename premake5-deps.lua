@@ -574,12 +574,12 @@ local mbedx509_name = ''
 -- name
 if _ACTION and os.target() == 'windows' then
     if string.match(_ACTION, 'vs.+') then
-        zlib_name = 'zlibstatic'
+        zlib_name = 'zs'
         mbedtls_name = 'mbedtls'
         mbedcrypto_name = 'mbedcrypto'
         mbedx509_name = 'mbedx509'
     elseif string.match(_ACTION, 'gmake.*') then
-        zlib_name = 'libzlibstatic'
+        zlib_name = 'libzs'
         mbedtls_name = 'libmbedtls'
         mbedcrypto_name = 'libmbedcrypto'
         mbedx509_name = 'libmbedx509'
