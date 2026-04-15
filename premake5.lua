@@ -757,7 +757,7 @@ end
 
 
 
-workspace "gbe"
+workspace "gse"
     location("build/project/%{_ACTION}/" .. os_iden)
 
 
