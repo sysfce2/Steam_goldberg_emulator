@@ -101,6 +101,7 @@ static bool        s_pending_sdr_refresh = false; // set on Reset/Removing; drai
 // Forward declaration — defined after query_display_hdr_details() below.
 struct DisplayHdrDetail_t;
 static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale();
+static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c);
 
 // Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
 static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
