@@ -462,6 +462,107 @@ static inline float srgb_to_linear(float s)
     return (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
 }
 
+// IEEE 754 binary16 (half-float) conversion for FP16 HDR texture upload.
+static inline uint16_t float_to_half(float value)
+{
+    uint32_t f32;
+    memcpy(&f32, &value, 4);
+    uint32_t sign = (f32 >> 16) & 0x8000;
+    int32_t  exp  = (int32_t)((f32 >> 23) & 0xFF) - 127;
+    uint32_t mant = f32 & 0x7FFFFF;
+
+    if (exp > 15)       return (uint16_t)(sign | 0x7C00);            // overflow → +/-inf
+    if (exp > -15)      return (uint16_t)(sign | ((exp + 15) << 10) | (mant >> 13)); // normal
+    if (exp > -25) {                                                  // denormal
+        mant |= 0x800000;
+        uint32_t shift = (uint32_t)(-14 - exp);
+        return (uint16_t)(sign | (mant >> (shift + 13)));
+    }
+    return (uint16_t)sign;                                           // too small → zero
+}
+
+// ── HDR texture pipeline ─────────────────────────────────────────────
+//
+// The overlay implements the same pipeline used by Steam Overlay, Xbox
+// Game Bar, and NVIDIA overlays for correct HDR compositing:
+//
+//   1. Sample the SDR (sRGB) source texture
+//   2. Convert sRGB → linear  (sRGB EOTF)
+//   3. Apply SDR white gain   (≈ 80–200 nits → display white level)
+//   4. Write into an FP16 HDR render target
+//
+// For per-colour transforms (ImGui style colours), steps 1-3 happen
+// per-channel in transform_color_for_swapchain() every frame.
+//
+// For textures (icons, avatars, images), we perform steps 1-4 at upload
+// time by converting RGBA8 sRGB pixels to R16G16B16A16_FLOAT with the
+// colour-space transform baked in.  This avoids the lossy 8-bit
+// quantisation + Reinhard tonemap that the old RGBA8 path required.
+// ─────────────────────────────────────────────────────────────────────
+
+// Transform RGBA8 sRGB pixel buffer to FP16 (R16G16B16A16_FLOAT) for the
+// current swapchain colour space.  Returns a uint16_t array with 4 halfs
+// per pixel (RGBA order).  Caller owns the returned vector.
+static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int w, int h,
+                                                      SwapchainColorSpace cs, float sdr_scale)
+{
+    const int pixel_count = w * h;
+    std::vector<uint16_t> out(pixel_count * 4);
+
+    if (cs == SCS_LINEAR_HDR) {
+        // sRGB → linear × SDR white scale.  No tonemap needed — FP16 stores > 1.0.
+        for (int i = 0; i < pixel_count; ++i) {
+            const uint8_t *src = pixels + i * 4;
+            uint16_t      *dst = out.data() + i * 4;
+            dst[0] = float_to_half(srgb_to_linear(src[0] / 255.0f) * sdr_scale);
+            dst[1] = float_to_half(srgb_to_linear(src[1] / 255.0f) * sdr_scale);
+            dst[2] = float_to_half(srgb_to_linear(src[2] / 255.0f) * sdr_scale);
+            dst[3] = float_to_half(src[3] / 255.0f);  // alpha: linear pass-through
+        }
+    } else if (cs == SCS_HDR10_PQ) {
+        // sRGB → linear → PQ (ST.2084) encode
+        const float nits = sdr_scale * 80.0f;
+        for (int i = 0; i < pixel_count; ++i) {
+            const uint8_t *src = pixels + i * 4;
+            uint16_t      *dst = out.data() + i * 4;
+            for (int c = 0; c < 3; ++c) {
+                float lin = srgb_to_linear(src[c] / 255.0f);
+                float L = (lin * nits) / 10000.0f;
+                if (L < 0.0f) L = 0.0f;
+                float Lm1 = powf(L, PQ_m1);
+                dst[c] = float_to_half(powf((PQ_c1 + PQ_c2 * Lm1) / (1.0f + PQ_c3 * Lm1), PQ_m2));
+            }
+            dst[3] = float_to_half(src[3] / 255.0f);
+        }
+    } else if (cs == SCS_SDR_SRGB_RTV) {
+        // sRGB → linear only (hw re-encodes sRGB on write to _SRGB RTV)
+        for (int i = 0; i < pixel_count; ++i) {
+            const uint8_t *src = pixels + i * 4;
+            uint16_t      *dst = out.data() + i * 4;
+            dst[0] = float_to_half(srgb_to_linear(src[0] / 255.0f));
+            dst[1] = float_to_half(srgb_to_linear(src[1] / 255.0f));
+            dst[2] = float_to_half(srgb_to_linear(src[2] / 255.0f));
+            dst[3] = float_to_half(src[3] / 255.0f);
+        }
+    } else {
+        // SDR / Unknown: simple 8-bit → FP16 passthrough (no transform)
+        for (int i = 0; i < pixel_count; ++i) {
+            const uint8_t *src = pixels + i * 4;
+            uint16_t      *dst = out.data() + i * 4;
+            dst[0] = float_to_half(src[0] / 255.0f);
+            dst[1] = float_to_half(src[1] / 255.0f);
+            dst[2] = float_to_half(src[2] / 255.0f);
+            dst[3] = float_to_half(src[3] / 255.0f);
+        }
+    }
+    return out;
+}
+
+// Track the colour space + SDR scale that cached textures were uploaded with.
+// When these change, the cache must be invalidated and textures re-uploaded.
+static SwapchainColorSpace s_cached_tex_cs    = SCS_UNKNOWN;
+static float               s_cached_tex_scale = 1.0f;
+
 // PQ (ST.2084) constants
 static constexpr float PQ_m1 = 0.1593017578125f;
 static constexpr float PQ_m2 = 78.84375f;
@@ -503,6 +604,17 @@ static ImVec4 transform_color_for_swapchain(const ImVec4 &col, SwapchainColorSpa
 // Shorthand: transform an inline sRGB ImVec4 for the active swapchain colour space.
 #define TC(c) transform_color_for_swapchain((c), s_addon_ecs, s_addon_sdr_scale)
 
+// Shorthand: transform an IM_COL32 (ImU32) colour for the active swapchain.
+// Use at call sites — NOT for constexpr/static initialisers.
+static inline ImU32 transform_color_u32(ImU32 col, SwapchainColorSpace cs, float sdr_scale)
+{
+    if (cs == SCS_SDR_UNORM || cs == SCS_UNKNOWN) return col;
+    ImVec4 v = ImGui::ColorConvertU32ToFloat4(col);
+    v = transform_color_for_swapchain(v, cs, sdr_scale);
+    return ImGui::ColorConvertFloat4ToU32(v);
+}
+#define TC32(c) transform_color_u32((c), s_addon_ecs, s_addon_sdr_scale)
+
 // Transform RGBA8 pixel buffer in-place for the current swapchain colour space.
 // Same logic as native overlay's srgb_decode_pixels_if_needed().
 static void transform_pixels_for_swapchain(uint8_t *pixels, int w, int h,
@@ -514,21 +626,13 @@ static void transform_pixels_for_swapchain(uint8_t *pixels, int w, int h,
     const int byte_count  = pixel_count * 4;
 
     if (cs == SCS_LINEAR_HDR) {
-        // sRGB → linear + SDR white scale, with soft-knee compression above 0.75.
-        // Values below the knee pass through linearly (matching ImGui vertex-color
-        // scaling).  Only highlights above the knee are softly compressed toward 1.0
-        // to avoid hard clipping in the UNORM8 output.
-        constexpr float knee       = 0.75f;
-        constexpr float knee_range = 1.0f - knee;  // 0.25
-        constexpr float knee_inv   = 1.0f / knee_range;
+        // sRGB → linear + SDR white scale, with Reinhard soft-shoulder if scale > 1
+        const bool need_tonemap = sdr_scale > 1.01f;
         for (int i = 0; i < byte_count; i += 4) {
             for (int c = 0; c < 3; ++c) {
                 float v = pixels[i + c] / 255.0f;
                 float lin = srgb_to_linear(v) * sdr_scale;
-                if (lin > knee) {
-                    float x = (lin - knee) * knee_inv;
-                    lin = knee + knee_range * (x / (1.0f + x));
-                }
+                if (need_tonemap) lin = lin / (1.0f + lin); // Reinhard
                 int b = (int)(lin * 255.0f + 0.5f);
                 pixels[i + c] = (uint8_t)(b < 0 ? 0 : (b > 255 ? 255 : b));
             }
@@ -637,24 +741,39 @@ static IconTexture upload_icon(device *dev, const uint8_t *pixels, int w, int h)
     IconTexture icon{};
     if (!dev || !pixels || w <= 0 || h <= 0) return icon;
 
-    // Transform pixel data for the current swapchain colour space.
-    // We need a mutable copy because the source may be read-only bridge memory.
-    const int byte_count = w * h * 4;
-    std::vector<uint8_t> transformed;
-    const uint8_t *upload_pixels = pixels;
-    if (s_addon_ecs != SCS_SDR_UNORM && s_addon_ecs != SCS_UNKNOWN) {
-        transformed.assign(pixels, pixels + byte_count);
-        transform_pixels_for_swapchain(transformed.data(), w, h, s_addon_ecs, s_addon_sdr_scale);
-        upload_pixels = transformed.data();
-    }
+    // ── HDR texture pipeline ─────────────────────────────────────────
+    // When the swap chain is HDR or _SRGB, upload textures as FP16
+    // (R16G16B16A16_FLOAT) with the sRGB → linear → HDR transform baked
+    // in.  This avoids the lossy 8-bit quantisation and Reinhard tonemap
+    // that the legacy RGBA8 path required.
+    //
+    // For SDR swap chains, the classic RGBA8 path is used unchanged.
+    // ──────────────────────────────────────────────────────────────────
+    const bool use_fp16 = (s_addon_ecs == SCS_LINEAR_HDR ||
+                           s_addon_ecs == SCS_HDR10_PQ   ||
+                           s_addon_ecs == SCS_SDR_SRGB_RTV);
 
     subresource_data init{};
-    init.data       = const_cast<uint8_t*>(upload_pixels);
-    init.row_pitch  = w * 4;
-    init.slice_pitch = byte_count;
+    format tex_fmt;
+    std::vector<uint16_t> fp16_pixels;
+
+    if (use_fp16) {
+        // FP16 path: sRGB → linear → HDR gain → R16G16B16A16_FLOAT
+        fp16_pixels = transform_pixels_to_fp16(pixels, w, h, s_addon_ecs, s_addon_sdr_scale);
+        init.data       = fp16_pixels.data();
+        init.row_pitch  = w * 4 * sizeof(uint16_t);  // 4 × FP16 per pixel
+        init.slice_pitch = w * h * 4 * (uint32_t)sizeof(uint16_t);
+        tex_fmt = format::r16g16b16a16_float;
+    } else {
+        // SDR path: plain RGBA8 passthrough (no transform needed)
+        init.data       = const_cast<uint8_t*>(pixels);
+        init.row_pitch  = w * 4;
+        init.slice_pitch = w * h * 4;
+        tex_fmt = format::r8g8b8a8_unorm;
+    }
 
     resource_desc desc(static_cast<uint32_t>(w), static_cast<uint32_t>(h),
-        1, 1, format::r8g8b8a8_unorm, 1, memory_heap::default_,
+        1, 1, tex_fmt, 1, memory_heap::default_,
         resource_usage::shader_resource);
 
     if (!dev->create_resource(desc, &init, resource_usage::shader_resource, &icon.tex)) {
@@ -662,7 +781,7 @@ static IconTexture upload_icon(device *dev, const uint8_t *pixels, int w, int h)
     }
 
     if (!dev->create_resource_view(icon.tex, resource_usage::shader_resource,
-            resource_view_desc(format::r8g8b8a8_unorm), &icon.srv)) {
+            resource_view_desc(tex_fmt), &icon.srv)) {
         dev->destroy_resource(icon.tex);
         icon.tex = {};
         return icon;
@@ -1021,7 +1140,7 @@ static void render_notifications(effect_runtime *runtime)
             ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
         } else {
             ImVec2 p = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
             ImGui::Dummy(ImVec2(avatar_size, avatar_size));
         }
         ImGui::SameLine();
@@ -1030,19 +1149,19 @@ static void render_notifications(effect_runtime *runtime)
 
         // Line 1: Name (ID: steamid)
         ImGui::SetCursorPos(text_start);
-        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", finfo->name);
+        ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", finfo->name);
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)finfo->steam_id);
+        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", (unsigned long long)finfo->steam_id);
 
         // Line 2: Playing AppName (AppID XXXX)
         ImGui::SetCursorPosX(text_start.x);
         if (finfo->appid != 0) {
             if (finfo->app_name[0])
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", finfo->app_name, finfo->appid);
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", finfo->app_name, finfo->appid);
             else
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", finfo->appid);
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing AppID %u", finfo->appid);
         } else {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+            ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "Online");
         }
 
         // Line 3: Lobby info
@@ -1050,11 +1169,11 @@ static void render_notifications(effect_runtime *runtime)
         if (finfo->in_lobby && finfo->lobby_id != 0) {
             bool frd_is_owner = (finfo->lobby_owner_name[0] && strcmp(finfo->lobby_owner_name, finfo->name) == 0);
             if (finfo->lobby_owner_name[0])
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                     frd_is_owner ? "Has Lobby" : "In Lobby",
                     (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit, finfo->lobby_owner_name);
             else
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "In Lobby - %llu (%d/%d)",
                     (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit);
         }
 
@@ -1506,7 +1625,7 @@ static void render_stats_hud()
             }
 
             if (state.show_min_max_avg) {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)),
                     "Min: %.1fms  Avg: %.1fms  Max: %.1fms",
                     s_display_min_ft, s_display_avg_ft, s_display_max_ft);
             }
@@ -1527,7 +1646,7 @@ static void render_stats_hud()
                     char buf[32]; snprintf(buf, sizeof(buf), "5%% high: %.1fms", ft_percentile(0.95f));
                     pct_line += buf;
                 }
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", pct_line.c_str());
+                ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "%s", pct_line.c_str());
             }
         }
 
@@ -1552,7 +1671,7 @@ static void render_stats_hud()
             }
 
             if (state.show_min_max_avg) {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)),
                     "Min: %.0f  Avg: %.0f  Max: %.0f",
                     fps_min, fps_avg, fps_max);
             }
@@ -1573,7 +1692,7 @@ static void render_stats_hud()
                     char buf[32]; snprintf(buf, sizeof(buf), "5%% Low: %.0f", fps_low(0.05f));
                     pct_line += buf;
                 }
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", pct_line.c_str());
+                ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "%s", pct_line.c_str());
             }
         }
     }
@@ -1613,6 +1732,27 @@ static void on_reshade_overlay(effect_runtime *runtime)
     }
     // Resolve effective colour space (auto-detect + user overrides from config)
     s_addon_ecs = effective_addon_cs();
+
+    // ── Invalidate GPU texture caches if HDR colour space / SDR scale changed ──
+    // Textures have the colour-space transform baked in at upload time (FP16 in
+    // HDR mode, RGBA8 in SDR).  When the effective colour space or SDR white
+    // scale changes, all cached textures must be re-uploaded.
+    if (s_addon_ecs != s_cached_tex_cs ||
+        (s_addon_ecs != SCS_SDR_UNORM && s_addon_ecs != SCS_UNKNOWN &&
+         fabsf(s_addon_sdr_scale - s_cached_tex_scale) > 0.01f))
+    {
+        auto *data = s_current_device->get_private_data<addon_device_data>();
+        if (data) {
+            for (auto &[key, icon] : data->icon_cache)
+                free_icon(s_current_device, icon);
+            data->icon_cache.clear();
+            for (auto &[key, icon] : data->avatar_cache)
+                free_icon(s_current_device, icon);
+            data->avatar_cache.clear();
+        }
+        s_cached_tex_cs    = s_addon_ecs;
+        s_cached_tex_scale = s_addon_sdr_scale;
+    }
 
     // ── Patch ImGui style colours for HDR / _SRGB backbuffers ──
     // Same approach as the native overlay: save all style colours, transform
@@ -1783,7 +1923,7 @@ static void render_main_overlay(effect_runtime *runtime)
 
             if (got_lobby_info) {
                 // Actual matchmaking lobby
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s (%d/%d) %s",
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s (%d/%d) %s",
                     lobby_info.is_owner ? "Has Lobby" : "In Lobby",
                     lobby_info.member_count, lobby_info.member_limit,
                     lobby_info.is_owner ? "[Owner]" : "");
@@ -1795,7 +1935,7 @@ static void render_main_overlay(effect_runtime *runtime)
                 }
             } else if (has_connect_str) {
                 // Connect-string only (no formal lobby, but friends can join)
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Hosting Game");
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "Hosting Game");
             }
 
             if (has_connect_str) {
@@ -1805,7 +1945,7 @@ static void render_main_overlay(effect_runtime *runtime)
                 } else {
                     snprintf(launch_cmd, sizeof(launch_cmd), "%s", connect_str);
                 }
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Launch: %s", launch_cmd);
+                ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "Launch: %s", launch_cmd);
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Copy##launch")) {
                     ImGui::SetClipboardText(launch_cmd);
@@ -1831,7 +1971,7 @@ static void render_main_overlay(effect_runtime *runtime)
                     if (gs_info.max_players > 0) {
                         snprintf(server_line + off, sizeof(server_line) - off, " (%u/%u)", gs_info.num_players, gs_info.max_players);
                     }
-                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", server_line);
+                    ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "%s", server_line);
                 }
             }
         }
@@ -1854,7 +1994,7 @@ static void render_main_overlay(effect_runtime *runtime)
                 has_unread = true;
         }
         if (has_unread)
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)));
         if (ImGui::Button(translationFriends[s_current_language]))
             s_show_friends = !s_show_friends;
         if (has_unread)
@@ -1969,7 +2109,7 @@ static void render_main_overlay(effect_runtime *runtime)
                 ImGuiWindowFlags_AlwaysAutoResize)) {
 
             // --- Master toggles ---
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Display");
+            ImGui::TextColored(TC(ImVec4(0.8f, 0.8f, 0.4f, 1.0f)), "Display");
             ImGui::Separator();
             {
                 bool fps_on = state.show_fps != 0;
@@ -1988,7 +2128,7 @@ static void render_main_overlay(effect_runtime *runtime)
             ImGui::Spacing();
 
             // --- Graph toggles ---
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Graphs");
+            ImGui::TextColored(TC(ImVec4(0.8f, 0.8f, 0.4f, 1.0f)), "Graphs");
             ImGui::Separator();
             {
                 bool fg = state.show_fps_graph != 0;
@@ -2003,7 +2143,7 @@ static void render_main_overlay(effect_runtime *runtime)
             ImGui::Spacing();
 
             // --- Graph timeframe ---
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Graph Timeframe");
+            ImGui::TextColored(TC(ImVec4(0.8f, 0.8f, 0.4f, 1.0f)), "Graph Timeframe");
             ImGui::Separator();
             {
                 int tf = state.graph_timeframe_sec > 0 ? state.graph_timeframe_sec : 5;
@@ -2014,7 +2154,7 @@ static void render_main_overlay(effect_runtime *runtime)
             ImGui::Spacing();
 
             // --- Statistics toggles ---
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.4f, 1.0f), "Statistics");
+            ImGui::TextColored(TC(ImVec4(0.8f, 0.8f, 0.4f, 1.0f)), "Statistics");
             ImGui::Separator();
             {
                 bool mma = state.show_min_max_avg != 0;
@@ -2153,7 +2293,7 @@ static void render_main_overlay(effect_runtime *runtime)
                     ImGui::Image(ImTextureRef(local_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
                 } else {
                     ImVec2 p = ImGui::GetCursorScreenPos();
-                    ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                    ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
                     ImGui::Dummy(ImVec2(avatar_size, avatar_size));
                 }
                 ImGui::SameLine();
@@ -2162,9 +2302,9 @@ static void render_main_overlay(effect_runtime *runtime)
 
                 // Line 1: Username (ID: steamid)
                 ImGui::SetCursorPos(text_start);
-                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", state.username);
+                ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", state.username);
                 ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
+                ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)",
                     (unsigned long long)state.steam_id);
                 // Show local IPs if available (one line per adapter)
                 if (s_bridge.GetLocalIP) {
@@ -2175,7 +2315,7 @@ static void render_main_overlay(effect_runtime *runtime)
                         while (line && *line) {
                             char *nl = strchr(line, '\n');
                             if (nl) *nl = '\0';
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "%s", line);
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "%s", line);
                             line = nl ? nl + 1 : nullptr;
                         }
                     }
@@ -2184,9 +2324,9 @@ static void render_main_overlay(effect_runtime *runtime)
                 // Line 2: Playing AppName (AppID XXXX)
                 ImGui::SetCursorPosX(text_start.x);
                 if (state.app_name[0])
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", state.app_name, state.app_id);
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", state.app_name, state.app_id);
                 else
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", state.app_id);
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing AppID %u", state.app_id);
 
                 // Line 3: Status - In Game / In Lobby / In Server
                 ImGui::SetCursorPosX(text_start.x);
@@ -2217,20 +2357,20 @@ static void render_main_overlay(effect_runtime *runtime)
                     }
                     bool local_is_owner = lobby_info.is_owner;
                     if (!owner_name.empty())
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                        ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                             local_is_owner ? "Has Lobby" : "In Lobby",
                             (unsigned long long)lobby_info.lobby_id, lobby_info.member_count, lobby_info.member_limit, owner_name.c_str());
                     else
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d)",
+                        ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d)",
                             local_is_owner ? "Has Lobby" : "In Lobby",
                             (unsigned long long)lobby_info.lobby_id, lobby_info.member_count, lobby_info.member_limit);
                 } else if (in_server) {
                     if (gs_info.server_name[0] != '\0')
-                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "In Server - %s", gs_info.server_name);
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "In Server - %s", gs_info.server_name);
                     else
-                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "In Server");
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "In Server");
                 } else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "In Game");
                 }
             }
 
@@ -2379,12 +2519,12 @@ static void render_main_overlay(effect_runtime *runtime)
             snprintf(warn_title, sizeof(warn_title), "%s##gse_warn", translationWarning[s_current_language]);
             if (ImGui::Begin(warn_title, &show_win)) {
                 if (state.warn_bad_appid) {
-                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "WARNING WARNING WARNING");
+                    ImGui::TextColored(TC(ImVec4(1, 0, 0, 1)), "WARNING WARNING WARNING");
                     ImGui::TextWrapped("%s", translationWarningDescription_badAppid[s_current_language]);
-                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "WARNING WARNING WARNING");
+                    ImGui::TextColored(TC(ImVec4(1, 0, 0, 1)), "WARNING WARNING WARNING");
                 }
                 if (state.warn_local_save) {
-                    ImGui::TextColored(ImVec4(1, 0.8f, 0, 1), "%s", translationWarningDescription_localSave[s_current_language]);
+                    ImGui::TextColored(TC(ImVec4(1, 0.8f, 0, 1)), "%s", translationWarningDescription_localSave[s_current_language]);
                 }
             }
             ImGui::End();
@@ -2400,7 +2540,7 @@ static void render_main_overlay(effect_runtime *runtime)
             int count = s_bridge.GetNetworkInfo(adapters, 8);
 
             if (count == 0) {
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No network adapters detected");
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "No network adapters detected");
             }
 
             for (int ai = 0; ai < count; ++ai) {
@@ -2413,22 +2553,22 @@ static void render_main_overlay(effect_runtime *runtime)
 
                 if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
                     if (a.range_str[0]) {
-                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Range: %s", a.range_str);
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "  Range: %s", a.range_str);
                     }
                     for (int ui = 0; ui < a.user_count; ++ui) {
                         auto &u = a.users[ui];
                         ImGui::PushID(ai * 100 + ui);
 
                         if (u.is_self) {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), u8"  \u25CF %s", u.name);
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), u8"  \u25CF %s", u.name);
                             ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "(%s)", u.ip_str);
                             ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[You]");
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "[You]");
                         } else {
-                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), u8"  \u25CF %s", u.name);
+                            ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), u8"  \u25CF %s", u.name);
                             ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "(%s)", u.ip_str);
                         }
                         // Right-click context menu for copy
                         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
@@ -2451,7 +2591,7 @@ static void render_main_overlay(effect_runtime *runtime)
                         ImGui::PopID();
                     }
                     if (a.user_count == 0) {
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "  (no users detected)");
+                        ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "  (no users detected)");
                     }
                 }
             }
@@ -2469,18 +2609,18 @@ static void render_main_overlay(effect_runtime *runtime)
 
             if (got_state && lcs.lobby_id != 0) {
                 // Header: member list
-                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "Members (%d):", lcs.member_count);
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "Members (%d):", lcs.member_count);
                 ImGui::SameLine();
                 for (int i = 0; i < lcs.member_count; ++i) {
                     if (i > 0) ImGui::SameLine();
                     bool is_self = (lcs.members[i].steam_id == state.steam_id);
                     if (is_self)
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", lcs.members[i].name);
+                        ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 1.0f, 1.0f)), "%s", lcs.members[i].name);
                     else
-                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", lcs.members[i].name);
+                        ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", lcs.members[i].name);
                     if (i < lcs.member_count - 1) {
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                        ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), ",");
                     }
                 }
                 ImGui::Separator();
@@ -2498,9 +2638,9 @@ static void render_main_overlay(effect_runtime *runtime)
 
                         bool is_self_msg = (strncmp(line, "You: ", 5) == 0);
                         if (is_self_msg)
-                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                            ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 1.0f, 1.0f)), "%s", line);
                         else
-                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+                            ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", line);
 
                         if (!end) break;
                         *end = '\n';
@@ -2537,7 +2677,7 @@ static void render_main_overlay(effect_runtime *runtime)
                     }
                 }
             } else {
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Not in a lobby.");
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "Not in a lobby.");
             }
         }
         ImGui::End();
@@ -2739,7 +2879,7 @@ static void render_main_overlay(effect_runtime *runtime)
                                     ImVec2 p0 = ImGui::GetCursorScreenPos();
                                     ImVec2 p1 = ImVec2(p0.x + card_w, p0.y + img_h);
                                     ImDrawList *dl = ImGui::GetWindowDrawList();
-                                    dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 50, 255));
+                                    dl->AddRectFilled(p0, p1, TC32(IM_COL32(40, 40, 50, 255)));
 
                                     char btn_id[64]{};
                                     snprintf(btn_id, sizeof(btn_id), "##bg_%d_%d_%d",
@@ -2764,7 +2904,7 @@ static void render_main_overlay(effect_runtime *runtime)
                                             ImVec2(p0.x + ox + dw, p0.y + oy + dh));
                                         // Hover highlight
                                         if (ImGui::IsItemHovered())
-                                            dl->AddRect(p0, p1, IM_COL32(200, 200, 255, 180), 0.f, 0, 2.f);
+                                            dl->AddRect(p0, p1, TC32(IM_COL32(200, 200, 255, 180)), 0.f, 0, 2.f);
                                     } else if (!is_static) {
                                         // Animated/video: show extension badge centred
                                         const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
@@ -2772,7 +2912,7 @@ static void render_main_overlay(effect_runtime *runtime)
                                         dl->AddText(
                                             ImVec2(p0.x + (card_w - tsz.x) * 0.5f,
                                                    p0.y + (img_h  - tsz.y) * 0.5f),
-                                            IM_COL32(160, 160, 160, 255), badge);
+                                            TC32(IM_COL32(160, 160, 160, 255)), badge);
                                     }
 
                                     // On click: open full-size preview
@@ -2866,7 +3006,7 @@ static void render_main_overlay(effect_runtime *runtime)
 
                 // Dim everything behind
                 ImGui::GetBackgroundDrawList()->AddRectFilled(
-                    ImVec2(0, 0), io2.DisplaySize, IM_COL32(0, 0, 0, 180));
+                    ImVec2(0, 0), io2.DisplaySize, TC32(IM_COL32(0, 0, 0, 180)));
 
                 // Load the preview image immediately (no frame cap)
                 const IconTexture *ftex = load_preview_image(s_sce_preview_key);
@@ -3023,7 +3163,7 @@ static void render_friends_list()
             ImGui::Image(ImTextureRef(avatar->srv.handle), ImVec2(avatar_size, avatar_size));
         } else {
             ImVec2 p = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
             ImGui::Dummy(ImVec2(avatar_size, avatar_size));
         }
         ImGui::SameLine();
@@ -3034,26 +3174,26 @@ static void render_friends_list()
         ImGui::SetCursorPos(text_start);
         bool needs_attn = (f.window_state & 0x08); // window_state_need_attention
         if (needs_attn)
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", f.name);
+            ImGui::TextColored(TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "%s", f.name);
         else
-            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", f.name);
+            ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", f.name);
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)f.steam_id);
+        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", (unsigned long long)f.steam_id);
         // Show detected IP if available
         if (f.ip_str[0]) {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", f.ip_str);
+            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "[%s]", f.ip_str);
         }
 
         // Line 2: Playing AppName (AppID XXXX)
         ImGui::SetCursorPosX(text_start.x);
         if (f.appid != 0) {
             if (f.app_name[0])
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", f.app_name, f.appid);
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", f.app_name, f.appid);
             else
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", f.appid);
+                ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing AppID %u", f.appid);
         } else {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+            ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "Online");
         }
 
         // Line 3: Lobby info (if friend has a lobby)
@@ -3061,11 +3201,11 @@ static void render_friends_list()
             ImGui::SetCursorPosX(text_start.x);
             bool frd_is_owner = (f.lobby_owner_name[0] && strcmp(f.lobby_owner_name, f.name) == 0);
             if (f.lobby_owner_name[0])
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                     frd_is_owner ? "Has Lobby" : "In Lobby",
                     (unsigned long long)f.lobby_id, f.lobby_member_count, f.lobby_member_limit, f.lobby_owner_name);
             else
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "In Lobby - %llu (%d/%d)",
                     (unsigned long long)f.lobby_id, f.lobby_member_count, f.lobby_member_limit);
         }
 
@@ -3169,9 +3309,9 @@ static void render_friends_list()
     if (!in_game_idx.empty()) {
         char hdr[64];
         snprintf(hdr, sizeof(hdr), "In Game (%d)##frd_ingame", (int)in_game_idx.size());
-        ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.15f, 0.35f, 0.15f, 0.80f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.45f, 0.20f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.25f, 0.55f, 0.25f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.15f, 0.35f, 0.15f, 0.80f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.20f, 0.45f, 0.20f, 0.90f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.25f, 0.55f, 0.25f, 1.00f)));
         bool open = ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen);
         ImGui::PopStyleColor(3);
         if (open) {
@@ -3183,9 +3323,9 @@ static void render_friends_list()
     if (!online_idx.empty()) {
         char hdr[64];
         snprintf(hdr, sizeof(hdr), "Online (%d)##frd_online", (int)online_idx.size());
-        ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.20f, 0.30f, 0.45f, 0.80f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.25f, 0.38f, 0.55f, 0.90f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.30f, 0.45f, 0.65f, 1.00f)));
         bool open = ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen);
         ImGui::PopStyleColor(3);
         if (open) {
@@ -3246,7 +3386,7 @@ static void render_chat_windows()
     if (ImGui::Begin("Chat##gse_chat_tabbed", &s_show_chat, ImGuiWindowFlags_NoCollapse)) {
         // If no chats open, show friend picker
         if (s_open_chats.empty()) {
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Select a friend to start chatting:");
+            ImGui::TextColored(TC(ImVec4(0.8f, 0.8f, 0.2f, 1.0f)), "Select a friend to start chatting:");
             ImGui::Spacing();
             
             // List friends to start chat with
@@ -3319,7 +3459,7 @@ static void render_chat_windows()
                 
                 // Color tab if needs attention
                 if (needs_attn)
-                    ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0.6f, 0.4f, 0.1f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Tab, TC(ImVec4(0.6f, 0.4f, 0.1f, 1.0f)));
                 
                 bool tab_open = true;
                 if (ImGui::BeginTabItem(chat.friend_name, &tab_open)) {
@@ -3337,7 +3477,7 @@ static void render_chat_windows()
                             ImGui::Image(ImTextureRef(friend_avatar->srv.handle), ImVec2(avatar_size, avatar_size));
                         } else {
                             ImVec2 p = ImGui::GetCursorScreenPos();
-                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
                             ImGui::Dummy(ImVec2(avatar_size, avatar_size));
                         }
                         ImGui::SameLine();
@@ -3352,9 +3492,9 @@ static void render_chat_windows()
 
                         // Line 1: Friend name (ID: steamid)
                         ImGui::SetCursorPos(text_start);
-                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", chat.friend_name);
+                        ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", chat.friend_name);
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)",
                             (unsigned long long)chat.steam_id);
 
                         // Line 2: Playing AppID
@@ -3362,11 +3502,11 @@ static void render_chat_windows()
                         if (finfo && finfo->appid != 0) {
                             const char *game = finfo->app_name[0] ? finfo->app_name : nullptr;
                             if (game)
-                                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game, finfo->appid);
+                                ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", game, finfo->appid);
                             else
-                                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing AppID %u", finfo->appid);
+                                ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing AppID %u", finfo->appid);
                         } else {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "Online");
                         }
 
                         // Line 3: Status
@@ -3374,25 +3514,25 @@ static void render_chat_windows()
                         if (finfo && finfo->in_lobby && finfo->lobby_id != 0) {
                             bool frd_is_owner = (finfo->lobby_owner_name[0] && strcmp(finfo->lobby_owner_name, finfo->name) == 0);
                             if (finfo->lobby_owner_name[0])
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                                     frd_is_owner ? "Has Lobby" : "In Lobby",
                                     (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit, finfo->lobby_owner_name);
                             else
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "In Lobby - %llu (%d/%d)",
                                     (unsigned long long)finfo->lobby_id, finfo->lobby_member_count, finfo->lobby_member_limit);
                         } else if (finfo && finfo->same_app) {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "In Game");
                         } else if (finfo && finfo->appid != 0) {
-                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "In another game");
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "In another game");
                         } else {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "Online");
                         }
                     }
                     ImGui::Separator();
 
                     // Invite accept/refuse
                     if (got_state && cs.has_pending_invite) {
-                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Pending invite from this friend!");
+                        ImGui::TextColored(TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "Pending invite from this friend!");
                         ImGui::SameLine();
                         if (ImGui::Button("Accept##accept_invite")) {
                             if (s_bridge.FriendAction)
@@ -3426,15 +3566,15 @@ static void render_chat_windows()
                             bool is_invite_refused = (strstr(line, "[INVITE REFUSED]") != nullptr);
 
                             if (is_invite_accepted)
-                                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(0.3f, 0.9f, 0.3f, 1.0f)), "%s", line);
                             else if (is_invite_refused)
-                                ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(0.9f, 0.3f, 0.3f, 1.0f)), "%s", line);
                             else if (is_invite_line)
-                                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "%s", line);
                             else if (is_self)
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 1.0f, 1.0f)), "%s", line);
                             else
-                                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", line);
 
                             if (!end) break;
                             *end = '\n';
@@ -3550,8 +3690,8 @@ static void render_achievement_list()
         ImGui::ProgressBar(fill, ImVec2(-1.0f, bar_h), "");
 
         auto *dl = ImGui::GetWindowDrawList();
-        constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
-        constexpr ImU32 text_col   = IM_COL32(255, 255, 255, 255);
+        const ImU32 shadow_col = TC32(IM_COL32(0, 0, 0, 200));
+        const ImU32 text_col   = TC32(IM_COL32(255, 255, 255, 255));
         auto draw_sh = [&](ImVec2 pos, const char *text) {
             dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
             dl->AddText(pos, text_col, text);
@@ -3715,10 +3855,10 @@ static void render_achievement_list()
         if (a.obtainability > 0) {
             ImGui::SameLine();
             switch (a.obtainability) {
-                case 1: ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "[Missable]"); break;
-                case 2: ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "[Bugged]"); break;
-                case 3: ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[Online Only]"); break;
-                default: ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[Special]"); break;
+                case 1: ImGui::TextColored(TC(ImVec4(1.0f, 0.85f, 0.0f, 1.0f)), "[Missable]"); break;
+                case 2: ImGui::TextColored(TC(ImVec4(0.9f, 0.2f, 0.2f, 1.0f)), "[Bugged]"); break;
+                case 3: ImGui::TextColored(TC(ImVec4(1.0f, 0.6f, 0.0f, 1.0f)), "[Online Only]"); break;
+                default: ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "[Special]"); break;
             }
         }
 
@@ -3771,11 +3911,11 @@ static void render_achievement_list()
             ImU32 sym_col;
             bool has_progress = !achieved && a.max_progress > 0;
             if (achieved) {
-                sym = u8"\u2713"; sym_col = COL_ACH_ACHIEVED;
+                sym = u8"\u2713"; sym_col = TC32(COL_ACH_ACHIEVED);
             } else if (has_progress && a.progress > 0) {
-                sym = u8"\u25B6"; sym_col = COL_ACH_PROGRESS;
+                sym = u8"\u25B6"; sym_col = TC32(COL_ACH_PROGRESS);
             } else {
-                sym = u8"\u2717"; sym_col = COL_ACH_LOCKED;
+                sym = u8"\u2717"; sym_col = TC32(COL_ACH_LOCKED);
             }
 
             char date_buf[128]{};
@@ -3798,7 +3938,7 @@ static void render_achievement_list()
             auto *dl = ImGui::GetWindowDrawList();
             ImFont *fnt = ImGui::GetFont();
             const float sym_font_sz = bar_h * 0.8f;
-            constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
+            const ImU32 shadow_col = TC32(IM_COL32(0, 0, 0, 200));
 
             auto draw_shadowed = [&](ImVec2 pos, ImU32 col, const char *text) {
                 dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
@@ -3820,13 +3960,13 @@ static void render_achievement_list()
                 float date_x = sym_pos.x + sym_sz.x + 4.0f;
                 ImVec2 date_sz = ImGui::CalcTextSize(date_buf);
                 ImVec2 date_pos = { date_x, sbar_pos.y + (bar_h - date_sz.y) * 0.5f };
-                draw_shadowed(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
+                draw_shadowed(date_pos, TC32(IM_COL32(255, 255, 255, 255)), date_buf);
             }
 
             if (show_progress && pbuf[0]) {
                 ImVec2 pbar_sz = ImGui::CalcTextSize(pbuf);
                 ImVec2 pbar_pos = { sbar_pos.x + (sbar_width - pbar_sz.x) * 0.5f, sbar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
-                draw_shadowed(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
+                draw_shadowed(pbar_pos, TC32(IM_COL32(255, 255, 255, 255)), pbuf);
             }
         }
 
@@ -3865,18 +4005,18 @@ static void render_achievement_list()
         char hdr_u[64]; snprintf(hdr_u, sizeof(hdr_u), "Unlocked (%d)##ach_unlocked", (int)unlocked.size());
         char hdr_l[64]; snprintf(hdr_l, sizeof(hdr_l), "Locked (%d)##ach_locked", (int)locked.size());
 
-        ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.15f, 0.35f, 0.15f, 0.80f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.45f, 0.20f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.25f, 0.55f, 0.25f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.15f, 0.35f, 0.15f, 0.80f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.20f, 0.45f, 0.20f, 0.90f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.25f, 0.55f, 0.25f, 1.00f)));
         bool open_u = ImGui::CollapsingHeader(hdr_u, ImGuiTreeNodeFlags_DefaultOpen);
         ImGui::PopStyleColor(3);
         if (open_u) {
             for (int si : unlocked) render_ach_item(si);
         }
 
-        ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.35f, 0.20f, 0.20f, 0.80f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.45f, 0.25f, 0.25f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.55f, 0.30f, 0.30f, 1.00f));
+        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.35f, 0.20f, 0.20f, 0.80f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.45f, 0.25f, 0.25f, 0.90f)));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.55f, 0.30f, 0.30f, 1.00f)));
         bool open_l = ImGui::CollapsingHeader(hdr_l, ImGuiTreeNodeFlags_DefaultOpen);
         ImGui::PopStyleColor(3);
         if (open_l) {
@@ -3916,9 +4056,9 @@ static void render_achievement_list()
             hdr += "##grp_";
             hdr += std::to_string(gi);
 
-            ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.20f, 0.30f, 0.45f, 0.80f)));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.25f, 0.38f, 0.55f, 0.90f)));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.30f, 0.45f, 0.65f, 1.00f)));
             bool open = ImGui::CollapsingHeader(hdr.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
             ImGui::PopStyleColor(3);
             if (open) {
@@ -3936,9 +4076,9 @@ static void render_achievement_list()
             int ug_done = 0;
             for (int idx : ungrouped) if (achs[idx].achieved) ++ug_done;
             char ug_hdr[64]; snprintf(ug_hdr, sizeof(ug_hdr), "Base Game (%d/%d)##ach_base", ug_done, (int)ungrouped.size());
-            ImGui::PushStyleColor(ImGuiCol_Header,       ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.20f, 0.30f, 0.45f, 0.80f)));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.25f, 0.38f, 0.55f, 0.90f)));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.30f, 0.45f, 0.65f, 1.00f)));
             bool open = ImGui::CollapsingHeader(ug_hdr, ImGuiTreeNodeFlags_DefaultOpen);
             ImGui::PopStyleColor(3);
             if (open) {

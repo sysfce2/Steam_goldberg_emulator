@@ -1339,7 +1339,7 @@ void Steam_Overlay::build_chat_window()
                 bool needs_attn = (state.window_state & window_state_need_attention) != 0;
 
                 if (needs_attn)
-                    ImGui::PushStyleColor(ImGuiCol_Tab, ImVec4(0.6f, 0.4f, 0.1f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Tab, TC(ImVec4(0.6f, 0.4f, 0.1f, 1.0f)));
 
                 bool tab_open = true;
                 std::string tab_label = frd.name() + "###chat_tab_" + std::to_string(frd.id());
@@ -1356,7 +1356,7 @@ void Steam_Overlay::build_chat_window()
                             ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
                         } else {
                             ImVec2 p = ImGui::GetCursorScreenPos();
-                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
                             ImGui::Dummy(ImVec2(avatar_size, avatar_size));
                         }
                         ImGui::SameLine();
@@ -1366,18 +1366,18 @@ void Steam_Overlay::build_chat_window()
 
                         // Line 1: Friend name (ID: steamid)
                         ImGui::SetCursorPos(text_start);
-                        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
+                        ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", frd.name().c_str());
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", frd.id());
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", frd.id());
 
                         // Line 2: Playing AppID
                         ImGui::SetCursorPosX(text_start.x);
                         if (frd.appid() != 0) {
                             auto it = steam_preowned_app_ids.find(frd.appid());
                             std::string app_name = (it != steam_preowned_app_ids.end()) ? it->second : std::to_string(frd.appid());
-                            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", app_name.c_str(), frd.appid());
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", app_name.c_str(), frd.appid());
                         } else {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "Online");
                         }
 
                         // Line 3: Status
@@ -1385,14 +1385,14 @@ void Steam_Overlay::build_chat_window()
                         bool same_app = (local_appid == frd.appid());
                         if (frd.lobby_id() != 0) {
                             bool frd_is_owner = (frd.lobby_owner_name().size() > 0 && frd.lobby_owner_name() == frd.name());
-                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu",
+                            ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu",
                                 frd_is_owner ? "Has Lobby" : "In Lobby", frd.lobby_id());
                         } else if (same_app) {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "In Game");
                         } else if (frd.appid() != 0) {
-                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "In another game");
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "In another game");
                         } else {
-                            ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "Online");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "Online");
                         }
                     }
                     ImGui::Separator();
@@ -1400,7 +1400,7 @@ void Steam_Overlay::build_chat_window()
                     // Invite accept/refuse
                     if (state.window_state & (window_state_lobby_invite | window_state_rich_invite)) {
                         bool same_app = (settings->get_local_game_id().AppID() == frd.appid());
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_Text, TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)));
                         ImGui::LabelText("##label", translationInvitedYouToJoinTheGame[current_language], frd.name().c_str(), frd.appid());
                         ImGui::PopStyleColor();
                         if (same_app) {
@@ -1417,7 +1417,7 @@ void Steam_Overlay::build_chat_window()
                             }
                         } else {
                             ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(different game)");
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(different game)");
                             ImGui::SameLine();
                             if (ImGui::Button(translationRefuse[current_language])) {
                                 state.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
@@ -1783,7 +1783,7 @@ void Steam_Overlay::build_notifications(float width, float height)
             ImGui::Image(frd_state->avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
         } else {
             ImVec2 p = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
             ImGui::Dummy(ImVec2(avatar_size, avatar_size));
         }
         ImGui::SameLine();
@@ -1793,18 +1793,18 @@ void Steam_Overlay::build_notifications(float width, float height)
 
         // Line 1: Name (ID: steamid)
         ImGui::SetCursorPos(text_start);
-        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd_ptr->name().c_str());
+        ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", frd_ptr->name().c_str());
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd_ptr->id());
+        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", (unsigned long long)frd_ptr->id());
 
         // Line 2: Playing AppName (AppID XXXX)
         ImGui::SetCursorPosX(text_start.x);
         if (frd_ptr->appid() != 0) {
             auto it2 = steam_preowned_app_ids.find(frd_ptr->appid());
             std::string game = (it2 != steam_preowned_app_ids.end()) ? it2->second : std::to_string(frd_ptr->appid());
-            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game.c_str(), frd_ptr->appid());
+            ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", game.c_str(), frd_ptr->appid());
         } else {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+            ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "Online");
         }
 
         // Line 3: Lobby info (only if same app)
@@ -1828,7 +1828,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                     else
                         owner_name = std::to_string(owner.ConvertToUint64());
                 }
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                     (owner_name == frd_ptr->name()) ? "Has Lobby" : "In Lobby",
                     (unsigned long long)frd_ptr->lobby_id(), mc, ml, owner_name.c_str());
             }
@@ -2352,28 +2352,20 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
         // scRGB convention: 1.0 = 80 nits.  If Windows SDR white is 200 nits, the OS
         // scales SDR content by 2.5× when compositing.  We apply the same factor so our
         // overlay sits at the same perceived brightness as the game's own SDR UI.
-        //
-        // The overlay writes to a UNORM8 RTV so output is clamped to [0, 1].  Values
-        // below the knee (0.75) pass through linearly — matching ImGui vertex-color
-        // scaling.  Only values above the knee are softly compressed toward 1.0 using
-        // a localised Reinhard shoulder, preserving mid-tone brightness while avoiding
-        // hard clipping in highlights.
+        // To mitigate the uint8 saturation problem for high SDR-white scales, we use a
+        // soft shoulder (Reinhard-like) that compresses highlights instead of hard-clipping.
         static uint8_t hdr_lut[256];
         static float   hdr_lut_built_for = -1.0f;
         if (hdr_lut_built_for != s_sdr_white_scale) {
             hdr_lut_built_for = s_sdr_white_scale;
-            constexpr float knee = 0.75f;
-            constexpr float knee_range = 1.0f - knee;  // 0.25
-            constexpr float knee_inv   = 1.0f / knee_range;
             for (int i = 0; i < 256; ++i) {
                 float s = i / 255.0f;
                 float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
                 l *= s_sdr_white_scale; // lift to match display SDR white brightness
-                // Soft knee: only compress values above 0.75, keep mid-tones linear.
-                if (l > knee) {
-                    float x = (l - knee) * knee_inv;   // normalised excess [0, ∞)
-                    l = knee + knee_range * (x / (1.0f + x)); // local Reinhard shoulder
-                }
+                // Soft shoulder: Reinhard tone-map when scale > 1 to avoid hard clipping.
+                // Maps [0, ∞) → [0, 1).  At scale=1 it's close to identity below 1.0.
+                if (s_sdr_white_scale > 1.0f)
+                    l = l / (1.0f + l);
                 hdr_lut[i] = (uint8_t)(fminf(l * 255.0f + 0.5f, 255.0f));
             }
         }
@@ -2510,12 +2502,110 @@ static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c)
     }
 }
 
+// Shorthand macros for wrapping inline sRGB colours for the active swap-chain colour space.
+// TC()   — transforms an ImVec4 (used with TextColored, PushStyleColor).
+// TC32() — transforms an ImU32  (used with AddRectFilled, AddRect, AddText, draw helpers).
+#define TC(c) adjust_imgui_color_for_swapchain((c))
+
+static ImU32 adjust_imgui_color_u32_for_swapchain(ImU32 c)
+{
+    if (effective_swapchain_cs() == SCS_SDR_UNORM || effective_swapchain_cs() == SCS_UNKNOWN) return c;
+    ImVec4 v = ImGui::ColorConvertU32ToFloat4(c);
+    v = adjust_imgui_color_for_swapchain(v);
+    return ImGui::ColorConvertFloat4ToU32(v);
+}
+
+#define TC32(c) adjust_imgui_color_u32_for_swapchain((c))
+
+// ── FP16 texture upload helpers ──────────────────────────────────────────────
+// IEEE 754 binary16 (half-float) conversion.
+static inline uint16_t float_to_half(float value)
+{
+    uint32_t f32;
+    memcpy(&f32, &value, 4);
+    uint32_t sign = (f32 >> 16) & 0x8000;
+    int32_t  exp  = ((f32 >> 23) & 0xFF) - 127;
+    uint32_t mant = f32 & 0x7FFFFF;
+    if (exp > 15) return (uint16_t)(sign | 0x7C00);             // overflow → ±inf
+    if (exp < -14) {                                             // denorm / underflow
+        if (exp < -24) return (uint16_t)sign;                    // too small → ±0
+        mant |= 0x800000;
+        uint32_t shift = (uint32_t)(-exp - 1 + 13);             // 14..24 → 13..23
+        return (uint16_t)(sign | (mant >> shift));
+    }
+    return (uint16_t)(sign | ((exp + 15) << 10) | (mant >> 13));
+}
+
+// sRGB EOTF for pixel transforms (same as srgb_ch_decode_only but for uint8→float).
+static inline float srgb_byte_to_linear(uint8_t b)
+{
+    float s = b / 255.0f;
+    return (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
+}
+
+// Convert RGBA8 sRGB pixels → R16G16B16A16_FLOAT with colour-space transform baked in.
+static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int w, int h,
+                                                      SwapchainColorSpace cs, float sdr_scale)
+{
+    const int count = w * h;
+    std::vector<uint16_t> out(count * 4);
+    if (cs == SCS_LINEAR_HDR) {
+        for (int i = 0; i < count; ++i) {
+            const uint8_t *s = pixels + i * 4;
+            uint16_t      *d = out.data() + i * 4;
+            d[0] = float_to_half(srgb_byte_to_linear(s[0]) * sdr_scale);
+            d[1] = float_to_half(srgb_byte_to_linear(s[1]) * sdr_scale);
+            d[2] = float_to_half(srgb_byte_to_linear(s[2]) * sdr_scale);
+            d[3] = float_to_half(s[3] / 255.0f);
+        }
+    } else if (cs == SCS_HDR10_PQ) {
+        constexpr float m1 = 0.1593017578125f, m2 = 78.84375f;
+        constexpr float c1 = 0.8359375f, c2 = 18.8515625f, c3 = 18.6875f;
+        const float nits = sdr_scale * 80.0f;
+        for (int i = 0; i < count; ++i) {
+            const uint8_t *s = pixels + i * 4;
+            uint16_t      *d = out.data() + i * 4;
+            for (int ch = 0; ch < 3; ++ch) {
+                float lin = srgb_byte_to_linear(s[ch]);
+                float L = fminf((lin * nits) / 10000.0f, 1.0f);
+                float Lm1 = powf(L, m1);
+                d[ch] = float_to_half(powf((c1 + c2 * Lm1) / (1.0f + c3 * Lm1), m2));
+            }
+            d[3] = float_to_half(s[3] / 255.0f);
+        }
+    } else if (cs == SCS_SDR_SRGB_RTV) {
+        for (int i = 0; i < count; ++i) {
+            const uint8_t *s = pixels + i * 4;
+            uint16_t      *d = out.data() + i * 4;
+            d[0] = float_to_half(srgb_byte_to_linear(s[0]));
+            d[1] = float_to_half(srgb_byte_to_linear(s[1]));
+            d[2] = float_to_half(srgb_byte_to_linear(s[2]));
+            d[3] = float_to_half(s[3] / 255.0f);
+        }
+    } else {
+        for (int i = 0; i < count; ++i) {
+            const uint8_t *s = pixels + i * 4;
+            uint16_t      *d = out.data() + i * 4;
+            d[0] = float_to_half(s[0] / 255.0f);
+            d[1] = float_to_half(s[1] / 255.0f);
+            d[2] = float_to_half(s[2] / 255.0f);
+            d[3] = float_to_half(s[3] / 255.0f);
+        }
+    }
+    return out;
+}
+
+// Decide whether FP16 upload is available and appropriate.
+static bool should_use_fp16()
+{
+    SwapchainColorSpace cs = effective_swapchain_cs();
+    return (cs == SCS_LINEAR_HDR || cs == SCS_HDR10_PQ || cs == SCS_SDR_SRGB_RTV);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, bool upload_new_icon_to_gpu)
 {
     if (!_renderer) return false;
-    // Don't cache images while the colour space is still unknown (detection pending).
-    // Loading now would bake the wrong pixel transform into the cached decoded data.
-    if (s_swapchain_cs == SCS_UNKNOWN && effective_swapchain_cs() == SCS_UNKNOWN) return false;
     if (settings->paginated_achievements_icons < 0) return false; // no icons are loaded anyway
     if (!settings->overlay_upload_achs_icons_to_gpu) return false; // don't upload anything to the GPU
 
@@ -2536,10 +2626,18 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
         if (iw <= 0 || ih <= 0 || image_info->data.size() < (size_t)iw * ih * 4) return false;
         // Store in the struct — AttachResource holds a raw pointer, so the buffer must outlive the resource
         auto& icon_decoded_data = achieved ? ach.icon_decoded_data : ach.icon_gray_decoded_data;
-        icon_decoded_data = image_info->data;
-        srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
-            (uint8_t*)icon_decoded_data.data(), (size_t)iw * ih);
-        icon_rsrc->AttachResource((void*)icon_decoded_data.data(), (uint32_t)iw, (uint32_t)ih);
+        if (should_use_fp16()) {
+            auto fp16 = transform_pixels_to_fp16((const uint8_t*)image_info->data.data(), iw, ih,
+                                                  effective_swapchain_cs(), s_sdr_white_scale);
+            icon_decoded_data.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
+            icon_rsrc->AttachResource((void*)icon_decoded_data.data(), (uint32_t)iw, (uint32_t)ih,
+                                      InGameOverlay::RendererPixelFormat::RGBA16F);
+        } else {
+            icon_decoded_data = image_info->data;
+            srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+                (uint8_t*)icon_decoded_data.data(), (size_t)iw * ih);
+            icon_rsrc->AttachResource((void*)icon_decoded_data.data(), (uint32_t)iw, (uint32_t)ih);
+        }
         
         PRINT_DEBUG("'%s' (%dx%d, result=%i)", ach.name.c_str(), iw, ih, (int)icon_rsrc->GetResourceId() != 0);
     }
@@ -2550,8 +2648,6 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
 bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
 {
     if (!_renderer) return false;
-    // Don't cache images while the colour space is still unknown (detection pending).
-    if (s_swapchain_cs == SCS_UNKNOWN && effective_swapchain_cs() == SCS_UNKNOWN) return false;
     
     // Already loaded?
     if (state.avatar_resource && state.avatar_resource->GetResourceId() != 0) return true;
@@ -2579,10 +2675,18 @@ bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
     if (iw <= 0 || ih <= 0 || img->data.size() < (size_t)iw * ih * 4) return false;
     
     // Store pixel data - AttachResource holds a raw pointer so buffer must outlive resource
-    state.avatar_pixels = img->data;
-    srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
-        (uint8_t*)state.avatar_pixels.data(), (size_t)iw * ih);
-    state.avatar_resource->AttachResource((void*)state.avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih);
+    if (should_use_fp16()) {
+        auto fp16 = transform_pixels_to_fp16((const uint8_t*)img->data.data(), iw, ih,
+                                              effective_swapchain_cs(), s_sdr_white_scale);
+        state.avatar_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
+        state.avatar_resource->AttachResource((void*)state.avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih,
+                                              InGameOverlay::RendererPixelFormat::RGBA16F);
+    } else {
+        state.avatar_pixels = img->data;
+        srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+            (uint8_t*)state.avatar_pixels.data(), (size_t)iw * ih);
+        state.avatar_resource->AttachResource((void*)state.avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih);
+    }
     
     return state.avatar_resource->GetResourceId() != 0;
 }
@@ -2590,8 +2694,6 @@ bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
 bool Steam_Overlay::try_load_local_avatar()
 {
     if (!_renderer) return false;
-    // Don't cache images while the colour space is still unknown (detection pending).
-    if (s_swapchain_cs == SCS_UNKNOWN && effective_swapchain_cs() == SCS_UNKNOWN) return false;
     
     // Already loaded?
     if (local_avatar_resource && local_avatar_resource->GetResourceId() != 0) return true;
@@ -2620,10 +2722,18 @@ bool Steam_Overlay::try_load_local_avatar()
     if (iw <= 0 || ih <= 0 || img->data.size() < (size_t)iw * ih * 4) return false;
     
     // Store pixel data - AttachResource holds a raw pointer so buffer must outlive resource
-    local_avatar_pixels = img->data;
-    srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
-        (uint8_t*)local_avatar_pixels.data(), (size_t)iw * ih);
-    local_avatar_resource->AttachResource((void*)local_avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih);
+    if (should_use_fp16()) {
+        auto fp16 = transform_pixels_to_fp16((const uint8_t*)img->data.data(), iw, ih,
+                                              effective_swapchain_cs(), s_sdr_white_scale);
+        local_avatar_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
+        local_avatar_resource->AttachResource((void*)local_avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih,
+                                              InGameOverlay::RendererPixelFormat::RGBA16F);
+    } else {
+        local_avatar_pixels = img->data;
+        srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+            (uint8_t*)local_avatar_pixels.data(), (size_t)iw * ih);
+        local_avatar_resource->AttachResource((void*)local_avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih);
+    }
     
     return local_avatar_resource->GetResourceId() != 0;
 }
@@ -2837,7 +2947,7 @@ void Steam_Overlay::render_main_window()
                     if (local_adapters[ai].ip == 0) continue;
                     char ip_buf[24];
                     format_ip_address(local_adapters[ai].ip, ip_buf, sizeof(ip_buf));
-                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "%s: %s", local_adapters[ai].name, ip_buf);
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "%s: %s", local_adapters[ai].name, ip_buf);
                     ImGui::SameLine();
                     char btn_id[64];
                     snprintf(btn_id, sizeof(btn_id), "Copy##lip%d", ai);
@@ -2862,7 +2972,7 @@ void Steam_Overlay::render_main_window()
                         int member_count = matchmaking->GetNumLobbyMembers(lobby);
                         int member_limit = matchmaking->GetLobbyMemberLimit(lobby);
                         bool is_owner = (matchmaking->GetLobbyOwner(lobby) == settings->get_local_steam_id());
-                        ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby (%d/%d) %s", 
+                        ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "In Lobby (%d/%d) %s", 
                             member_count, member_limit,
                             is_owner ? "[Owner]" : "");
                         ImGui::SameLine();
@@ -2874,7 +2984,7 @@ void Steam_Overlay::render_main_window()
                     }
                 } else if (!connect_str.empty()) {
                     // Connect string only (no formal lobby)
-                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Hosting Game");
+                    ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "Hosting Game");
                 }
 
                 if (!connect_str.empty()) {
@@ -2884,7 +2994,7 @@ void Steam_Overlay::render_main_window()
                     std::string exe_name = (pos != std::string::npos) ? full_path.substr(pos + 1) : full_path;
                     
                     std::string launch_cmd = exe_name + " " + connect_str;
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Launch: %s", launch_cmd.c_str());
+                    ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "Launch: %s", launch_cmd.c_str());
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Copy##launch")) {
                         ImGui::SetClipboardText(launch_cmd.c_str());
@@ -2916,7 +3026,7 @@ void Steam_Overlay::render_main_window()
                             snprintf(counts, sizeof(counts), " (%u/%u)", num, maxp);
                             server_line += counts;
                         }
-                        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", server_line.c_str());
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "%s", server_line.c_str());
                     }
                 }
             }
@@ -2941,7 +3051,7 @@ void Steam_Overlay::render_main_window()
                 }
             }
             if (has_unread)
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)));
             if (ImGui::Button(translationFriends[current_language])) {
                 show_friends = !show_friends;
             }
@@ -3230,7 +3340,7 @@ void Steam_Overlay::render_main_window()
                         ImGui::Image(local_avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
                     } else {
                         ImVec2 p = ImGui::GetCursorScreenPos();
-                        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
                         ImGui::Dummy(ImVec2(avatar_size, avatar_size));
                     }
                     ImGui::SameLine();
@@ -3247,15 +3357,15 @@ void Steam_Overlay::render_main_window()
 
                     // Line 1: Username (ID: steamid)
                     ImGui::SetCursorPos(text_start);
-                    ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", settings->get_local_name());
+                    ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", settings->get_local_name());
                     ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)",
+                    ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)",
                         settings->get_local_steam_id().ConvertToUint64());
 
                     // Line 2: Playing AppName (AppID XXXX)
                     ImGui::SetCursorPosX(text_start.x);
                     std::string app_name = resolve_app_name(local_appid);
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", app_name.c_str(), local_appid);
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", app_name.c_str(), local_appid);
 
                     // Line 3: In Lobby / In Server / In Game
                     ImGui::SetCursorPosX(text_start.x);
@@ -3284,7 +3394,7 @@ void Steam_Overlay::render_main_window()
                                     owner_name = std::to_string(owner.ConvertToUint64());
                             }
                             bool local_is_owner = (owner == settings->get_local_steam_id());
-                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                            ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                                 local_is_owner ? "Has Lobby" : "In Lobby",
                                 lobby.ConvertToUint64(), member_count, member_limit, owner_name.c_str());
                         }
@@ -3292,11 +3402,11 @@ void Steam_Overlay::render_main_window()
                         const auto &sd = gs->get_server_data();
                         std::string sname = sd.server_name();
                         if (!sname.empty())
-                            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "In Server - %s", sname.c_str());
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "In Server - %s", sname.c_str());
                         else
-                            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "In Server");
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "In Server");
                     } else {
-                        ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.5f, 1.0f), "In Game");
+                        ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "In Game");
                     }
                 }
 
@@ -3387,7 +3497,7 @@ void Steam_Overlay::render_main_window()
                             ImGui::Image(state.avatar_resource->GetResourceId(), ImVec2(avatar_size, avatar_size));
                         } else {
                             ImVec2 p = ImGui::GetCursorScreenPos();
-                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), IM_COL32(60, 60, 80, 255));
+                            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + avatar_size, p.y + avatar_size), TC32(IM_COL32(60, 60, 80, 255)));
                             ImGui::Dummy(ImVec2(avatar_size, avatar_size));
                         }
                         ImGui::SameLine();
@@ -3398,11 +3508,11 @@ void Steam_Overlay::render_main_window()
                         ImGui::SetCursorPos(text_start);
                         bool needs_attn = (state.window_state & window_state_need_attention);
                         if (needs_attn)
-                            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", frd.name().c_str());
+                            ImGui::TextColored(TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "%s", frd.name().c_str());
                         else
-                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", frd.name().c_str());
+                            ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", frd.name().c_str());
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(ID: %llu)", (unsigned long long)frd.id());
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", (unsigned long long)frd.id());
                         // Show detected IPs if available
                         if (network) {
                             uint32 frd_ips[16];
@@ -3412,7 +3522,7 @@ void Steam_Overlay::render_main_window()
                                 char ip_buf[24];
                                 format_ip_address(frd_ips[ipi], ip_buf, sizeof(ip_buf));
                                 ImGui::SameLine();
-                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "[%s]", ip_buf);
+                                ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "[%s]", ip_buf);
                             }
                         }
 
@@ -3420,9 +3530,9 @@ void Steam_Overlay::render_main_window()
                         ImGui::SetCursorPosX(text_start.x);
                         if (frd.appid() != 0) {
                             std::string game = resolve_app_name(frd.appid());
-                            ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Playing %s (AppID %u)", game.c_str(), frd.appid());
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.8f, 0.5f, 1.0f)), "Playing %s (AppID %u)", game.c_str(), frd.appid());
                         } else {
-                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Online");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "Online");
                         }
 
                         // Line 3: Lobby info (if friend has a lobby)
@@ -3463,11 +3573,11 @@ void Steam_Overlay::render_main_window()
                             bool friend_is_owner = (!frd_owner_name.empty() && frd_owner_name == frd.name());
 
                             if (!frd_owner_name.empty())
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%s - %llu (%d/%d - %s)",
+                                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu (%d/%d - %s)",
                                     friend_is_owner ? "Has Lobby" : "In Lobby",
                                     (unsigned long long)frd.lobby_id(), frd_mc, frd_ml, frd_owner_name.c_str());
                             else
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "In Lobby - %llu (%d/%d)",
+                                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "In Lobby - %llu (%d/%d)",
                                     (unsigned long long)frd.lobby_id(), frd_mc, frd_ml);
                         }
 
@@ -3584,9 +3694,9 @@ void Steam_Overlay::render_main_window()
                     if (!in_game_friends.empty()) {
                         char hdr[64];
                         snprintf(hdr, sizeof(hdr), "In Game (%d)##frd_ingame", (int)in_game_friends.size());
-                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.15f, 0.35f, 0.15f, 0.80f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.20f, 0.45f, 0.20f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.25f, 0.55f, 0.25f, 1.00f));
+                        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.15f, 0.35f, 0.15f, 0.80f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.20f, 0.45f, 0.20f, 0.90f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.25f, 0.55f, 0.25f, 1.00f)));
                         bool open = ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen);
                         ImGui::PopStyleColor(3);
                         if (open) {
@@ -3598,9 +3708,9 @@ void Steam_Overlay::render_main_window()
                     if (!online_friends.empty()) {
                         char hdr[64];
                         snprintf(hdr, sizeof(hdr), "Online (%d)##frd_online", (int)online_friends.size());
-                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+                        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.20f, 0.30f, 0.45f, 0.80f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.25f, 0.38f, 0.55f, 0.90f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.30f, 0.45f, 0.65f, 1.00f)));
                         bool open = ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen);
                         ImGui::PopStyleColor(3);
                         if (open) {
@@ -3643,8 +3753,8 @@ void Steam_Overlay::render_main_window()
                     ImGui::ProgressBar(fill, ImVec2(-1.0f, bar_h), "");
 
                     auto *dl = ImGui::GetWindowDrawList();
-                    constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
-                    constexpr ImU32 text_col   = IM_COL32(255, 255, 255, 255);
+                    const ImU32 shadow_col = TC32(IM_COL32(0, 0, 0, 200));
+                    const ImU32 text_col   = TC32(IM_COL32(255, 255, 255, 255));
                     auto draw_sh = [&](ImVec2 pos, const char *text) {
                         dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
                         dl->AddText(pos, text_col, text);
@@ -3896,10 +4006,10 @@ void Steam_Overlay::render_main_window()
                         if (sit != steamUserStats_sh->steamhunters_achievement_data.end() && sit->second.obtainability > 0) {
                             ImGui::SameLine();
                             switch (sit->second.obtainability) {
-                                case 1: ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "[Missable]"); break;
-                                case 2: ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "[Bugged]"); break;
-                                case 3: ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[Online Only]"); break;
-                                default: ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "[Special]"); break;
+                                case 1: ImGui::TextColored(TC(ImVec4(1.0f, 0.85f, 0.0f, 1.0f)), "[Missable]"); break;
+                                case 2: ImGui::TextColored(TC(ImVec4(0.9f, 0.2f, 0.2f, 1.0f)), "[Bugged]"); break;
+                                case 3: ImGui::TextColored(TC(ImVec4(1.0f, 0.6f, 0.0f, 1.0f)), "[Online Only]"); break;
+                                default: ImGui::TextColored(TC(ImVec4(0.7f, 0.7f, 0.7f, 1.0f)), "[Special]"); break;
                             }
                         }
                     }
@@ -3936,11 +4046,11 @@ void Steam_Overlay::render_main_window()
                         ImU32 sym_col;
                         bool has_progress = !achieved && x.max_progress > 0;
                         if (achieved) {
-                            sym = u8"\u2713"; sym_col = IM_COL32(0, 220, 0, 255);
+                            sym = u8"\u2713"; sym_col = TC32(IM_COL32(0, 220, 0, 255));
                         } else if (has_progress && x.progress > 0) {
-                            sym = u8"\u25B6"; sym_col = IM_COL32(255, 180, 0, 255);
+                            sym = u8"\u25B6"; sym_col = TC32(IM_COL32(255, 180, 0, 255));
                         } else {
-                            sym = u8"\u2717"; sym_col = IM_COL32(220, 0, 0, 255);
+                            sym = u8"\u2717"; sym_col = TC32(IM_COL32(220, 0, 0, 255));
                         }
 
                         char date_buf[128]{};
@@ -3963,7 +4073,7 @@ void Steam_Overlay::render_main_window()
                         auto  *dl  = ImGui::GetWindowDrawList();
                         ImFont *fnt = ImGui::GetFont();
                         const float sym_font_sz = bar_h * 0.8f;
-                        constexpr ImU32 shadow_col = IM_COL32(0, 0, 0, 200);
+                        const ImU32 shadow_col = TC32(IM_COL32(0, 0, 0, 200));
 
                         auto draw_shadowed = [&](ImVec2 pos, ImU32 col, const char *text) {
                             dl->AddText(ImVec2(pos.x + 1, pos.y + 1), shadow_col, text);
@@ -3982,13 +4092,13 @@ void Steam_Overlay::render_main_window()
                             float  date_x   = sym_pos.x + sym_sz.x + 4.0f;
                             ImVec2 date_sz  = ImGui::CalcTextSize(date_buf);
                             ImVec2 date_pos = { date_x, bar_pos.y + (bar_h - date_sz.y) * 0.5f };
-                            draw_shadowed(date_pos, IM_COL32(255, 255, 255, 255), date_buf);
+                            draw_shadowed(date_pos, TC32(IM_COL32(255, 255, 255, 255)), date_buf);
                         }
 
                         if (show_progress && pbuf[0]) {
                             ImVec2 pbar_sz  = ImGui::CalcTextSize(pbuf);
                             ImVec2 pbar_pos = { bar_pos.x + (bar_width - pbar_sz.x) * 0.5f, bar_pos.y + (bar_h - pbar_sz.y) * 0.5f };
-                            draw_shadowed(pbar_pos, IM_COL32(255, 255, 255, 255), pbuf);
+                            draw_shadowed(pbar_pos, TC32(IM_COL32(255, 255, 255, 255)), pbuf);
                         }
                     }
 
@@ -4040,18 +4150,18 @@ void Steam_Overlay::render_main_window()
                     char hdr_u[64]; snprintf(hdr_u, sizeof(hdr_u), "Unlocked (%d)##ach_unlocked", (int)unlocked.size());
                     char hdr_l[64]; snprintf(hdr_l, sizeof(hdr_l), "Locked (%d)##ach_locked", (int)locked.size());
 
-                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.15f, 0.35f, 0.15f, 0.80f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.20f, 0.45f, 0.20f, 0.90f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.25f, 0.55f, 0.25f, 1.00f));
+                    ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.15f, 0.35f, 0.15f, 0.80f)));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.20f, 0.45f, 0.20f, 0.90f)));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.25f, 0.55f, 0.25f, 1.00f)));
                     bool open_u = ImGui::CollapsingHeader(hdr_u, ImGuiTreeNodeFlags_DefaultOpen);
                     ImGui::PopStyleColor(3);
                     if (open_u) {
                         for (size_t si : unlocked) render_ach_item(achievements[si]);
                     }
 
-                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.35f, 0.20f, 0.20f, 0.80f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.45f, 0.25f, 0.25f, 0.90f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.55f, 0.30f, 0.30f, 1.00f));
+                    ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.35f, 0.20f, 0.20f, 0.80f)));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.45f, 0.25f, 0.25f, 0.90f)));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.55f, 0.30f, 0.30f, 1.00f)));
                     bool open_l = ImGui::CollapsingHeader(hdr_l, ImGuiTreeNodeFlags_DefaultOpen);
                     ImGui::PopStyleColor(3);
                     if (open_l) {
@@ -4084,9 +4194,9 @@ void Steam_Overlay::render_main_window()
                         char grp_count[32]; snprintf(grp_count, sizeof(grp_count), " (%d/%d)", grp_done, (int)grp_idx.size());
                         hdr += grp_count;
 
-                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+                        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.20f, 0.30f, 0.45f, 0.80f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.25f, 0.38f, 0.55f, 0.90f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.30f, 0.45f, 0.65f, 1.00f)));
                         bool open = ImGui::CollapsingHeader(hdr.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
                         ImGui::PopStyleColor(3);
                         if (open) {
@@ -4103,9 +4213,9 @@ void Steam_Overlay::render_main_window()
                         int ug_done = 0;
                         for (size_t gi : ungrouped) if (achievements[gi].achieved) ++ug_done;
                         char ug_hdr[64]; snprintf(ug_hdr, sizeof(ug_hdr), "Base Game (%d/%d)##ach_base", ug_done, (int)ungrouped.size());
-                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.30f, 0.45f, 0.80f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,  ImVec4(0.25f, 0.38f, 0.55f, 0.90f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.30f, 0.45f, 0.65f, 1.00f));
+                        ImGui::PushStyleColor(ImGuiCol_Header, TC(ImVec4(0.20f, 0.30f, 0.45f, 0.80f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, TC(ImVec4(0.25f, 0.38f, 0.55f, 0.90f)));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderActive, TC(ImVec4(0.30f, 0.45f, 0.65f, 1.00f)));
                         bool open = ImGui::CollapsingHeader(ug_hdr, ImGuiTreeNodeFlags_DefaultOpen);
                         ImGui::PopStyleColor(3);
                         if (open) {
@@ -4336,11 +4446,19 @@ void Steam_Overlay::render_main_window()
                                             int pw = 0, ph = 0;
                                             tex.pixels = local_storage->load_image_from_folder(folder, filename, pw, ph);
                                             if (!tex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
-                                                srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
-                                                    (uint8_t*)tex.pixels.data(), (size_t)pw * ph);
                                                 tex.resource = _renderer->CreateResource();
                                                 tex.w = pw; tex.h = ph;
-                                                tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
+                                                if (should_use_fp16()) {
+                                                    auto fp16 = transform_pixels_to_fp16((const uint8_t*)tex.pixels.data(), pw, ph,
+                                                                                          effective_swapchain_cs(), s_sdr_white_scale);
+                                                    tex.fp16_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
+                                                    tex.resource->AttachResource((void*)tex.fp16_pixels.data(), (uint32_t)pw, (uint32_t)ph,
+                                                                                 InGameOverlay::RendererPixelFormat::RGBA16F);
+                                                } else {
+                                                    srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+                                                        (uint8_t*)tex.pixels.data(), (size_t)pw * ph);
+                                                    tex.resource->AttachResource(tex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
+                                                }
                                             }
                                             ++tex_loaded_this_frame;
                                         }
@@ -4360,7 +4478,7 @@ void Steam_Overlay::render_main_window()
                                         ImVec2 p0 = ImGui::GetCursorScreenPos();
                                         ImVec2 p1 = ImVec2(p0.x + card_w, p0.y + img_h);
                                         ImDrawList *dl = ImGui::GetWindowDrawList();
-                                        dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 50, 255));
+                                        dl->AddRectFilled(p0, p1, TC32(IM_COL32(40, 40, 50, 255)));
 
                                         char btn_id[64]{};
                                         snprintf(btn_id, sizeof(btn_id), "##bg_%d_%d_%d", series.series_number, tidx, slot_idx);
@@ -4385,7 +4503,7 @@ void Steam_Overlay::render_main_window()
                                                 ImVec2(p0.x + ox + dw, p0.y + oy + dh));
                                             // Hover highlight
                                             if (ImGui::IsItemHovered())
-                                                dl->AddRect(p0, p1, IM_COL32(200, 200, 255, 180), 0.f, 0, 2.f);
+                                                dl->AddRect(p0, p1, TC32(IM_COL32(200, 200, 255, 180)), 0.f, 0, 2.f);
                                         } else if (!is_static) {
                                             // Animated/video: show extension badge centred
                                             const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
@@ -4393,7 +4511,7 @@ void Steam_Overlay::render_main_window()
                                             dl->AddText(
                                                 ImVec2(p0.x + (card_w - tsz.x) * 0.5f,
                                                        p0.y + (img_h  - tsz.y) * 0.5f),
-                                                IM_COL32(160, 160, 160, 255), badge);
+                                                TC32(IM_COL32(160, 160, 160, 255)), badge);
                                         }
 
                                         // On click: open full-size preview.
@@ -4485,8 +4603,7 @@ void Steam_Overlay::render_main_window()
                 if (!sce_preview_key.empty()) {
                     // Dim everything behind the preview window
                     ImGui::GetBackgroundDrawList()->AddRectFilled(
-                        ImVec2(0, 0), io.DisplaySize,
-                        IM_COL32(0, 0, 0, 180));
+                        ImVec2(0, 0), io.DisplaySize, TC32(IM_COL32(0, 0, 0, 180)));
 
                     auto &ftex = sce_textures[sce_preview_key];
                     if (!ftex.load_attempted) {
@@ -4499,11 +4616,19 @@ void Steam_Overlay::render_main_window()
                             int pw = 0, ph = 0;
                             ftex.pixels = local_storage->load_image_from_folder(f_folder, f_file, pw, ph);
                             if (!ftex.pixels.empty() && _renderer && pw > 0 && ph > 0) {
-                                srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
-                                    (uint8_t*)ftex.pixels.data(), (size_t)pw * ph);
                                 ftex.resource = _renderer->CreateResource();
                                 ftex.w = pw; ftex.h = ph;
-                                ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
+                                if (should_use_fp16()) {
+                                    auto fp16 = transform_pixels_to_fp16((const uint8_t*)ftex.pixels.data(), pw, ph,
+                                                                          effective_swapchain_cs(), s_sdr_white_scale);
+                                    ftex.fp16_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
+                                    ftex.resource->AttachResource((void*)ftex.fp16_pixels.data(), (uint32_t)pw, (uint32_t)ph,
+                                                                   InGameOverlay::RendererPixelFormat::RGBA16F);
+                                } else {
+                                    srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
+                                        (uint8_t*)ftex.pixels.data(), (size_t)pw * ph);
+                                    ftex.resource->AttachResource(ftex.pixels.data(), (uint32_t)pw, (uint32_t)ph);
+                                }
                             }
                         }
                     }
@@ -4647,7 +4772,7 @@ void Steam_Overlay::render_main_window()
                 int count = Bridge_GetNetworkInfo(adapters, 8);
 
                 if (count == 0) {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No network adapters detected");
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "No network adapters detected");
                 }
 
                 for (int ai = 0; ai < count; ++ai) {
@@ -4661,22 +4786,22 @@ void Steam_Overlay::render_main_window()
 
                     if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
                         if (a.range_str[0]) {
-                            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Range: %s", a.range_str);
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "  Range: %s", a.range_str);
                         }
                         for (int ui = 0; ui < a.user_count; ++ui) {
                             auto &u = a.users[ui];
                             ImGui::PushID(ai * 100 + ui);
 
                             if (u.is_self) {
-                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), u8"  \u25CF %s", u.name);
+                                ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), u8"  \u25CF %s", u.name);
                                 ImGui::SameLine();
-                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                                ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "(%s)", u.ip_str);
                                 ImGui::SameLine();
-                                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[You]");
+                                ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "[You]");
                             } else {
-                                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), u8"  \u25CF %s", u.name);
+                                ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), u8"  \u25CF %s", u.name);
                                 ImGui::SameLine();
-                                ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "(%s)", u.ip_str);
+                                ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "(%s)", u.ip_str);
                             }
                             // Right-click context menu for copy
                             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
@@ -4699,7 +4824,7 @@ void Steam_Overlay::render_main_window()
                             ImGui::PopID();
                         }
                         if (a.user_count == 0) {
-                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "  (no users detected)");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "  (no users detected)");
                         }
                     }
                 }
@@ -4717,18 +4842,18 @@ void Steam_Overlay::render_main_window()
 
                 if (got_state) {
                     // Header: member list
-                    ImGui::TextColored(ImVec4(0.5f, 0.7f, 0.9f, 1.0f), "Members (%d):", lcs.member_count);
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.9f, 1.0f)), "Members (%d):", lcs.member_count);
                     ImGui::SameLine();
                     for (int i = 0; i < lcs.member_count; ++i) {
                         if (i > 0) ImGui::SameLine();
                         bool is_self = (lcs.members[i].steam_id == settings->get_local_steam_id().ConvertToUint64());
                         if (is_self)
-                            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", lcs.members[i].name);
+                            ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 1.0f, 1.0f)), "%s", lcs.members[i].name);
                         else
-                            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", lcs.members[i].name);
+                            ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", lcs.members[i].name);
                         if (i < lcs.member_count - 1) {
                             ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                            ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), ",");
                         }
                     }
                     ImGui::Separator();
@@ -4746,9 +4871,9 @@ void Steam_Overlay::render_main_window()
 
                             bool is_self = (strncmp(line, "You: ", 5) == 0);
                             if (is_self)
-                                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 1.0f, 1.0f)), "%s", line);
                             else
-                                ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "%s", line);
+                                ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", line);
 
                             if (!end) break;
                             *end = '\n';
@@ -4785,7 +4910,7 @@ void Steam_Overlay::render_main_window()
                         }
                     }
                 } else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Not in a lobby.");
+                    ImGui::TextColored(TC(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), "Not in a lobby.");
                 }
             }
             ImGui::End();
@@ -4822,20 +4947,20 @@ void Steam_Overlay::render_main_window()
             ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin(translationWarning[current_language], &show_warning)) {
                 if (warn_bad_appid) {
-                    ImGui::TextColored(ImVec4(255, 0, 0, 255),
+                    ImGui::TextColored(TC(ImVec4(255, 0, 0, 255)),
                         "%s %s %s",
                         translationWarning[current_language], translationWarning[current_language], translationWarning[current_language]);
                     ImGui::TextWrapped("%s", translationWarningDescription_badAppid[current_language]);
-                    ImGui::TextColored(ImVec4(255, 0, 0, 255),
+                    ImGui::TextColored(TC(ImVec4(255, 0, 0, 255)),
                         "%s %s %s",
                         translationWarning[current_language], translationWarning[current_language], translationWarning[current_language]);
                 }
                 if (warn_local_save) {
-                    ImGui::TextColored(ImVec4(255, 0, 0, 255),
+                    ImGui::TextColored(TC(ImVec4(255, 0, 0, 255)),
                         "%s %s %s",
                         translationWarning[current_language], translationWarning[current_language], translationWarning[current_language]);
                     ImGui::TextWrapped("%s", translationWarningDescription_localSave[current_language]);
-                    ImGui::TextColored(ImVec4(255, 0, 0, 255),
+                    ImGui::TextColored(TC(ImVec4(255, 0, 0, 255)),
                         "%s %s %s",
                         translationWarning[current_language], translationWarning[current_language], translationWarning[current_language]);
                 }
