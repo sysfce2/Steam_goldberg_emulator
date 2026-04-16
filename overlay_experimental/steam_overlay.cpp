@@ -103,6 +103,61 @@ struct DisplayHdrDetail_t;
 static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale();
 static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c);
 
+// ---------------------------------------------------------------------------
+// Heuristic: determine whether 10-bit R10G10B10A2 / A2R10G10B10 / A2B10G10R10
+// pixel data is PQ (HDR10, ST.2084) encoded or plain SDR (sRGB / gamma 2.2).
+//
+// R10G10B10A2_UNORM is an ambiguous format — it can carry either PQ-encoded
+// HDR10 content (game manages HDR, sets DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+// or ordinary sRGB/gamma SDR content in 10-bit precision (display-managed HDR,
+// where the DWM applies SDR→HDR conversion after compositing).
+//
+// Without the DXGI colour-space flag (the InGameOverlay callback only reports
+// pixel format), we sample the actual back-buffer pixels:
+//
+//   PQ reference levels (10-bit code values out of 1023):
+//       80 nit (SDR white) → PQ ≈ 520        400 nit → PQ ≈ 681
+//     1000 nit             → PQ ≈ 783       4000 nit → PQ ≈ 945
+//
+//   SDR levels: full white = 1023.  Bright UI and surfaces routinely exceed 900.
+//
+// If a significant fraction of sampled pixels have any colour channel above 896
+// (≈ PQ 2500 nit — extremely rare even in bright HDR scenes), the content is
+// almost certainly SDR.
+// ---------------------------------------------------------------------------
+static bool detect_10bit_content_is_pq(const InGameOverlay::ScreenshotCallbackParameter_t* sc)
+{
+    if (!sc || !sc->Data || sc->Width == 0 || sc->Height == 0)
+        return true;  // unable to determine — fall back to PQ (legacy default)
+
+    const uint8_t* base   = static_cast<const uint8_t*>(sc->Data);
+    const uint32_t stride = sc->Pitch;                                // bytes per row
+    const uint32_t step_x = (std::max)(sc->Width  / 32u, 1u);        // ~32 samples across
+    const uint32_t step_y = (std::max)(sc->Height / 32u, 1u);        // ~32 samples down
+    constexpr uint32_t kThreshold = 896;  // ~87.6 % of 1023 → PQ ≈ 2500 nit
+
+    uint32_t above = 0;
+    uint32_t total = 0;
+
+    for (uint32_t y = 0; y < sc->Height; y += step_y) {
+        const uint32_t* row = reinterpret_cast<const uint32_t*>(base + (size_t)y * stride);
+        for (uint32_t x = 0; x < sc->Width; x += step_x) {
+            uint32_t px  = row[x];
+            uint32_t ch0 =  px        & 0x3FFu;
+            uint32_t ch1 = (px >> 10) & 0x3FFu;
+            uint32_t ch2 = (px >> 20) & 0x3FFu;
+            uint32_t mx  = (ch0 > ch1) ? ch0 : ch1;
+            if (ch2 > mx) mx = ch2;
+            if (mx > kThreshold) ++above;
+            ++total;
+        }
+    }
+
+    // If more than 5 % of sampled pixels have any channel above 896, classify
+    // as SDR.  In real PQ content, >2500 nit pixels are <1 % of the image.
+    return total > 0 && (above * 100u / total) < 5u;
+}
+
 // Used in both OverlayHookReady and the [Refresh] button to (re-)arm one-shot format detection.
 static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
 {
@@ -133,21 +188,36 @@ static void arm_swapchain_format_detect(InGameOverlay::RendererHook_t* r)
                     s_swapchain_type_str = "HDR  |  Linear FP32  |  wide gamut";
                     s_swapchain_cs = SCS_LINEAR_HDR;
                     break;
-                // ---- 10-bit HDR10 / PQ formats -------------------------------------
+                // ---- 10-bit formats (PQ or SDR — determined by pixel heuristic) ------
                 case F::R10G10B10A2:
                     s_swapchain_fmt_str  = "R10G10B10A2_UNORM";
-                    s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-                    s_swapchain_cs = SCS_HDR10_PQ;
+                    if (detect_10bit_content_is_pq(sc)) {
+                        s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                        s_swapchain_cs = SCS_HDR10_PQ;
+                    } else {
+                        s_swapchain_type_str = "SDR  |  sRGB  |  10-bit (display-managed HDR)";
+                        s_swapchain_cs = SCS_SDR_UNORM;
+                    }
                     break;
                 case F::A2R10G10B10:
                     s_swapchain_fmt_str  = "A2R10G10B10_UNORM";
-                    s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-                    s_swapchain_cs = SCS_HDR10_PQ;
+                    if (detect_10bit_content_is_pq(sc)) {
+                        s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                        s_swapchain_cs = SCS_HDR10_PQ;
+                    } else {
+                        s_swapchain_type_str = "SDR  |  sRGB  |  10-bit (display-managed HDR)";
+                        s_swapchain_cs = SCS_SDR_UNORM;
+                    }
                     break;
                 case F::A2B10G10R10:
                     s_swapchain_fmt_str  = "A2B10G10R10_UNORM";
-                    s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-                    s_swapchain_cs = SCS_HDR10_PQ;
+                    if (detect_10bit_content_is_pq(sc)) {
+                        s_swapchain_type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                        s_swapchain_cs = SCS_HDR10_PQ;
+                    } else {
+                        s_swapchain_type_str = "SDR  |  sRGB  |  10-bit (display-managed HDR)";
+                        s_swapchain_cs = SCS_SDR_UNORM;
+                    }
                     break;
                 // ---- 8-bit SDR formats (_SRGB = hardware sRGB encoding on RTV) -----
                 case F::R8G8B8A8_SRGB:
@@ -2282,20 +2352,28 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
         // scRGB convention: 1.0 = 80 nits.  If Windows SDR white is 200 nits, the OS
         // scales SDR content by 2.5× when compositing.  We apply the same factor so our
         // overlay sits at the same perceived brightness as the game's own SDR UI.
-        // To mitigate the uint8 saturation problem for high SDR-white scales, we use a
-        // soft shoulder (Reinhard-like) that compresses highlights instead of hard-clipping.
+        //
+        // The overlay writes to a UNORM8 RTV so output is clamped to [0, 1].  Values
+        // below the knee (0.75) pass through linearly — matching ImGui vertex-color
+        // scaling.  Only values above the knee are softly compressed toward 1.0 using
+        // a localised Reinhard shoulder, preserving mid-tone brightness while avoiding
+        // hard clipping in highlights.
         static uint8_t hdr_lut[256];
         static float   hdr_lut_built_for = -1.0f;
         if (hdr_lut_built_for != s_sdr_white_scale) {
             hdr_lut_built_for = s_sdr_white_scale;
+            constexpr float knee = 0.75f;
+            constexpr float knee_range = 1.0f - knee;  // 0.25
+            constexpr float knee_inv   = 1.0f / knee_range;
             for (int i = 0; i < 256; ++i) {
                 float s = i / 255.0f;
                 float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
                 l *= s_sdr_white_scale; // lift to match display SDR white brightness
-                // Soft shoulder: Reinhard tone-map when scale > 1 to avoid hard clipping.
-                // Maps [0, ∞) → [0, 1).  At scale=1 it's close to identity below 1.0.
-                if (s_sdr_white_scale > 1.0f)
-                    l = l / (1.0f + l);
+                // Soft knee: only compress values above 0.75, keep mid-tones linear.
+                if (l > knee) {
+                    float x = (l - knee) * knee_inv;   // normalised excess [0, ∞)
+                    l = knee + knee_range * (x / (1.0f + x)); // local Reinhard shoulder
+                }
                 hdr_lut[i] = (uint8_t)(fminf(l * 255.0f + 0.5f, 255.0f));
             }
         }
@@ -2435,6 +2513,9 @@ static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c)
 bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, bool upload_new_icon_to_gpu)
 {
     if (!_renderer) return false;
+    // Don't cache images while the colour space is still unknown (detection pending).
+    // Loading now would bake the wrong pixel transform into the cached decoded data.
+    if (s_swapchain_cs == SCS_UNKNOWN && effective_swapchain_cs() == SCS_UNKNOWN) return false;
     if (settings->paginated_achievements_icons < 0) return false; // no icons are loaded anyway
     if (!settings->overlay_upload_achs_icons_to_gpu) return false; // don't upload anything to the GPU
 
@@ -2469,6 +2550,8 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
 bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
 {
     if (!_renderer) return false;
+    // Don't cache images while the colour space is still unknown (detection pending).
+    if (s_swapchain_cs == SCS_UNKNOWN && effective_swapchain_cs() == SCS_UNKNOWN) return false;
     
     // Already loaded?
     if (state.avatar_resource && state.avatar_resource->GetResourceId() != 0) return true;
@@ -2507,6 +2590,8 @@ bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
 bool Steam_Overlay::try_load_local_avatar()
 {
     if (!_renderer) return false;
+    // Don't cache images while the colour space is still unknown (detection pending).
+    if (s_swapchain_cs == SCS_UNKNOWN && effective_swapchain_cs() == SCS_UNKNOWN) return false;
     
     // Already loaded?
     if (local_avatar_resource && local_avatar_resource->GetResourceId() != 0) return true;

@@ -347,6 +347,11 @@ static SwapChainInfo get_swapchain_info(effect_runtime *runtime)
     
     resource_desc desc = dev->get_resource_desc(backbuffer);
     format fmt = desc.texture.format;
+
+    // Query the actual colour space from the swap chain — this is the DXGI
+    // colour space the game configured via SetColorSpace1().  Crucial for
+    // R10G10B10A2 which can be either PQ (HDR10) or sRGB (display-managed HDR).
+    color_space cs = runtime->get_color_space();
     
     switch (fmt) {
         // ---- Linear HDR formats (scRGB / FP / wide UNORM) ------------------
@@ -365,16 +370,32 @@ static SwapChainInfo get_swapchain_info(effect_runtime *runtime)
             info.type_str   = "HDR  |  Linear FP32  |  wide gamut";
             info.cs         = SCS_LINEAR_HDR;
             break;
-        // ---- HDR10 PQ formats -----------------------------------------------
+        // ---- 10-bit formats (PQ or SDR — determined by actual colour space) --
         case format::r10g10b10a2_unorm:
             info.format_str = "R10G10B10A2_UNORM";
-            info.type_str   = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-            info.cs         = SCS_HDR10_PQ;
+            if (cs == color_space::hdr10_pq || cs == color_space::hdr10_hlg) {
+                info.type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                info.cs       = SCS_HDR10_PQ;
+            } else if (cs == color_space::scrgb) {
+                info.type_str = "HDR  |  scRGB / Linear  |  BT.709+";
+                info.cs       = SCS_LINEAR_HDR;
+            } else {
+                info.type_str = "SDR  |  sRGB  |  10-bit (display-managed HDR)";
+                info.cs       = SCS_SDR_UNORM;
+            }
             break;
         case format::b10g10r10a2_unorm:
             info.format_str = "B10G10R10A2_UNORM";
-            info.type_str   = "HDR10  |  PQ (ST.2084)  |  BT.2020";
-            info.cs         = SCS_HDR10_PQ;
+            if (cs == color_space::hdr10_pq || cs == color_space::hdr10_hlg) {
+                info.type_str = "HDR10  |  PQ (ST.2084)  |  BT.2020";
+                info.cs       = SCS_HDR10_PQ;
+            } else if (cs == color_space::scrgb) {
+                info.type_str = "HDR  |  scRGB / Linear  |  BT.709+";
+                info.cs       = SCS_LINEAR_HDR;
+            } else {
+                info.type_str = "SDR  |  sRGB  |  10-bit (display-managed HDR)";
+                info.cs       = SCS_SDR_UNORM;
+            }
             break;
         // ---- 8-bit SDR UNORM formats ----------------------------------------
         case format::r8g8b8a8_unorm:
@@ -493,13 +514,21 @@ static void transform_pixels_for_swapchain(uint8_t *pixels, int w, int h,
     const int byte_count  = pixel_count * 4;
 
     if (cs == SCS_LINEAR_HDR) {
-        // sRGB → linear + SDR white scale, with Reinhard soft-shoulder if scale > 1
-        const bool need_tonemap = sdr_scale > 1.01f;
+        // sRGB → linear + SDR white scale, with soft-knee compression above 0.75.
+        // Values below the knee pass through linearly (matching ImGui vertex-color
+        // scaling).  Only highlights above the knee are softly compressed toward 1.0
+        // to avoid hard clipping in the UNORM8 output.
+        constexpr float knee       = 0.75f;
+        constexpr float knee_range = 1.0f - knee;  // 0.25
+        constexpr float knee_inv   = 1.0f / knee_range;
         for (int i = 0; i < byte_count; i += 4) {
             for (int c = 0; c < 3; ++c) {
                 float v = pixels[i + c] / 255.0f;
                 float lin = srgb_to_linear(v) * sdr_scale;
-                if (need_tonemap) lin = lin / (1.0f + lin); // Reinhard
+                if (lin > knee) {
+                    float x = (lin - knee) * knee_inv;
+                    lin = knee + knee_range * (x / (1.0f + x));
+                }
                 int b = (int)(lin * 255.0f + 0.5f);
                 pixels[i + c] = (uint8_t)(b < 0 ? 0 : (b > 255 ? 255 : b));
             }
