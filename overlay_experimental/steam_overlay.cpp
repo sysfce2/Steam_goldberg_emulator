@@ -103,6 +103,14 @@ struct DisplayHdrDetail_t;
 static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale();
 static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c);
 
+static ImU32 adjust_imgui_color_u32_for_swapchain(ImU32 c);
+
+// Shorthand macros for wrapping inline sRGB colours for the active swap-chain colour space.
+// TC()   — transforms an ImVec4 (used with TextColored, PushStyleColor).
+// TC32() — transforms an ImU32  (used with AddRectFilled, AddRect, AddText, draw helpers).
+#define TC(c) adjust_imgui_color_for_swapchain((c))
+#define TC32(c) adjust_imgui_color_u32_for_swapchain((c))
+
 // ---------------------------------------------------------------------------
 // Heuristic: determine whether 10-bit R10G10B10A2 / A2R10G10B10 / A2B10G10R10
 // pixel data is PQ (HDR10, ST.2084) encoded or plain SDR (sRGB / gamma 2.2).
@@ -2502,11 +2510,6 @@ static ImVec4 adjust_imgui_color_for_swapchain(ImVec4 c)
     }
 }
 
-// Shorthand macros for wrapping inline sRGB colours for the active swap-chain colour space.
-// TC()   — transforms an ImVec4 (used with TextColored, PushStyleColor).
-// TC32() — transforms an ImU32  (used with AddRectFilled, AddRect, AddText, draw helpers).
-#define TC(c) adjust_imgui_color_for_swapchain((c))
-
 static ImU32 adjust_imgui_color_u32_for_swapchain(ImU32 c)
 {
     if (effective_swapchain_cs() == SCS_SDR_UNORM || effective_swapchain_cs() == SCS_UNKNOWN) return c;
@@ -2514,8 +2517,6 @@ static ImU32 adjust_imgui_color_u32_for_swapchain(ImU32 c)
     v = adjust_imgui_color_for_swapchain(v);
     return ImGui::ColorConvertFloat4ToU32(v);
 }
-
-#define TC32(c) adjust_imgui_color_u32_for_swapchain((c))
 
 // ── FP16 texture upload helpers ──────────────────────────────────────────────
 // IEEE 754 binary16 (half-float) conversion.
