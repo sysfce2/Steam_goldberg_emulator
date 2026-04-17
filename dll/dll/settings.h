@@ -205,6 +205,14 @@ struct Overlay_Appearance {
     enum class SwapchainOverride { Auto, LinearHDR, HDR10PQ, SrgbRTV, SDR };
     SwapchainOverride swapchain_override = SwapchainOverride::Auto;
 
+    // Per-image colour adjustments applied at texture upload time.
+    // Brightness: linear multiplier (1.0 = unchanged).
+    // Contrast: expansion/compression around 0.5 in linear space (1.0 = unchanged).
+    // Gamma: power curve exponent applied in linear space (1.0 = unchanged).
+    float image_brightness = 1.0f;
+    float image_contrast   = 1.0f;
+    float image_gamma_adjust = 1.0f;
+
     static NotificationPosition translate_notification_position(const std::string &str);
 };
 

@@ -158,6 +158,11 @@ static GSE_NotifAppearance s_appearance = {
     /* stats_text_b */          0.0f,
     /* stats_text_a */          1.0f,
     /* width_percent */         0.25f,
+    /* swapchain_override */    0,
+    /* image_gamma */           0,
+    /* image_brightness */      1.0f,
+    /* image_contrast */        1.0f,
+    /* image_gamma_adjust */    1.0f,
 };
 
 // ── Appearance macros (read live from s_appearance each frame) ────────── //
@@ -509,23 +514,41 @@ static constexpr float PQ_c1 = 0.8359375f;
 static constexpr float PQ_c2 = 18.8515625f;
 static constexpr float PQ_c3 = 18.6875f;
 
+// Apply per-image brightness / contrast / gamma adjustments in linear space.
+// Order: gamma (power curve) → contrast (expand around 0.5) → brightness (scale).
+static inline float apply_image_adjustments(float lin, float brightness, float contrast, float gamma_adj)
+{
+    if (gamma_adj != 1.0f && lin > 0.0f)
+        lin = powf(lin, gamma_adj);
+    if (contrast != 1.0f)
+        lin = (lin - 0.5f) * contrast + 0.5f;
+    if (brightness != 1.0f)
+        lin *= brightness;
+    return lin < 0.0f ? 0.0f : lin;
+}
+
 // Transform RGBA8 sRGB pixel buffer to FP16 (R16G16B16A16_FLOAT) for the
 // current swapchain colour space.  Returns a uint16_t array with 4 halfs
 // per pixel (RGBA order).  Caller owns the returned vector.
 static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int w, int h,
-                                                      SwapchainColorSpace cs, float sdr_scale)
+                                                      SwapchainColorSpace cs, float sdr_scale,
+                                                      float brightness = 1.0f, float contrast = 1.0f,
+                                                      float gamma_adj = 1.0f)
 {
     const int pixel_count = w * h;
     std::vector<uint16_t> out(pixel_count * 4);
+    const bool has_adj = (brightness != 1.0f || contrast != 1.0f || gamma_adj != 1.0f);
 
     if (cs == SCS_LINEAR_HDR) {
         // sRGB → linear × SDR white scale.  No tonemap needed — FP16 stores > 1.0.
         for (int i = 0; i < pixel_count; ++i) {
             const uint8_t *src = pixels + i * 4;
             uint16_t      *dst = out.data() + i * 4;
-            dst[0] = float_to_half(srgb_to_linear(src[0] / 255.0f) * sdr_scale);
-            dst[1] = float_to_half(srgb_to_linear(src[1] / 255.0f) * sdr_scale);
-            dst[2] = float_to_half(srgb_to_linear(src[2] / 255.0f) * sdr_scale);
+            for (int c = 0; c < 3; ++c) {
+                float lin = srgb_to_linear(src[c] / 255.0f);
+                if (has_adj) lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
+                dst[c] = float_to_half(lin * sdr_scale);
+            }
             dst[3] = float_to_half(src[3] / 255.0f);  // alpha: linear pass-through
         }
     } else if (cs == SCS_HDR10_PQ) {
@@ -536,6 +559,7 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
             uint16_t      *dst = out.data() + i * 4;
             for (int c = 0; c < 3; ++c) {
                 float lin = srgb_to_linear(src[c] / 255.0f);
+                if (has_adj) lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
                 float L = (lin * nits) / 10000.0f;
                 if (L < 0.0f) L = 0.0f;
                 float Lm1 = powf(L, PQ_m1);
@@ -548,28 +572,42 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
         for (int i = 0; i < pixel_count; ++i) {
             const uint8_t *src = pixels + i * 4;
             uint16_t      *dst = out.data() + i * 4;
-            dst[0] = float_to_half(srgb_to_linear(src[0] / 255.0f));
-            dst[1] = float_to_half(srgb_to_linear(src[1] / 255.0f));
-            dst[2] = float_to_half(srgb_to_linear(src[2] / 255.0f));
+            for (int c = 0; c < 3; ++c) {
+                float lin = srgb_to_linear(src[c] / 255.0f);
+                if (has_adj) lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
+                dst[c] = float_to_half(lin);
+            }
             dst[3] = float_to_half(src[3] / 255.0f);
         }
     } else {
-        // SDR / Unknown: simple 8-bit → FP16 passthrough (no transform)
+        // SDR / Unknown: 8-bit → FP16 with optional adjustments
         for (int i = 0; i < pixel_count; ++i) {
             const uint8_t *src = pixels + i * 4;
             uint16_t      *dst = out.data() + i * 4;
-            dst[0] = float_to_half(src[0] / 255.0f);
-            dst[1] = float_to_half(src[1] / 255.0f);
-            dst[2] = float_to_half(src[2] / 255.0f);
+            for (int c = 0; c < 3; ++c) {
+                float v = src[c] / 255.0f;
+                if (has_adj) {
+                    float lin = srgb_to_linear(v);
+                    lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
+                    // Re-encode to sRGB since SDR expects sRGB values
+                    v = lin <= 0.0031308f ? lin * 12.92f : 1.055f * powf(lin, 1.0f / 2.4f) - 0.055f;
+                    if (v < 0.0f) v = 0.0f; else if (v > 1.0f) v = 1.0f;
+                }
+                dst[c] = float_to_half(v);
+            }
             dst[3] = float_to_half(src[3] / 255.0f);
         }
     }
     return out;
 }
 
-// Track the colour space + SDR scale that cached textures were uploaded with.
-// When these change, the cache must be invalidated and textures re-uploaded.
+// Track the colour space + SDR scale + image adjustments that cached textures
+// were uploaded with.  When any of these change, the cache must be invalidated.
 static SwapchainColorSpace s_cached_tex_cs    = SCS_UNKNOWN;
+static float               s_cached_tex_scale = 1.0f;
+static float               s_cached_tex_brightness = 1.0f;
+static float               s_cached_tex_contrast   = 1.0f;
+static float               s_cached_tex_gamma_adj  = 1.0f;
 static float               s_cached_tex_scale = 1.0f;
 
 // Transform a single sRGB ImVec4 colour for the current swapchain colour space.
@@ -746,14 +784,20 @@ static IconTexture upload_icon(device *dev, const uint8_t *pixels, int w, int h)
     const bool use_fp16 = (s_addon_ecs == SCS_LINEAR_HDR ||
                            s_addon_ecs == SCS_HDR10_PQ   ||
                            s_addon_ecs == SCS_SDR_SRGB_RTV);
+    const float img_brightness = s_appearance.image_brightness;
+    const float img_contrast   = s_appearance.image_contrast;
+    const float img_gamma_adj  = s_appearance.image_gamma_adjust;
+    const bool has_adj = (img_brightness != 1.0f || img_contrast != 1.0f || img_gamma_adj != 1.0f);
 
     subresource_data init{};
     format tex_fmt;
     std::vector<uint16_t> fp16_pixels;
 
-    if (use_fp16) {
-        // FP16 path: sRGB → linear → HDR gain → R16G16B16A16_FLOAT
-        fp16_pixels = transform_pixels_to_fp16(pixels, w, h, s_addon_ecs, s_addon_sdr_scale);
+    if (use_fp16 || has_adj) {
+        // FP16 path: sRGB → linear → adjustments → HDR gain → R16G16B16A16_FLOAT
+        // Also used when image adjustments are active (even on SDR) for better precision.
+        fp16_pixels = transform_pixels_to_fp16(pixels, w, h, s_addon_ecs, s_addon_sdr_scale,
+                                                img_brightness, img_contrast, img_gamma_adj);
         init.data       = fp16_pixels.data();
         init.row_pitch  = w * 4 * sizeof(uint16_t);  // 4 × FP16 per pixel
         init.slice_pitch = w * h * 4 * (uint32_t)sizeof(uint16_t);
@@ -1737,13 +1781,18 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Resolve effective colour space (auto-detect + user overrides from config)
     s_addon_ecs = effective_addon_cs();
 
-    // ── Invalidate GPU texture caches if HDR colour space / SDR scale changed ──
-    // Textures have the colour-space transform baked in at upload time (FP16 in
-    // HDR mode, RGBA8 in SDR).  When the effective colour space or SDR white
-    // scale changes, all cached textures must be re-uploaded.
+    // ── Invalidate GPU texture caches if HDR colour space / SDR scale /
+    //    image adjustments changed ──
+    // Textures have the colour-space transform and image adjustments baked in
+    // at upload time.  When any parameter changes, all cached textures must be
+    // re-uploaded.
+    const bool adj_changed = (fabsf(s_appearance.image_brightness - s_cached_tex_brightness) > 0.001f ||
+                              fabsf(s_appearance.image_contrast   - s_cached_tex_contrast)   > 0.001f ||
+                              fabsf(s_appearance.image_gamma_adjust - s_cached_tex_gamma_adj) > 0.001f);
     if (s_addon_ecs != s_cached_tex_cs ||
         (s_addon_ecs != SCS_SDR_UNORM && s_addon_ecs != SCS_UNKNOWN &&
-         fabsf(s_addon_sdr_scale - s_cached_tex_scale) > 0.01f))
+         fabsf(s_addon_sdr_scale - s_cached_tex_scale) > 0.01f) ||
+        adj_changed)
     {
         auto *data = s_current_device->get_private_data<addon_device_data>();
         if (data) {
@@ -1754,8 +1803,11 @@ static void on_reshade_overlay(effect_runtime *runtime)
                 free_icon(s_current_device, icon);
             data->avatar_cache.clear();
         }
-        s_cached_tex_cs    = s_addon_ecs;
-        s_cached_tex_scale = s_addon_sdr_scale;
+        s_cached_tex_cs         = s_addon_ecs;
+        s_cached_tex_scale      = s_addon_sdr_scale;
+        s_cached_tex_brightness = s_appearance.image_brightness;
+        s_cached_tex_contrast   = s_appearance.image_contrast;
+        s_cached_tex_gamma_adj  = s_appearance.image_gamma_adjust;
     }
 
     // NOTE: ImGui style colours are NOT patched for HDR — ReShade handles the
@@ -4166,6 +4218,17 @@ static void draw_settings_overlay(effect_runtime *runtime)
         if (s_bridge.GetSDRWhiteScale) {
             float scale = s_bridge.GetSDRWhiteScale();
             ImGui::Text("SDR white scale: %.2f", scale);
+        }
+    }
+    // Image adjustments (local overrides — runtime tweaks, not persisted)
+    if (ImGui::CollapsingHeader("Image Adjustments")) {
+        ImGui::SliderFloat("Brightness", &s_appearance.image_brightness, 0.5f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Contrast",   &s_appearance.image_contrast,   0.5f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Gamma",      &s_appearance.image_gamma_adjust, 0.5f, 2.0f, "%.2f");
+        if (ImGui::Button("Reset##img_adj")) {
+            s_appearance.image_brightness   = 1.0f;
+            s_appearance.image_contrast     = 1.0f;
+            s_appearance.image_gamma_adjust = 1.0f;
         }
     }
 }

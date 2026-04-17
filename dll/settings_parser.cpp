@@ -455,6 +455,23 @@ static void load_overlay_appearance(class Settings *settings_client, class Setti
                 settings_client->overlay_appearance.swapchain_override = mode;
                 settings_server->overlay_appearance.swapchain_override = mode;
             // Swapchain colour-space override END <<<
+            // >>> Image colour adjustments (brightness, contrast, gamma)
+            } else if (name.compare("Image_Brightness") == 0) {
+                float val = std::stof(value);
+                if (val < 0.1f) val = 0.1f; else if (val > 4.0f) val = 4.0f;
+                settings_client->overlay_appearance.image_brightness = val;
+                settings_server->overlay_appearance.image_brightness = val;
+            } else if (name.compare("Image_Contrast") == 0) {
+                float val = std::stof(value);
+                if (val < 0.1f) val = 0.1f; else if (val > 4.0f) val = 4.0f;
+                settings_client->overlay_appearance.image_contrast = val;
+                settings_server->overlay_appearance.image_contrast = val;
+            } else if (name.compare("Image_Gamma_Adjust") == 0) {
+                float val = std::stof(value);
+                if (val < 0.1f) val = 0.1f; else if (val > 4.0f) val = 4.0f;
+                settings_client->overlay_appearance.image_gamma_adjust = val;
+                settings_server->overlay_appearance.image_gamma_adjust = val;
+            // Image colour adjustments END <<<
             // >>> FPS position
             } else if (name.compare("Stats_Pos_x") == 0) {
                 auto pos = std::stof(value);

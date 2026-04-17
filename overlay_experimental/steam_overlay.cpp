@@ -98,6 +98,25 @@ static float       s_sdr_white_scale     = 1.0f;
 static bool        s_sdr_scale_queried   = false; // true once display info has been queried
 static bool        s_pending_sdr_refresh = false; // set on Reset/Removing; drained in overlay_render_proc
 
+// Per-image colour adjustments (refreshed each frame from settings->overlay_appearance).
+static float       s_img_brightness = 1.0f;
+static float       s_img_contrast   = 1.0f;
+static float       s_img_gamma_adj  = 1.0f;
+
+// Texture cache invalidation tracking — mirrors the addon's approach.
+// When these change, all baked textures (achievement icons, avatars, SCE) must be re-uploaded.
+static SwapchainColorSpace s_cached_tex_cs    = SCS_UNKNOWN;
+static float               s_cached_tex_scale = 1.0f;
+static float               s_cached_tex_brightness = 1.0f;
+static float               s_cached_tex_contrast   = 1.0f;
+static float               s_cached_tex_gamma_adj  = 1.0f;
+
+// Periodic swapchain re-detection interval (seconds).
+// When the overlay is open, re-arm the format detect this often to catch
+// mid-session HDR/resolution changes the game makes without a Reset.
+static constexpr float SWAPCHAIN_REDETECT_INTERVAL_SEC = 5.0f;
+static float           s_swapchain_redetect_timer      = 0.0f;
+
 // Forward declaration — defined after query_display_hdr_details() below.
 struct DisplayHdrDetail_t;
 static std::vector<DisplayHdrDetail_t> refresh_sdr_white_scale();
@@ -580,6 +599,14 @@ bool Steam_Overlay::renderer_hook_proc()
 
             // SCE asset textures: free the whole cache so they are re-loaded and re-decoded lazily.
             sce_textures_free_all();
+
+            // Reset texture cache tracking so the per-frame invalidation check
+            // in overlay_render_proc() doesn't trigger a redundant second flush.
+            s_cached_tex_cs    = SCS_UNKNOWN;
+            s_cached_tex_scale = 1.0f;
+            s_cached_tex_brightness = 1.0f;
+            s_cached_tex_contrast   = 1.0f;
+            s_cached_tex_gamma_adj  = 1.0f;
         }
 
         if (is_ready && settings->overlay_appearance.image_gamma == Overlay_Appearance::SrgbDecode::Auto) {
@@ -2547,19 +2574,36 @@ static inline float srgb_byte_to_linear(uint8_t b)
     return (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
 }
 
+// Apply per-image brightness / contrast / gamma adjustments in linear space.
+static inline float apply_image_adjustments(float lin, float brightness, float contrast, float gamma_adj)
+{
+    if (gamma_adj != 1.0f && lin > 0.0f)
+        lin = powf(lin, gamma_adj);
+    if (contrast != 1.0f)
+        lin = (lin - 0.5f) * contrast + 0.5f;
+    if (brightness != 1.0f)
+        lin *= brightness;
+    return lin < 0.0f ? 0.0f : lin;
+}
+
 // Convert RGBA8 sRGB pixels → R16G16B16A16_FLOAT with colour-space transform baked in.
 static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int w, int h,
-                                                      SwapchainColorSpace cs, float sdr_scale)
+                                                      SwapchainColorSpace cs, float sdr_scale,
+                                                      float brightness = 1.0f, float contrast = 1.0f,
+                                                      float gamma_adj = 1.0f)
 {
     const int count = w * h;
     std::vector<uint16_t> out(count * 4);
+    const bool has_adj = (brightness != 1.0f || contrast != 1.0f || gamma_adj != 1.0f);
     if (cs == SCS_LINEAR_HDR) {
         for (int i = 0; i < count; ++i) {
             const uint8_t *s = pixels + i * 4;
             uint16_t      *d = out.data() + i * 4;
-            d[0] = float_to_half(srgb_byte_to_linear(s[0]) * sdr_scale);
-            d[1] = float_to_half(srgb_byte_to_linear(s[1]) * sdr_scale);
-            d[2] = float_to_half(srgb_byte_to_linear(s[2]) * sdr_scale);
+            for (int ch = 0; ch < 3; ++ch) {
+                float lin = srgb_byte_to_linear(s[ch]);
+                if (has_adj) lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
+                d[ch] = float_to_half(lin * sdr_scale);
+            }
             d[3] = float_to_half(s[3] / 255.0f);
         }
     } else if (cs == SCS_HDR10_PQ) {
@@ -2571,6 +2615,7 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
             uint16_t      *d = out.data() + i * 4;
             for (int ch = 0; ch < 3; ++ch) {
                 float lin = srgb_byte_to_linear(s[ch]);
+                if (has_adj) lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
                 float L = fminf((lin * nits) / 10000.0f, 1.0f);
                 float Lm1 = powf(L, m1);
                 d[ch] = float_to_half(powf((c1 + c2 * Lm1) / (1.0f + c3 * Lm1), m2));
@@ -2581,18 +2626,28 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
         for (int i = 0; i < count; ++i) {
             const uint8_t *s = pixels + i * 4;
             uint16_t      *d = out.data() + i * 4;
-            d[0] = float_to_half(srgb_byte_to_linear(s[0]));
-            d[1] = float_to_half(srgb_byte_to_linear(s[1]));
-            d[2] = float_to_half(srgb_byte_to_linear(s[2]));
+            for (int ch = 0; ch < 3; ++ch) {
+                float lin = srgb_byte_to_linear(s[ch]);
+                if (has_adj) lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
+                d[ch] = float_to_half(lin);
+            }
             d[3] = float_to_half(s[3] / 255.0f);
         }
     } else {
+        // SDR / Unknown: 8-bit → FP16 with optional adjustments
         for (int i = 0; i < count; ++i) {
             const uint8_t *s = pixels + i * 4;
             uint16_t      *d = out.data() + i * 4;
-            d[0] = float_to_half(s[0] / 255.0f);
-            d[1] = float_to_half(s[1] / 255.0f);
-            d[2] = float_to_half(s[2] / 255.0f);
+            for (int ch = 0; ch < 3; ++ch) {
+                float v = s[ch] / 255.0f;
+                if (has_adj) {
+                    float lin = srgb_byte_to_linear(s[ch]);
+                    lin = apply_image_adjustments(lin, brightness, contrast, gamma_adj);
+                    v = lin <= 0.0031308f ? lin * 12.92f : 1.055f * powf(lin, 1.0f / 2.4f) - 0.055f;
+                    if (v < 0.0f) v = 0.0f; else if (v > 1.0f) v = 1.0f;
+                }
+                d[ch] = float_to_half(v);
+            }
             d[3] = float_to_half(s[3] / 255.0f);
         }
     }
@@ -2600,10 +2655,13 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
 }
 
 // Decide whether FP16 upload is available and appropriate.
+// Also used when image adjustments are active (even on SDR) for better precision.
 static bool should_use_fp16()
 {
     SwapchainColorSpace cs = effective_swapchain_cs();
-    return (cs == SCS_LINEAR_HDR || cs == SCS_HDR10_PQ || cs == SCS_SDR_SRGB_RTV);
+    if (cs == SCS_LINEAR_HDR || cs == SCS_HDR10_PQ || cs == SCS_SDR_SRGB_RTV)
+        return true;
+    return (s_img_brightness != 1.0f || s_img_contrast != 1.0f || s_img_gamma_adj != 1.0f);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2632,7 +2690,8 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
         auto& icon_decoded_data = achieved ? ach.icon_decoded_data : ach.icon_gray_decoded_data;
         if (should_use_fp16()) {
             auto fp16 = transform_pixels_to_fp16((const uint8_t*)image_info->data.data(), iw, ih,
-                                                  effective_swapchain_cs(), s_sdr_white_scale);
+                                                  effective_swapchain_cs(), s_sdr_white_scale,
+                                                  s_img_brightness, s_img_contrast, s_img_gamma_adj);
             icon_decoded_data.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
             icon_rsrc->AttachResource((void*)icon_decoded_data.data(), (uint32_t)iw, (uint32_t)ih,
                                       InGameOverlay::RendererPixelFormat::RGBA16F);
@@ -2681,7 +2740,8 @@ bool Steam_Overlay::try_load_avatar(friend_window_state &state, uint64 steam_id)
     // Store pixel data - AttachResource holds a raw pointer so buffer must outlive resource
     if (should_use_fp16()) {
         auto fp16 = transform_pixels_to_fp16((const uint8_t*)img->data.data(), iw, ih,
-                                              effective_swapchain_cs(), s_sdr_white_scale);
+                                              effective_swapchain_cs(), s_sdr_white_scale,
+                                              s_img_brightness, s_img_contrast, s_img_gamma_adj);
         state.avatar_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
         state.avatar_resource->AttachResource((void*)state.avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih,
                                               InGameOverlay::RendererPixelFormat::RGBA16F);
@@ -2728,7 +2788,8 @@ bool Steam_Overlay::try_load_local_avatar()
     // Store pixel data - AttachResource holds a raw pointer so buffer must outlive resource
     if (should_use_fp16()) {
         auto fp16 = transform_pixels_to_fp16((const uint8_t*)img->data.data(), iw, ih,
-                                              effective_swapchain_cs(), s_sdr_white_scale);
+                                              effective_swapchain_cs(), s_sdr_white_scale,
+                                              s_img_brightness, s_img_contrast, s_img_gamma_adj);
         local_avatar_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
         local_avatar_resource->AttachResource((void*)local_avatar_pixels.data(), (uint32_t)iw, (uint32_t)ih,
                                               InGameOverlay::RendererPixelFormat::RGBA16F);
@@ -2767,6 +2828,11 @@ void Steam_Overlay::overlay_render_proc()
     // so effective_swapchain_cs() can resolve the user's Swapchain_Override.
     s_ov_app = &settings->overlay_appearance;
 
+    // Refresh per-image colour adjustments from settings
+    s_img_brightness = settings->overlay_appearance.image_brightness;
+    s_img_contrast   = settings->overlay_appearance.image_contrast;
+    s_img_gamma_adj  = settings->overlay_appearance.image_gamma_adjust;
+
     // Deferred SCE texture cleanup - do this BEFORE any ImGui rendering
     // to avoid deleting resources mid-frame (which crashes DX9)
     if (sce_textures_pending_free) {
@@ -2787,6 +2853,71 @@ void Steam_Overlay::overlay_render_proc()
     // callback where arm_swapchain_format_detect is called.
     if (!s_sdr_scale_queried)
         refresh_sdr_white_scale();
+
+    // ── Texture cache invalidation ──────────────────────────────────────
+    // If the swapchain colour space, SDR scale, or image adjustments changed
+    // since we last baked the textures, invalidate everything so they are
+    // re-decoded + re-uploaded with the new parameters on next access.
+    {
+        const SwapchainColorSpace cur_cs = effective_swapchain_cs();
+        const bool cs_changed    = (cur_cs != s_cached_tex_cs);
+        const bool scale_changed = (cur_cs != SCS_SDR_UNORM && cur_cs != SCS_UNKNOWN &&
+                                    fabsf(s_sdr_white_scale - s_cached_tex_scale) > 0.01f);
+        const bool adj_changed   = (fabsf(s_img_brightness - s_cached_tex_brightness) > 0.001f ||
+                                    fabsf(s_img_contrast   - s_cached_tex_contrast)   > 0.001f ||
+                                    fabsf(s_img_gamma_adj  - s_cached_tex_gamma_adj)  > 0.001f);
+        if (cs_changed || scale_changed || adj_changed) {
+            PRINT_DEBUG("Texture cache invalidation: cs %d→%d  scale %.2f→%.2f  adj %.2f/%.2f/%.2f→%.2f/%.2f/%.2f",
+                (int)s_cached_tex_cs, (int)cur_cs, s_cached_tex_scale, s_sdr_white_scale,
+                s_cached_tex_brightness, s_cached_tex_contrast, s_cached_tex_gamma_adj,
+                s_img_brightness, s_img_contrast, s_img_gamma_adj);
+
+            // Achievement icons: clear decoded pixel caches and detach GPU resources.
+            // The RendererResource_t objects stay alive; try_load_ach_icon() will
+            // re-decode and re-attach on next access (GetResourceId() == 0).
+            for (auto &ach : achievements) {
+                ach.icon_decoded_data.clear();
+                ach.icon_gray_decoded_data.clear();
+                if (ach.icon)      ach.icon->ClearAttachedResource();
+                if (ach.icon_gray) ach.icon_gray->ClearAttachedResource();
+            }
+            last_loaded_ach_icon = 0;
+
+            // Avatars: clear decoded pixels and detach GPU resources.
+            for (auto &[frd, state] : friends) {
+                state.avatar_pixels.clear();
+                if (state.avatar_resource) state.avatar_resource->ClearAttachedResource();
+            }
+            local_avatar_pixels.clear();
+            if (local_avatar_resource) local_avatar_resource->ClearAttachedResource();
+
+            // SCE textures: free the whole cache so they are re-loaded lazily.
+            sce_textures_free_all();
+
+            // Snapshot the current parameters
+            s_cached_tex_cs         = cur_cs;
+            s_cached_tex_scale      = s_sdr_white_scale;
+            s_cached_tex_brightness = s_img_brightness;
+            s_cached_tex_contrast   = s_img_contrast;
+            s_cached_tex_gamma_adj  = s_img_gamma_adj;
+        }
+    }
+
+    // ── Periodic swapchain re-detection ─────────────────────────────────
+    // While the overlay is visible, periodically re-arm the format detector
+    // to catch mid-session HDR/resolution/format changes the game may make
+    // without triggering a device Reset (e.g. borderless ↔ fullscreen, HDR toggle).
+    if (show_overlay && _renderer &&
+        settings->overlay_appearance.image_gamma == Overlay_Appearance::SrgbDecode::Auto)
+    {
+        s_swapchain_redetect_timer += ImGui::GetIO().DeltaTime;
+        if (s_swapchain_redetect_timer >= SWAPCHAIN_REDETECT_INTERVAL_SEC) {
+            s_swapchain_redetect_timer = 0.0f;
+            arm_swapchain_format_detect(_renderer);
+        }
+    } else {
+        s_swapchain_redetect_timer = 0.0f;
+    }
 
     // NOTE: ImGui style colours are NOT patched for HDR — InGameOverlay handles
     // sRGB→swapchain conversion for ImGui rendering internally.  Only textures
@@ -4436,7 +4567,8 @@ void Steam_Overlay::render_main_window()
                                                 tex.w = pw; tex.h = ph;
                                                 if (should_use_fp16()) {
                                                     auto fp16 = transform_pixels_to_fp16((const uint8_t*)tex.pixels.data(), pw, ph,
-                                                                                          effective_swapchain_cs(), s_sdr_white_scale);
+                                                                                          effective_swapchain_cs(), s_sdr_white_scale,
+                                                                                          s_img_brightness, s_img_contrast, s_img_gamma_adj);
                                                     tex.fp16_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
                                                     tex.resource->AttachResource((void*)tex.fp16_pixels.data(), (uint32_t)pw, (uint32_t)ph,
                                                                                  InGameOverlay::RendererPixelFormat::RGBA16F);
@@ -4606,7 +4738,8 @@ void Steam_Overlay::render_main_window()
                                 ftex.w = pw; ftex.h = ph;
                                 if (should_use_fp16()) {
                                     auto fp16 = transform_pixels_to_fp16((const uint8_t*)ftex.pixels.data(), pw, ph,
-                                                                          effective_swapchain_cs(), s_sdr_white_scale);
+                                                                          effective_swapchain_cs(), s_sdr_white_scale,
+                                                                          s_img_brightness, s_img_contrast, s_img_gamma_adj);
                                     ftex.fp16_pixels.assign(reinterpret_cast<const char*>(fp16.data()), fp16.size() * sizeof(uint16_t));
                                     ftex.resource->AttachResource((void*)ftex.fp16_pixels.data(), (uint32_t)pw, (uint32_t)ph,
                                                                    InGameOverlay::RendererPixelFormat::RGBA16F);

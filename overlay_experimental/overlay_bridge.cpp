@@ -645,6 +645,9 @@ __declspec(dllexport) int GSE_OverlayBridge_GetNotifAppearance(GSE_NotifAppearan
     out->width_percent          = Notification::width_percent;
     out->swapchain_override     = static_cast<int32_t>(a.swapchain_override);
     out->image_gamma            = static_cast<int32_t>(a.image_gamma);
+    out->image_brightness       = a.image_brightness;
+    out->image_contrast         = a.image_contrast;
+    out->image_gamma_adjust     = a.image_gamma_adjust;
     return 1;
 }
 
