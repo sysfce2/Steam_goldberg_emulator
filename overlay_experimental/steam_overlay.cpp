@@ -3438,6 +3438,51 @@ void Steam_Overlay::render_main_window()
                 ImGui::TextDisabled("HDR scale  : %.2fx  (SDR white = %d nits)",
                     s_sdr_white_scale, (int)(s_sdr_white_scale * 80.f + 0.5f));
             }
+
+            // -- Image adjustments (live sliders) --
+            ImGui::Spacing();
+            ImGui::TextDisabled("Image Adjustments:");
+            {
+                static bool s_adj_slider_active = false;
+                bool any_active = false;
+                bool released = false;
+
+                float &br = settings->overlay_appearance.image_brightness;
+                float &ct = settings->overlay_appearance.image_contrast;
+                float &ga = settings->overlay_appearance.image_gamma_adjust;
+
+                ImGui::SliderFloat("Brightness##img", &br, 0.5f, 2.0f, "%.2f");
+                if (ImGui::IsItemActive()) any_active = true;
+                if (ImGui::IsItemDeactivatedAfterEdit()) released = true;
+
+                ImGui::SliderFloat("Contrast##img",   &ct, 0.5f, 2.0f, "%.2f");
+                if (ImGui::IsItemActive()) any_active = true;
+                if (ImGui::IsItemDeactivatedAfterEdit()) released = true;
+
+                ImGui::SliderFloat("Gamma##img",      &ga, 0.5f, 2.0f, "%.2f");
+                if (ImGui::IsItemActive()) any_active = true;
+                if (ImGui::IsItemDeactivatedAfterEdit()) released = true;
+
+                if (any_active) s_adj_slider_active = true;
+                if (released)   s_adj_slider_active = false;
+
+                if (ImGui::SmallButton("Reset##img_adj")) {
+                    br = 1.0f; ct = 1.0f; ga = 1.0f;
+                    released = true;
+                }
+
+                // While a slider is being dragged, suppress the per-frame cache
+                // invalidation by keeping the cached values in sync.  On release
+                // (or Reset), force a mismatch so the check triggers exactly once.
+                if (s_adj_slider_active) {
+                    s_cached_tex_brightness = s_img_brightness;
+                    s_cached_tex_contrast   = s_img_contrast;
+                    s_cached_tex_gamma_adj  = s_img_gamma_adj;
+                }
+                if (released) {
+                    s_cached_tex_brightness = -999.0f; // sentinel → forces adj_changed
+                }
+            }
         }
         ImGui::Separator();
         // -------------------------------------------------------------------
