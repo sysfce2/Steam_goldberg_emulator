@@ -1406,7 +1406,7 @@ void Steam_Overlay::build_chat_window()
                         ImGui::SetCursorPos(text_start);
                         ImGui::TextColored(TC(ImVec4(0.9f, 0.9f, 0.2f, 1.0f)), "%s", frd.name().c_str());
                         ImGui::SameLine();
-                        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", frd.id());
+                        ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(ID: %llu)", (unsigned long long)frd.id());
 
                         // Line 2: Playing AppID
                         ImGui::SetCursorPosX(text_start.x);
@@ -1424,7 +1424,7 @@ void Steam_Overlay::build_chat_window()
                         if (frd.lobby_id() != 0) {
                             bool frd_is_owner = (frd.lobby_owner_name().size() > 0 && frd.lobby_owner_name() == frd.name());
                             ImGui::TextColored(TC(ImVec4(0.4f, 0.8f, 0.4f, 1.0f)), "%s - %llu",
-                                frd_is_owner ? "Has Lobby" : "In Lobby", frd.lobby_id());
+                                frd_is_owner ? "Has Lobby" : "In Lobby", (unsigned long long)frd.lobby_id());
                         } else if (same_app) {
                             ImGui::TextColored(TC(ImVec4(0.5f, 0.7f, 0.5f, 1.0f)), "In Game");
                         } else if (frd.appid() != 0) {
@@ -3415,7 +3415,7 @@ void Steam_Overlay::render_main_window()
                     else if (d.wide_color && !d.hdr_enabled) hdr_st = "WCG (no HDR)";
                     else if (d.hdr_enabled)     hdr_st = "HDR ON";
                     else                        hdr_st = "HDR OFF (supported)";
-                    char bpc_buf[8] = "?";
+                    char bpc_buf[16] = "?";
                     if (d.bpc > 0) snprintf(bpc_buf, sizeof(bpc_buf), "%d", d.bpc);
                     char white_buf[24] = "?";
                     if (d.sdr_white_nits >= 0)
@@ -4588,7 +4588,7 @@ void Steam_Overlay::render_main_window()
                                         std::string ext = url_ext(thumb_src);
                                         std::string item_label = sanitize(item->name);
                                         if (item_label.size() > 48) item_label.resize(48);
-                                        char prefix[8]{};
+                                        char prefix[16]{};
                                         snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
                                         // Backgrounds: "01_thumb_wallpaper_Name.jpg"; others: "01_icon_Name.ext"
                                         std::string filename = is_bg
@@ -4694,7 +4694,7 @@ void Steam_Overlay::render_main_window()
                                             for (int ni = 0; ni < (int)items_vec.size(); ++ni) {
                                                 const auto *nitem = items_vec[ni];
                                                 int nslot2 = ni + 1;
-                                                char npfx[8]{}; snprintf(npfx, sizeof(npfx), "%02d_", nslot2);
+                                                char npfx[16]{}; snprintf(npfx, sizeof(npfx), "%02d_", nslot2);
                                                 std::string nlbl = sanitize(nitem->name);
                                                 if (nlbl.size() > 48) nlbl.resize(48);
                                                 std::string npreview_file;

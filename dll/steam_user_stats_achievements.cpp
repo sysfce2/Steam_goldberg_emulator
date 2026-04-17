@@ -1376,7 +1376,7 @@ void Steam_User_Stats::RequestSceAssetDownload()
 
                 for (const auto &item : s.items) {
                     int slot_idx = ++slot_counter[item.type];
-                    char prefix[8]{};
+                    char prefix[16]{};
                     snprintf(prefix, sizeof(prefix), "%02d_", slot_idx);
 
                     std::string type_dir = ser_dir + PATH_SEPARATOR + type_subfolder(item.type);
