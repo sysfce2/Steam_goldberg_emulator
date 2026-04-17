@@ -603,19 +603,11 @@ static ImVec4 transform_color_for_swapchain(const ImVec4 &col, SwapchainColorSpa
     return out;
 }
 
-// Shorthand: transform an inline sRGB ImVec4 for the active swapchain colour space.
-#define TC(c) transform_color_for_swapchain((c), s_addon_ecs, s_addon_sdr_scale)
-
-// Shorthand: transform an IM_COL32 (ImU32) colour for the active swapchain.
-// Use at call sites — NOT for constexpr/static initialisers.
-static inline ImU32 transform_color_u32(ImU32 col, SwapchainColorSpace cs, float sdr_scale)
-{
-    if (cs == SCS_SDR_UNORM || cs == SCS_UNKNOWN) return col;
-    ImVec4 v = ImGui::ColorConvertU32ToFloat4(col);
-    v = transform_color_for_swapchain(v, cs, sdr_scale);
-    return ImGui::ColorConvertFloat4ToU32(v);
-}
-#define TC32(c) transform_color_u32((c), s_addon_ecs, s_addon_sdr_scale)
+// Shorthand macros for inline colours.  HDR transforms are applied only to
+// textures (via transform_pixels_to_fp16); ReShade handles the ImGui colour-
+// space conversion internally, so UI colours are passed through unchanged.
+#define TC(c) (c)
+#define TC32(c) (c)
 
 // Transform RGBA8 pixel buffer in-place for the current swapchain colour space.
 // Same logic as native overlay's srgb_decode_pixels_if_needed().
@@ -673,7 +665,7 @@ static int apply_global_style_colors()
 {
     int count = 0;
     auto push = [&](ImGuiCol idx, const ImVec4 &col) {
-        ImGui::PushStyleColor(idx, transform_color_for_swapchain(col, s_addon_ecs, s_addon_sdr_scale));
+        ImGui::PushStyleColor(idx, col);
         ++count;
     };
     push(ImGuiCol_WindowBg, COL_MAIN_BG);
@@ -1766,18 +1758,9 @@ static void on_reshade_overlay(effect_runtime *runtime)
         s_cached_tex_scale = s_addon_sdr_scale;
     }
 
-    // ── Patch ImGui style colours for HDR / _SRGB backbuffers ──
-    // Same approach as the native overlay: save all style colours, transform
-    // them for the current colour space, render the frame, then restore.
-    ImVec4 saved_imgui_colors[ImGuiCol_COUNT];
-    bool imgui_colors_patched = false;
-    if (s_addon_ecs == SCS_LINEAR_HDR || s_addon_ecs == SCS_HDR10_PQ || s_addon_ecs == SCS_SDR_SRGB_RTV) {
-        ImVec4 *cols = ImGui::GetStyle().Colors;
-        memcpy(saved_imgui_colors, cols, sizeof(saved_imgui_colors));
-        for (int i = 0; i < ImGuiCol_COUNT; ++i)
-            cols[i] = transform_color_for_swapchain(cols[i], s_addon_ecs, s_addon_sdr_scale);
-        imgui_colors_patched = true;
-    }
+    // NOTE: ImGui style colours are NOT patched for HDR — ReShade handles the
+    // sRGB→swapchain conversion for ImGui rendering internally.  Only textures
+    // need our explicit FP16 HDR transform (via transform_pixels_to_fp16).
 
     // Flush deferred GPU resource destruction (queued by free_sce_textures last frame)
     {
@@ -1856,9 +1839,6 @@ static void on_reshade_overlay(effect_runtime *runtime)
     if (docking_was_enabled)
         gse_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    // Restore ImGui style colours after our frame is done
-    if (imgui_colors_patched)
-        memcpy(ImGui::GetStyle().Colors, saved_imgui_colors, sizeof(saved_imgui_colors));
 }
 
 /* ── Main overlay window (rendered when user toggles with Shift+Tab) ──── */

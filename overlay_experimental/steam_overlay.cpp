@@ -108,8 +108,11 @@ static ImU32 adjust_imgui_color_u32_for_swapchain(ImU32 c);
 // Shorthand macros for wrapping inline sRGB colours for the active swap-chain colour space.
 // TC()   — transforms an ImVec4 (used with TextColored, PushStyleColor).
 // TC32() — transforms an ImU32  (used with AddRectFilled, AddRect, AddText, draw helpers).
-#define TC(c) adjust_imgui_color_for_swapchain((c))
-#define TC32(c) adjust_imgui_color_u32_for_swapchain((c))
+// HDR transforms are applied only to textures (via transform_pixels_to_fp16);
+// InGameOverlay handles the ImGui colour-space conversion internally, so UI
+// colours are passed through unchanged.
+#define TC(c) (c)
+#define TC32(c) (c)
 
 // ---------------------------------------------------------------------------
 // Heuristic: determine whether 10-bit R10G10B10A2 / A2R10G10B10 / A2B10G10R10
@@ -1865,9 +1868,9 @@ void Steam_Overlay::build_notifications(float width, float height)
             ? settings->overlay_appearance.notification_a
             : 1.0f;
         
-        ImGui::PushStyleColor(ImGuiCol_Border, adjust_imgui_color_for_swapchain(ImVec4(0, 0, 0, settings_noti_alpha)));
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, adjust_imgui_color_for_swapchain(get_notification_bg_rgba_safe()));
-        ImGui::PushStyleColor(ImGuiCol_Text, adjust_imgui_color_for_swapchain(ImVec4(1.0f, 1.0f, 1.0f, settings_noti_alpha)));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, settings_noti_alpha));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, get_notification_bg_rgba_safe());
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, settings_noti_alpha));
        
         // some extra window flags for each notification type
         ImGuiWindowFlags extra_flags = ImGuiWindowFlags_NoFocusOnAppearing;
@@ -2785,25 +2788,9 @@ void Steam_Overlay::overlay_render_proc()
     if (!s_sdr_scale_queried)
         refresh_sdr_white_scale();
 
-    // HDR style color normalisation.
-    // ingame_overlay forces DXGI_FORMAT_R8G8B8A8_UNORM on its own RTV, so ImGui vertex
-    // colours (authored as sRGB 0-1 floats) are stored as raw UNORM floats when the
-    // overlay is composited into the game's swap chain.  Depending on the colour space
-    // (scRGB, HDR10 PQ, or _SRGB), ImGui style colours (authored as sRGB 0-1 floats)
-    // must be transformed to match.  We patch all style colours for the duration of
-    // this frame and restore them afterwards.
-    ImVec4 saved_imgui_colors[ImGuiCol_COUNT];
-    bool imgui_colors_patched = false;
-    const SwapchainColorSpace ecs = effective_swapchain_cs();
-    if (ecs == SCS_LINEAR_HDR || ecs == SCS_HDR10_PQ || ecs == SCS_SDR_SRGB_RTV) {
-        ImVec4 *cols = ImGui::GetStyle().Colors;
-        memcpy(saved_imgui_colors, cols, sizeof(saved_imgui_colors));
-        for (int i = 0; i < ImGuiCol_COUNT; ++i) {
-            if (cols[i].w <= 0.f) continue; // skip fully transparent
-            cols[i] = adjust_imgui_color_for_swapchain(cols[i]);
-        }
-        imgui_colors_patched = true;
-    }
+    // NOTE: ImGui style colours are NOT patched for HDR — InGameOverlay handles
+    // sRGB→swapchain conversion for ImGui rendering internally.  Only textures
+    // need our explicit FP16 HDR transform (via transform_pixels_to_fp16).
 
     if (show_overlay) {
         render_main_window();
@@ -2811,7 +2798,7 @@ void Steam_Overlay::overlay_render_proc()
 
     if (stats.show_any_stats()) {
         // Give the stats HUD the same swapchain colour transform as the main overlay
-        stats.color_transform = imgui_colors_patched ? adjust_imgui_color_for_swapchain : nullptr;
+        stats.color_transform = nullptr;
         stats.render_stats(current_language);
     }
 
@@ -2826,9 +2813,7 @@ void Steam_Overlay::overlay_render_proc()
         build_notifications(io.DisplaySize.x, io.DisplaySize.y);
     }
 
-    if (imgui_colors_patched) {
-        memcpy(ImGui::GetStyle().Colors, saved_imgui_colors, sizeof(saved_imgui_colors));
-    }
+
 
     load_next_ach_icon();
 }
@@ -2840,12 +2825,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.background_g >= 0) &&
         (settings->overlay_appearance.background_b >= 0) &&
         (settings->overlay_appearance.background_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
+        ImVec4 colorSet = ImVec4(
             settings->overlay_appearance.background_r,
             settings->overlay_appearance.background_g,
             settings->overlay_appearance.background_b,
             settings->overlay_appearance.background_a
-        ));
+        );
         ImGui::PushStyleColor(ImGuiCol_WindowBg, colorSet);
         style_color_stack += 1;
     }
@@ -2854,12 +2839,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_g >= 0) &&
         (settings->overlay_appearance.element_b >= 0) &&
         (settings->overlay_appearance.element_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
+        ImVec4 colorSet = ImVec4(
             settings->overlay_appearance.element_r,
             settings->overlay_appearance.element_g,
             settings->overlay_appearance.element_b,
             settings->overlay_appearance.element_a
-        ));
+        );
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, colorSet);
         ImGui::PushStyleColor(ImGuiCol_Button, colorSet);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, colorSet);
@@ -2871,12 +2856,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_hovered_g >= 0) &&
         (settings->overlay_appearance.element_hovered_b >= 0) &&
         (settings->overlay_appearance.element_hovered_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
+        ImVec4 colorSet = ImVec4(
             settings->overlay_appearance.element_hovered_r,
             settings->overlay_appearance.element_hovered_g,
             settings->overlay_appearance.element_hovered_b,
             settings->overlay_appearance.element_hovered_a
-        ));
+        );
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colorSet);
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, colorSet);
         ImGui::PushStyleColor(ImGuiCol_ResizeGripHovered, colorSet);
@@ -2888,12 +2873,12 @@ uint32 Steam_Overlay::apply_global_style_color()
         (settings->overlay_appearance.element_active_g >= 0) &&
         (settings->overlay_appearance.element_active_b >= 0) &&
         (settings->overlay_appearance.element_active_a >= 0)) {
-        ImVec4 colorSet = adjust_imgui_color_for_swapchain(ImVec4(
+        ImVec4 colorSet = ImVec4(
             settings->overlay_appearance.element_active_r,
             settings->overlay_appearance.element_active_g,
             settings->overlay_appearance.element_active_b,
             settings->overlay_appearance.element_active_a
-        ));
+        );
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, colorSet);
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, colorSet);
         ImGui::PushStyleColor(ImGuiCol_ResizeGripActive, colorSet);
