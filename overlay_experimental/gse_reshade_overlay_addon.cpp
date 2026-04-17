@@ -174,9 +174,10 @@ static GSE_NotifAppearance s_appearance = {
 #define NOTIF_MARGIN_Y    (s_appearance.notification_margin_y)
 #define ANIM_DURATION_MS  ((int64_t)s_appearance.notification_animation)
 
-/* ── Current device pointer (set each frame in on_reshade_overlay) ─────── */
+/* ── Current device / swapchain pointers ──────────────────────────────── */
 
-static device *s_current_device = nullptr;
+static device    *s_current_device    = nullptr;
+static swapchain *s_current_swapchain = nullptr;
 
 /* ── Swapchain colour-space classification (mirrors native overlay) ───── */
 enum SwapchainColorSpace {
@@ -351,7 +352,8 @@ static SwapChainInfo get_swapchain_info(effect_runtime *runtime)
     // Query the actual colour space from the swap chain — this is the DXGI
     // colour space the game configured via SetColorSpace1().  Crucial for
     // R10G10B10A2 which can be either PQ (HDR10) or sRGB (display-managed HDR).
-    color_space cs = runtime->get_color_space();
+    color_space cs = s_current_swapchain ? s_current_swapchain->get_color_space()
+                                            : color_space::unknown;
     
     switch (fmt) {
         // ---- Linear HDR formats (scRGB / FP / wide UNORM) ------------------
@@ -500,6 +502,13 @@ static inline uint16_t float_to_half(float value)
 // quantisation + Reinhard tonemap that the old RGBA8 path required.
 // ─────────────────────────────────────────────────────────────────────
 
+// PQ (ST.2084) constants
+static constexpr float PQ_m1 = 0.1593017578125f;
+static constexpr float PQ_m2 = 78.84375f;
+static constexpr float PQ_c1 = 0.8359375f;
+static constexpr float PQ_c2 = 18.8515625f;
+static constexpr float PQ_c3 = 18.6875f;
+
 // Transform RGBA8 sRGB pixel buffer to FP16 (R16G16B16A16_FLOAT) for the
 // current swapchain colour space.  Returns a uint16_t array with 4 halfs
 // per pixel (RGBA order).  Caller owns the returned vector.
@@ -562,13 +571,6 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
 // When these change, the cache must be invalidated and textures re-uploaded.
 static SwapchainColorSpace s_cached_tex_cs    = SCS_UNKNOWN;
 static float               s_cached_tex_scale = 1.0f;
-
-// PQ (ST.2084) constants
-static constexpr float PQ_m1 = 0.1593017578125f;
-static constexpr float PQ_m2 = 78.84375f;
-static constexpr float PQ_c1 = 0.8359375f;
-static constexpr float PQ_c2 = 18.8515625f;
-static constexpr float PQ_c3 = 18.6875f;
 
 // Transform a single sRGB ImVec4 colour for the current swapchain colour space.
 // Alpha is preserved untouched.
@@ -820,11 +822,21 @@ static void on_destroy_device(device *dev)
     }
 }
 
+// Called after the swapchain is created / reset — cache the pointer so we can
+// query get_color_space() for HDR detection (effect_runtime does NOT expose it).
+static void on_init_swapchain(swapchain *sc, bool)
+{
+    s_current_swapchain = sc;
+}
+
 // Called before D3D9 Reset / DXGI ResizeBuffers / vkDestroySwapchain etc.
 // D3D9 D3DPOOL_DEFAULT resources become invalid on Reset — must release them.
 // D3D11/D3D12/Vulkan/OpenGL textures are device-level and survive resize, so skip.
 static void on_destroy_swapchain(swapchain *sc, bool)
 {
+    if (s_current_swapchain == sc)
+        s_current_swapchain = nullptr;
+
     device *dev = sc->get_device();
     if (!dev) return;
     if (dev->get_api() != device_api::d3d9) return;
@@ -4198,6 +4210,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         // Device lifecycle for texture management
         reshade::register_event<reshade::addon_event::init_device>(on_init_device);
         reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
+        reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
         reshade::register_event<reshade::addon_event::destroy_swapchain>(on_destroy_swapchain);
 
         // The reshade_overlay event fires between ImGui::NewFrame and EndFrame
