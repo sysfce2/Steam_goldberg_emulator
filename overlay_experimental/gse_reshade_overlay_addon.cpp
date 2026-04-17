@@ -608,7 +608,6 @@ static float               s_cached_tex_scale = 1.0f;
 static float               s_cached_tex_brightness = 1.0f;
 static float               s_cached_tex_contrast   = 1.0f;
 static float               s_cached_tex_gamma_adj  = 1.0f;
-static float               s_cached_tex_scale = 1.0f;
 
 // Transform a single sRGB ImVec4 colour for the current swapchain colour space.
 // Alpha is preserved untouched.
