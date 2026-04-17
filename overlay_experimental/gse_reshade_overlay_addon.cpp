@@ -4222,13 +4222,33 @@ static void draw_settings_overlay(effect_runtime *runtime)
     }
     // Image adjustments (local overrides — runtime tweaks, not persisted)
     if (ImGui::CollapsingHeader("Image Adjustments")) {
+        // Sliders update s_appearance live (visible in the label) but we only
+        // invalidate the texture cache when the user *releases* the slider.
+        // This avoids flushing + re-uploading every texture on every frame
+        // while the user is dragging.
+        static bool s_img_adj_dirty = false;
+
         ImGui::SliderFloat("Brightness", &s_appearance.image_brightness, 0.5f, 2.0f, "%.2f");
+        if (ImGui::IsItemDeactivatedAfterEdit()) s_img_adj_dirty = true;
+
         ImGui::SliderFloat("Contrast",   &s_appearance.image_contrast,   0.5f, 2.0f, "%.2f");
+        if (ImGui::IsItemDeactivatedAfterEdit()) s_img_adj_dirty = true;
+
         ImGui::SliderFloat("Gamma",      &s_appearance.image_gamma_adjust, 0.5f, 2.0f, "%.2f");
+        if (ImGui::IsItemDeactivatedAfterEdit()) s_img_adj_dirty = true;
+
         if (ImGui::Button("Reset##img_adj")) {
             s_appearance.image_brightness   = 1.0f;
             s_appearance.image_contrast     = 1.0f;
             s_appearance.image_gamma_adjust = 1.0f;
+            s_img_adj_dirty = true;
+        }
+
+        // Apply the dirty flag by forcing the cache tracking to stale values
+        // so the per-frame invalidation check in on_reshade_overlay() picks it up.
+        if (s_img_adj_dirty) {
+            s_img_adj_dirty = false;
+            s_cached_tex_brightness = -999.0f; // sentinel — guarantees adj_changed fires
         }
     }
 }
