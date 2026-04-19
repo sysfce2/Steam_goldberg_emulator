@@ -16,7 +16,6 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/settings_parser_ufs.h"
-#include <unordered_map>
 #include <functional>
 
 

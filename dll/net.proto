@@ -177,6 +177,8 @@ message Gameserver {
     uint32 port = 33;
     uint32 query_port = 34;
     uint32 appid = 35;
+    bytes version_name = 36;
+    uint32 protocol_version = 37;
 
     bool offline = 48;
     uint32 type = 49;

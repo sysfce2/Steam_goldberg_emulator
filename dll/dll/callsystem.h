@@ -87,6 +87,8 @@ public:
 
     void setCbAll(void (*cb_all)(std::vector<char> result, int callback));
 
+    void clear();
+
     void runCallResults();
 };
 

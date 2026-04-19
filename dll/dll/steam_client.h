@@ -66,10 +66,15 @@
 #include "playtime.h"
 #include "callback_wrapper.h"
 
-enum Steam_Pipe {
+enum Steam_Pipe_Type {
     NO_USER,
     CLIENT,
     SERVER
+};
+
+struct Steam_Pipe {
+    Steam_Pipe_Type type{};
+    bool got_last_cb{};
 };
 
 class Steam_Client :
@@ -183,14 +188,12 @@ public:
 
     PlaytimeCounter* playtime_counter{};
 
-    bool steamclient_server_inited{};
-
     bool gameserver_has_ipv6_functions{};
     int steamclient_version{};
     bool using_old_callbacks{};
     
     unsigned steam_pipe_counter = 1;
-    std::map<HSteamPipe, enum Steam_Pipe> steam_pipes{};
+    std::map<HSteamPipe, Steam_Pipe> steam_pipes{};
 
 
     Steam_Client();

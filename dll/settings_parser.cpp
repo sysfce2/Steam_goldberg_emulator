@@ -1872,6 +1872,7 @@ static bool try_parse_old_steam_interfaces_file(std::string interfaces_path)
         OLD_ITF_LINE("SteamUtils", SettingsItf::UTILS);
         OLD_ITF_LINE("STEAMUSERSTATS_INTERFACE_VERSION", SettingsItf::USER_STATS);
         OLD_ITF_LINE("STEAMAPPS_INTERFACE_VERSION", SettingsItf::APPS);
+        OLD_ITF_LINE("SteamApps", SettingsItf::APPS);
         OLD_ITF_LINE("SteamNetworking", SettingsItf::NETWORKING);
         OLD_ITF_LINE("STEAMREMOTESTORAGE_INTERFACE_VERSION", SettingsItf::REMOTE_STORAGE);
         OLD_ITF_LINE("STEAMSCREENSHOTS_INTERFACE_VERSION", SettingsItf::SCREENSHOTS);

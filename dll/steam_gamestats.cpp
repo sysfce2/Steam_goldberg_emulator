@@ -22,7 +22,6 @@
 */
 
 #include "dll/steam_gamestats.h"
-#include <unordered_map>
 
 
 Steam_GameStats::Attribute_t::Attribute_t(AttributeType_t type)

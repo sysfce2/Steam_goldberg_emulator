@@ -152,11 +152,11 @@ std::vector<uint8_t> Source_Query::handle_source_query(const void* buffer, size_
 
             serialize_response(output_buffer, source_query_magic::simple);
             serialize_response(output_buffer, source_response_header::A2S_INFO);
-            serialize_response(output_buffer, static_cast<uint8_t>(2));
+            serialize_response(output_buffer, static_cast<uint8_t>(gs.protocol_version()));
             serialize_response(output_buffer, gs.server_name());
             serialize_response(output_buffer, gs.map_name());
-            serialize_response(output_buffer, !gs.mod_dir().empty() ? gs.mod_dir() : gs.game_dir());
-            serialize_response(output_buffer, gs.product());
+            serialize_response(output_buffer, gs.mod_dir());
+            serialize_response(output_buffer, gs.game_description());
             serialize_response(output_buffer, static_cast<uint16_t>(gs.appid()));
             serialize_response(output_buffer, static_cast<uint8_t>(players.size()));
             serialize_response(output_buffer, static_cast<uint8_t>(gs.max_player_count()));
@@ -165,7 +165,7 @@ std::vector<uint8_t> Source_Query::handle_source_query(const void* buffer, size_
             serialize_response(output_buffer, my_server_env);
             serialize_response(output_buffer, (gs.password_protected() ? source_server_visibility::_private : source_server_visibility::_public));
             serialize_response(output_buffer, (gs.secure() ? source_server_vac::secured : source_server_vac::unsecured));
-            serialize_response(output_buffer, std::to_string(gs.version()));
+            serialize_response(output_buffer, gs.version_name());
 
             uint8_t flags = source_server_extra_flag::none;
 

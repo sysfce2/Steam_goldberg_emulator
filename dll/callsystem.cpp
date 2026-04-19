@@ -220,6 +220,11 @@ void SteamCallResults::setCbAll(void (*cb_all)(std::vector<char> result, int cal
     this->cb_all = cb_all;
 }
 
+void SteamCallResults::clear()
+{
+    callresults.clear();
+}
+
 void SteamCallResults::runCallResults()
 {
     unsigned long current_size = static_cast<unsigned long>(callresults.size());

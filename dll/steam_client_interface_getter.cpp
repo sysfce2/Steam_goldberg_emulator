@@ -83,7 +83,7 @@ ISteamGameStats *Steam_Client::GetISteamGameStats( HSteamUser hSteamUser, HSteam
 
     Steam_GameStats *steam_gamestats_tmp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_gamestats_tmp = steam_gameserver_gamestats;
     } else {
         steam_gamestats_tmp = steam_gamestats;
@@ -118,7 +118,7 @@ ISteamUser *Steam_Client::GetISteamUser( HSteamUser hSteamUser, HSteamPipe hStea
 
     Steam_User *steam_user_tmp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_user_tmp = steam_gameserver_user;
     } else {
         steam_user_tmp = steam_user;
@@ -283,7 +283,7 @@ ISteamUtils *Steam_Client::GetISteamUtils( HSteamPipe hSteamPipe, const char *pc
 
     Steam_Utils *steam_utils_temp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_utils_temp = steam_gameserver_utils;
     } else {
         steam_utils_temp = steam_utils;
@@ -366,7 +366,7 @@ void *Steam_Client::GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe
     if (!steam_pipes.count(hSteamPipe)) return NULL;
 
     bool server = false;
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         // PRINT_DEBUG("requesting interface with server pipe");
         server = true;
     } else {
@@ -618,7 +618,7 @@ ISteamApps *Steam_Client::GetISteamApps( HSteamUser hSteamUser, HSteamPipe hStea
 
     Steam_Apps *steam_apps_temp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_apps_temp = steam_gameserver_apps;
     } else {
         steam_apps_temp = steam_apps;
@@ -654,7 +654,7 @@ ISteamNetworking *Steam_Client::GetISteamNetworking( HSteamUser hSteamUser, HSte
 
     Steam_Networking *steam_networking_temp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_networking_temp = steam_gameserver_networking;
     } else {
         steam_networking_temp = steam_networking;
@@ -745,7 +745,7 @@ ISteamHTTP *Steam_Client::GetISteamHTTP( HSteamUser hSteamuser, HSteamPipe hStea
     if (!steam_pipes.count(hSteamPipe) || !hSteamuser) return NULL;
     Steam_HTTP *steam_http_temp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_http_temp = steam_gameserver_http;
     } else {
         steam_http_temp = steam_http;
@@ -823,7 +823,7 @@ ISteamUGC *Steam_Client::GetISteamUGC( HSteamUser hSteamUser, HSteamPipe hSteamP
     if (!steam_pipes.count(hSteamPipe) || !hSteamUser) return NULL;
     Steam_UGC *steam_ugc_temp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_ugc_temp = steam_gameserver_ugc;
     } else {
         steam_ugc_temp = steam_ugc;
@@ -946,7 +946,7 @@ ISteamInventory *Steam_Client::GetISteamInventory( HSteamUser hSteamuser, HSteam
     if (!steam_pipes.count(hSteamPipe) || !hSteamuser) return NULL;
     Steam_Inventory *steam_inventory_temp{};
 
-    if (steam_pipes[hSteamPipe] == Steam_Pipe::SERVER) {
+    if (steam_pipes[hSteamPipe].type == Steam_Pipe_Type::SERVER) {
         steam_inventory_temp = steam_gameserver_inventory;
     } else {
         steam_inventory_temp = steam_inventory;

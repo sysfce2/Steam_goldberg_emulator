@@ -21,13 +21,14 @@
 #include "dll/base64.h"
 #include "dll/dll.h"
 
-Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks)
+Steam_User::Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, bool is_server)
 {
     this->settings = settings;
     this->local_storage = local_storage;
     this->network = network;
     this->callbacks = callbacks;
     this->callback_results = callback_results;
+    this->is_server = is_server;
     
     auth_manager = new Auth_Manager(settings, network, callbacks);
     voicechat = new VoiceChat();
@@ -44,7 +45,7 @@ Steam_User::~Steam_User()
 HSteamUser Steam_User::GetHSteamUser()
 {
     PRINT_DEBUG_ENTRY();
-    return (settings == get_steam_client()->settings_server) ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
+    return is_server ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
 }
 
 void Steam_User::LogOn( CSteamID steamID )
@@ -56,7 +57,7 @@ void Steam_User::LogOn( CSteamID steamID )
     call_logged_off = false;
     logon_time = std::chrono::high_resolution_clock::now();
 
-    if (settings == get_steam_client()->settings_server) {
+    if (is_server) {
         get_steam_client()->steam_gameserver->LogOnAnonymous();
     }
 }
@@ -73,7 +74,7 @@ void Steam_User::LogOff()
     settings->set_offline(true);
     player_auths.clear();
 
-    if (settings == get_steam_client()->settings_server) {
+    if (is_server) {
         get_steam_client()->steam_gameserver->LogOff();
     }
 }
@@ -94,10 +95,17 @@ ELogonState Steam_User::GetLogonState()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
-    if(settings->is_offline())
-        return (ELogonState)0;
-    else
-        return (ELogonState)4; // tested on real steam, undocumented return value
+    if (settings->is_offline()) {
+        if (call_logged_on) {
+            return k_ELogonStateLoggingOn;
+        } else if (call_logged_off) {
+            return k_ELogonStateLoggingOff;
+        } else {
+            return k_ELogonStateNotLoggedOn;
+        }
+    } else {
+        return k_ELogonStateLoggedOn;
+    }
 }
 
 bool Steam_User::BConnected()
@@ -1003,7 +1011,7 @@ void Steam_User::Init( ICMCallback *cmcallback, ISteam2Auth *steam2auth )
 bool Steam_User::BGetCallback( int *piCallback, uint8 **ppubParam, int *unk )
 {
     PRINT_DEBUG_ENTRY();
-    HSteamUser user = (settings == get_steam_client()->settings_server) ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
+    HSteamUser user = is_server ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
     HSteamPipe pipe = get_steam_client()->get_pipe_for_user(user);
     if (!pipe)
         return false;
@@ -1020,7 +1028,7 @@ bool Steam_User::BGetCallback( int *piCallback, uint8 **ppubParam, int *unk )
 void Steam_User::FreeLastCallback()
 {
     PRINT_DEBUG_ENTRY();
-    HSteamUser user = (settings == get_steam_client()->settings_server) ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
+    HSteamUser user = is_server ? SERVER_HSTEAMUSER : CLIENT_HSTEAMUSER;
     HSteamPipe pipe = get_steam_client()->get_pipe_for_user(user);
     if (!pipe)
         return;

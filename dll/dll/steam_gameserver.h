@@ -79,6 +79,7 @@ public:
     Steam_GameServer(class Settings *settings, class Networking *network, class SteamCallBacks *callbacks);
     ~Steam_GameServer();
 
+    void set_protocol_version(unsigned short nProtocolVersion);
     std::vector<std::pair<CSteamID, Gameserver_Player_Info_t>>* get_players();
     const Gameserver& get_server_data() const { return server_data; }
     void add_player(CSteamID steamID);

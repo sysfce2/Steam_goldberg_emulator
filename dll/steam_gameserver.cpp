@@ -93,12 +93,13 @@ void Steam_GameServer::set_version(const char *pchVersionString)
     try {
         auto ver = std::stoul(version);
         server_data.set_version(ver);
+        server_data.set_version_name(pchVersionString);
         PRINT_DEBUG("set version to %lu", ver);
     } catch (...) {
         server_data.set_version(0);
+        server_data.set_version_name("");
         PRINT_DEBUG("not a number '%s'", pchVersionString);
     }
-
 }
 
 void Steam_GameServer::add_player(CSteamID steamID)
@@ -143,6 +144,10 @@ Steam_GameServer::~Steam_GameServer()
     auth_manager = nullptr;
 }
 
+void Steam_GameServer::set_protocol_version(unsigned short nProtocolVersion)
+{
+    server_data.set_protocol_version(nProtocolVersion);
+}
 
 std::vector<std::pair<CSteamID, Gameserver_Player_Info_t>>* Steam_GameServer::get_players()
 {
@@ -172,6 +177,12 @@ bool Steam_GameServer::InitGameServer( uint32 unIP, uint16 usGamePort, uint16 us
     set_appid(nGameAppId, "", false);
     set_version(pchVersionString);
     server_data.set_offline(false);
+    // Fixed versions sent by SteamGameServer011+. Actual steamclient.dll behavior.
+    if (nGameAppId < 200) {
+        server_data.set_protocol_version(48);
+    } else {
+        server_data.set_protocol_version(17);
+    }
 
     //TODO: flags should be k_unServerFlag
     flags = unFlags;
@@ -586,7 +597,7 @@ bool Steam_GameServer::BSetServerType( uint32 unServerFlags, uint32 unGameIP, ui
     server_data.set_port(unGamePort);
     server_data.set_spectator_port(unSpectatorPort);
     server_data.set_query_port(usQueryPort);
-    server_data.set_game_dir(pchGameDir ? pchGameDir : "");
+    server_data.set_mod_dir(pchGameDir ? pchGameDir : "");
     set_version(pchVersion);
     server_data.set_offline(false);
 
@@ -1018,7 +1029,7 @@ bool Steam_GameServer::Obsolete_GSSetStatus( int32 nAppIdServed, uint32 unServer
     server_data.set_spectator_port(0);
     server_data.set_server_name(pchServerName);
     server_data.set_spectator_server_name(pchServerName);
-    server_data.set_game_dir(pchGameDir);
+    server_data.set_mod_dir(pchGameDir);
     server_data.set_map_name(pchMapName);
     set_version(pchVersion);
     server_data.set_offline(false);
@@ -1071,7 +1082,17 @@ bool Steam_GameServer::GSSendSteam3UserConnect( CSteamID steamID, uint32 unIPPub
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
 
     CSteamID ticket_steam_id;
-    return SendUserConnectAndAuthenticate(unIPPublic, pvCookie, cubCookie, &ticket_steam_id);
+    Auth_Data ticket_data = auth_manager->validateTicket(pvCookie, cubCookie, steamID, &ticket_steam_id);
+    if (!ticket_data.id.IsValid())
+        return false;
+
+    // If this function gets called then SteamID was likely obtained from Steam.dll and won't match
+    // the client's Goldberg SteamID. So just ignore SteamID we got from auth ticket.
+    GSClientApprove_t data{};
+    data.m_SteamID = data.m_OwnerSteamID = steamID;
+    callbacks->addCBResult(data.k_iCallback, &data, sizeof(data), 0.1);
+    add_player(steamID);
+    return true;
 }
 
 bool Steam_GameServer::GSRemoveUserConnect( uint32 unUserID )

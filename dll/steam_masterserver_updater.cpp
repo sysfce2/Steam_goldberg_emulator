@@ -136,7 +136,8 @@ void Steam_Masterserver_Updater::SetBasicServerData(
 {
     PRINT_DEBUG_TODO();
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
-    
+
+    gameserver->set_protocol_version(nProtocolVersion);
     gameserver->SetDedicatedServer(bDedicatedServer);
     gameserver->SetRegion(pRegionName);
     gameserver->SetProduct(pProductName);

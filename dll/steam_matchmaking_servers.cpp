@@ -637,7 +637,7 @@ void Steam_Matchmaking_Servers::server_details(Gameserver *g, gameserveritem_t *
                 PRINT_DEBUG("  ssq server info ok");
                 if (ssq_info_has_steamid(ssq_a2s_info)) g->set_id(ssq_a2s_info->steamid);
                 g->set_game_description(ssq_a2s_info->game);
-                g->set_game_dir(ssq_a2s_info->folder);
+                g->set_mod_dir(ssq_a2s_info->folder);
                 if (ssq_a2s_info->server_type == A2S_SERVER_TYPE_DEDICATED) g->set_dedicated_server(true);
                 else if (ssq_a2s_info->server_type == A2S_SERVER_TYPE_STV_RELAY) g->set_dedicated_server(true);
                 else g->set_dedicated_server(false);
@@ -694,11 +694,7 @@ void Steam_Matchmaking_Servers::server_details(Gameserver *g, gameserveritem_t *
     server->m_steamID = CSteamID((uint64)g->id());
     
     memset(server->m_szGameDir, 0, sizeof(server->m_szGameDir));
-    if (!g->mod_dir().empty()) {
-        g->mod_dir().copy(server->m_szGameDir, sizeof(server->m_szGameDir) - 1);
-    } else {
-        g->game_dir().copy(server->m_szGameDir, sizeof(server->m_szGameDir) - 1);
-    }
+    g->mod_dir().copy(server->m_szGameDir, sizeof(server->m_szGameDir) - 1);
 
     memset(server->m_szMap, 0, sizeof(server->m_szMap));
     g->map_name().copy(server->m_szMap, sizeof(server->m_szMap) - 1);
@@ -956,56 +952,57 @@ void Steam_Matchmaking_Servers::Callback(Common_Message *msg)
 {
     if (msg->has_gameserver() && msg->gameserver().type() != eFriendsServer) {
         PRINT_DEBUG("got SERVER " "%" PRIu64 ", offline:%u", msg->gameserver().id(), msg->gameserver().offline());
+
+        auto it = std::find_if(gameservers.begin(), gameservers.end(),
+            [msg](const Steam_Matchmaking_Servers_Gameserver &item) {
+                return (msg->gameserver().id() == item.server.id());
+            }
+        );
+
         if (msg->gameserver().offline()) {
-            for (auto &g : gameservers) {
-                if (g.server.id() == msg->gameserver().id()) {
-                    g.last_recv = std::chrono::high_resolution_clock::time_point();
-                    g.type = eLANServer;
-                }
+            if (it != gameservers.end()) {
+                it->last_recv = std::chrono::high_resolution_clock::time_point();
+                it->type = eLANServer;
             }
         } else {
-            bool already = false;
-            for (auto &g : gameservers) {
-                if (g.server.id() == msg->gameserver().id()) {
-                    g.last_recv = std::chrono::high_resolution_clock::now();
-                    g.server = msg->gameserver();
-                    g.server.set_ip(msg->source_ip());
-                    g.type = eLANServer;
-                    already = true;
-                }
-            }
-
-            if (!already) {
-                struct Steam_Matchmaking_Servers_Gameserver g{};
-                g.last_recv = std::chrono::high_resolution_clock::now();
-                g.server = msg->gameserver();
-                g.server.set_ip(msg->source_ip());
-                g.type = eLANServer;
-                gameservers.push_back(g);
+            if (it == gameservers.end()) {
+                it = gameservers.emplace(it);
                 PRINT_DEBUG("  eLANServer SERVER ADDED");
             }
+
+            it->last_recv = std::chrono::high_resolution_clock::now();
+            it->server = msg->gameserver();
+            it->server.set_ip(msg->source_ip());
+
+            // TODO: This is obsolete, remove game_dir field eventually.
+            if (it->server.mod_dir().empty()) {
+                it->server.set_mod_dir(it->server.game_dir());
+            }
+
+            it->type = eLANServer;
         }
+
+        return;
     }
 
     if (msg->has_gameserver() && msg->gameserver().type() == eFriendsServer) {
         PRINT_DEBUG("got eFriendsServer SERVER " "%" PRIu64 "", msg->gameserver().id());
-        bool addserver = true;
-        for (auto &g : gameservers_friends) {
-            if (g.source_id == msg->source_id()) {
-                g.ip = msg->gameserver().ip();
-                g.port = msg->gameserver().port();
-                g.last_recv = std::chrono::high_resolution_clock::now();
-                addserver = false;
+
+        auto it = std::find_if(gameservers_friends.begin(), gameservers_friends.end(),
+            [msg](const Steam_Matchmaking_Servers_Gameserver_Friends &item) {
+                return (msg->source_id() == item.source_id);
             }
+        );
+
+        if (it == gameservers_friends.end()) {
+            it = gameservers_friends.emplace(it);
+            it->source_id = msg->source_id();
         }
 
-        if (addserver) {
-            struct Steam_Matchmaking_Servers_Gameserver_Friends gameserver_friend;
-            gameserver_friend.source_id = msg->source_id();
-            gameserver_friend.ip = msg->gameserver().ip();
-            gameserver_friend.port = msg->gameserver().port();
-            gameserver_friend.last_recv = std::chrono::high_resolution_clock::now();
-            gameservers_friends.push_back(gameserver_friend);
-        }
+        it->ip = msg->gameserver().ip();
+        it->port = msg->gameserver().port();
+        it->last_recv = std::chrono::high_resolution_clock::now();
+
+        return;
     }
 }

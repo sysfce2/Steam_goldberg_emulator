@@ -53,6 +53,7 @@ public ISteamUser
     class SteamCallBacks *callbacks{};
 	class SteamCallResults *callback_results{};
     Local_Storage *local_storage{};
+    bool is_server{};
 
 	std::string encrypted_app_ticket{};
 	Auth_Manager *auth_manager{};
@@ -69,7 +70,7 @@ public ISteamUser
     std::vector<std::pair<CSteamID, std::chrono::high_resolution_clock::time_point>> player_auths{};
 
 public:
-    Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks);
+    Steam_User(Settings *settings, Local_Storage *local_storage, class Networking *network, class SteamCallResults *callback_results, class SteamCallBacks *callbacks, bool is_server);
     ~Steam_User();
 
     // returns the HSteamUser this interface represents

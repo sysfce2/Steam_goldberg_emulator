@@ -10,6 +10,7 @@ const static std::vector<std::string> interface_patterns = {
     R"(SteamAppDisableUpdate\d+)",
     R"(STEAMAPPLIST_INTERFACE_VERSION\d+)",
     R"(STEAMAPPS_INTERFACE_VERSION\d+)",
+    R"(SteamApps\d+)",
     R"(STEAMAPPTICKET_INTERFACE_VERSION\d+)",
     R"(SteamClient\d+)",
     R"(STEAMCONTROLLER_INTERFACE_VERSION)",
