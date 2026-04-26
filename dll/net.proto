@@ -129,6 +129,7 @@ message Networking_Sockets {
     uint64 connection_id_from = 4;
     bytes data = 5;
     uint64 message_number = 7;
+    uint32 lane = 8;
 }
 
 message Networking_Messages {

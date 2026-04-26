@@ -192,7 +192,8 @@ public:
     int steamclient_version{};
     bool using_old_callbacks{};
     
-    unsigned steam_pipe_counter = 1;
+    uint32 steam_pipe_counter = 1;
+    std::priority_queue<uint32, std::vector<uint32>, std::greater<>> freed_steam_pipes{};
     std::map<HSteamPipe, Steam_Pipe> steam_pipes{};
 
 
@@ -200,141 +201,141 @@ public:
     ~Steam_Client();
 
     // Creates a communication pipe to the Steam client.
-	// NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
-	HSteamPipe CreateSteamPipe();
+    // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
+    HSteamPipe CreateSteamPipe();
 
-	// Releases a previously created communications pipe
-	// NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
-	bool BReleaseSteamPipe( HSteamPipe hSteamPipe );
+    // Releases a previously created communications pipe
+    // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
+    bool BReleaseSteamPipe( HSteamPipe hSteamPipe );
 
-	// connects to an existing global user, failing if none exists
-	// used by the game to coordinate with the steamUI
-	// NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
-	HSteamUser ConnectToGlobalUser( HSteamPipe hSteamPipe );
+    // connects to an existing global user, failing if none exists
+    // used by the game to coordinate with the steamUI
+    // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
+    HSteamUser ConnectToGlobalUser( HSteamPipe hSteamPipe );
 
-	// used by game servers, create a steam user that won't be shared with anyone else
-	// NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
-	HSteamUser CreateLocalUser( HSteamPipe *phSteamPipe, EAccountType eAccountType );
+    // used by game servers, create a steam user that won't be shared with anyone else
+    // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
+    HSteamUser CreateLocalUser( HSteamPipe *phSteamPipe, EAccountType eAccountType );
     HSteamUser CreateLocalUser( HSteamPipe *phSteamPipe );
 
-	// removes an allocated user
-	// NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
-	void ReleaseUser( HSteamPipe hSteamPipe, HSteamUser hUser );
+    // removes an allocated user
+    // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
+    void ReleaseUser( HSteamPipe hSteamPipe, HSteamUser hUser );
 
-	// retrieves the ISteamUser interface associated with the handle
-	ISteamUser *GetISteamUser( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // retrieves the ISteamUser interface associated with the handle
+    ISteamUser *GetISteamUser( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// retrieves the ISteamGameServer interface associated with the handle
-	ISteamGameServer *GetISteamGameServer( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // retrieves the ISteamGameServer interface associated with the handle
+    ISteamGameServer *GetISteamGameServer( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// set the local IP and Port to bind to
-	// this must be set before CreateLocalUser()
-	void SetLocalIPBinding( uint32 unIP, uint16 usPort ); 
+    // set the local IP and Port to bind to
+    // this must be set before CreateLocalUser()
+    void SetLocalIPBinding( uint32 unIP, uint16 usPort ); 
     void SetLocalIPBinding( const SteamIPAddress_t &unIP, uint16 usPort );
 
-	// returns the ISteamFriends interface
-	ISteamFriends *GetISteamFriends( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the ISteamFriends interface
+    ISteamFriends *GetISteamFriends( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns the ISteamUtils interface
-	ISteamUtils *GetISteamUtils( HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the ISteamUtils interface
+    ISteamUtils *GetISteamUtils( HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns the ISteamMatchmaking interface
-	ISteamMatchmaking *GetISteamMatchmaking( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the ISteamMatchmaking interface
+    ISteamMatchmaking *GetISteamMatchmaking( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns the ISteamMatchmakingServers interface
-	ISteamMatchmakingServers *GetISteamMatchmakingServers( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the ISteamMatchmakingServers interface
+    ISteamMatchmakingServers *GetISteamMatchmakingServers( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns the a generic interface
-	void *GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the a generic interface
+    void *GetISteamGenericInterface( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns the ISteamUserStats interface
-	ISteamUserStats *GetISteamUserStats( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the ISteamUserStats interface
+    ISteamUserStats *GetISteamUserStats( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns the ISteamGameServerStats interface
-	ISteamGameServerStats *GetISteamGameServerStats( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns the ISteamGameServerStats interface
+    ISteamGameServerStats *GetISteamGameServerStats( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns apps interface
-	ISteamApps *GetISteamApps( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns apps interface
+    ISteamApps *GetISteamApps( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// networking
-	ISteamNetworking *GetISteamNetworking( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // networking
+    ISteamNetworking *GetISteamNetworking( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// remote storage
-	ISteamRemoteStorage *GetISteamRemoteStorage( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // remote storage
+    ISteamRemoteStorage *GetISteamRemoteStorage( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// user screenshots
-	ISteamScreenshots *GetISteamScreenshots( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // user screenshots
+    ISteamScreenshots *GetISteamScreenshots( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// game stats
-	ISteamGameStats *GetISteamGameStats( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // game stats
+    ISteamGameStats *GetISteamGameStats( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// steam timeline
-	ISteamTimeline *GetISteamTimeline( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // steam timeline
+    ISteamTimeline *GetISteamTimeline( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// steam app disable update
-	ISteamAppDisableUpdate *GetISteamAppDisableUpdate( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // steam app disable update
+    ISteamAppDisableUpdate *GetISteamAppDisableUpdate( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
     // steam billing
     ISteamBilling *GetISteamBilling( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Deprecated. Applications should use SteamAPI_RunCallbacks() or SteamGameServer_RunCallbacks() instead.
-	STEAM_PRIVATE_API( void RunFrame() );
+    // Deprecated. Applications should use SteamAPI_RunCallbacks() or SteamGameServer_RunCallbacks() instead.
+    STEAM_PRIVATE_API( void RunFrame() );
 
-	// returns the number of IPC calls made since the last time this function was called
-	// Used for perf debugging so you can understand how many IPC calls your game makes per frame
-	// Every IPC call is at minimum a thread context switch if not a process one so you want to rate
-	// control how often you do them.
-	uint32 GetIPCCallCount();
+    // returns the number of IPC calls made since the last time this function was called
+    // Used for perf debugging so you can understand how many IPC calls your game makes per frame
+    // Every IPC call is at minimum a thread context switch if not a process one so you want to rate
+    // control how often you do them.
+    uint32 GetIPCCallCount();
 
-	// API warning handling
-	// 'int' is the severity; 0 for msg, 1 for warning
-	// 'const char *' is the text of the message
-	// callbacks will occur directly after the API function is called that generated the warning or message.
-	void SetWarningMessageHook( SteamAPIWarningMessageHook_t pFunction );
+    // API warning handling
+    // 'int' is the severity; 0 for msg, 1 for warning
+    // 'const char *' is the text of the message
+    // callbacks will occur directly after the API function is called that generated the warning or message.
+    void SetWarningMessageHook( SteamAPIWarningMessageHook_t pFunction );
 
-	// Trigger global shutdown for the DLL
-	bool BShutdownIfAllPipesClosed();
+    // Trigger global shutdown for the DLL
+    bool BShutdownIfAllPipesClosed();
 
-	// Expose HTTP interface
-	ISteamHTTP *GetISteamHTTP( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // Expose HTTP interface
+    ISteamHTTP *GetISteamHTTP( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Deprecated - the ISteamUnifiedMessages interface is no longer intended for public consumption.
-	STEAM_PRIVATE_API( void *DEPRECATED_GetISteamUnifiedMessages( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion ) ; )
+    // Deprecated - the ISteamUnifiedMessages interface is no longer intended for public consumption.
+    STEAM_PRIVATE_API( void *DEPRECATED_GetISteamUnifiedMessages( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion ) ; )
     ISteamUnifiedMessages *GetISteamUnifiedMessages( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Exposes the ISteamController interface
-	ISteamController *GetISteamController( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // Exposes the ISteamController interface
+    ISteamController *GetISteamController( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Exposes the ISteamUGC interface
-	ISteamUGC *GetISteamUGC( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // Exposes the ISteamUGC interface
+    ISteamUGC *GetISteamUGC( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// returns app list interface, only available on specially registered apps
-	ISteamAppList *GetISteamAppList( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
-	
-	// Music Player
-	ISteamMusic *GetISteamMusic( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // returns app list interface, only available on specially registered apps
+    ISteamAppList *GetISteamAppList( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );
+    
+    // Music Player
+    ISteamMusic *GetISteamMusic( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Music Player Remote
-	ISteamMusicRemote *GetISteamMusicRemote(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion);
+    // Music Player Remote
+    ISteamMusicRemote *GetISteamMusicRemote(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion);
 
-	// html page display
-	ISteamHTMLSurface *GetISteamHTMLSurface(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion);
+    // html page display
+    ISteamHTMLSurface *GetISteamHTMLSurface(HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion);
 
-	// Helper functions for internal Steam usage
-	STEAM_PRIVATE_API( void DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess( void (*)() ); )
-	STEAM_PRIVATE_API( void DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess( void (*)() ); )
-	STEAM_PRIVATE_API( void Set_SteamAPI_CCheckCallbackRegisteredInProcess( SteamAPI_CheckCallbackRegistered_t func ); )
+    // Helper functions for internal Steam usage
+    STEAM_PRIVATE_API( void DEPRECATED_Set_SteamAPI_CPostAPIResultInProcess( void (*)() ); )
+    STEAM_PRIVATE_API( void DEPRECATED_Remove_SteamAPI_CPostAPIResultInProcess( void (*)() ); )
+    STEAM_PRIVATE_API( void Set_SteamAPI_CCheckCallbackRegisteredInProcess( SteamAPI_CheckCallbackRegistered_t func ); )
     void Set_SteamAPI_CPostAPIResultInProcess( SteamAPI_PostAPIResultInProcess_t func );
     void Remove_SteamAPI_CPostAPIResultInProcess( SteamAPI_PostAPIResultInProcess_t func );
 
-	// inventory
-	ISteamInventory *GetISteamInventory( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // inventory
+    ISteamInventory *GetISteamInventory( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Video
-	ISteamVideo *GetISteamVideo( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // Video
+    ISteamVideo *GetISteamVideo( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
-	// Parental controls
-	ISteamParentalSettings *GetISteamParentalSettings( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
+    // Parental controls
+    ISteamParentalSettings *GetISteamParentalSettings( HSteamUser hSteamuser, HSteamPipe hSteamPipe, const char *pchVersion );
 
     //
     ISteamMasterServerUpdater *GetISteamMasterServerUpdater( HSteamUser hSteamUser, HSteamPipe hSteamPipe, const char *pchVersion );

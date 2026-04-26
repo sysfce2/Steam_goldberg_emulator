@@ -315,18 +315,25 @@ void Steam_Client::setAppID(uint32 appid)
     
 }
 
-    // Creates a communication pipe to the Steam client.
+// Creates a communication pipe to the Steam client.
 // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
 HSteamPipe Steam_Client::CreateSteamPipe()
 {
     PRINT_DEBUG_ENTRY();
-    if (!steam_pipe_counter) ++steam_pipe_counter;
-    HSteamPipe pipe = steam_pipe_counter;
-    ++steam_pipe_counter;
-    PRINT_DEBUG("  returned pipe handle %i", pipe);
 
-    steam_pipes[pipe] = {Steam_Pipe_Type::NO_USER, false};
-    
+    HSteamPipe pipe{};
+    if (!freed_steam_pipes.empty()) {
+        pipe = freed_steam_pipes.top();
+        freed_steam_pipes.pop();
+    } else {
+        if (!steam_pipe_counter) ++steam_pipe_counter;
+        pipe = steam_pipe_counter;
+        ++steam_pipe_counter;
+    }
+
+    PRINT_DEBUG("  returned pipe handle %i", pipe);
+    steam_pipes[pipe] = { Steam_Pipe_Type::NO_USER, false };
+
     return pipe;
 }
 
@@ -338,6 +345,7 @@ bool Steam_Client::BReleaseSteamPipe( HSteamPipe hSteamPipe )
 {
     PRINT_DEBUG("%i", hSteamPipe);
     if (steam_pipes.count(hSteamPipe)) {
+        freed_steam_pipes.push(hSteamPipe);
         return steam_pipes.erase(hSteamPipe) > 0;
     }
 

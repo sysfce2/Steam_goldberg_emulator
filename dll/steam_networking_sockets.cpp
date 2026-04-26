@@ -54,6 +54,7 @@ SteamNetworkingMessage_t* Steam_Networking_Sockets::get_steam_message_connection
     pMsg->m_pfnFreeData = &free_steam_message_data;
     pMsg->m_pfnRelease = &delete_steam_message;
     pMsg->m_nChannel = 0;
+    pMsg->m_idxLane = static_cast<uint16>(connect_socket->second.data.top().lane());
     connect_socket->second.data.pop();
     PRINT_DEBUG("get_steam_message_connection %u %lu, %llu", hConn, size, pMsg->m_nMessageNumber);
     return pMsg;
@@ -758,6 +759,7 @@ EResult Steam_Networking_Sockets::SendMessageToConnection( HSteamNetConnection h
     msg.mutable_networking_sockets()->set_connection_id_from(connect_socket->first);
     msg.mutable_networking_sockets()->set_connection_id(connect_socket->second.remote_id);
     msg.mutable_networking_sockets()->set_data(pData, cbData);
+    msg.mutable_networking_sockets()->set_lane(0);
     uint64 message_number = connect_socket->second.packet_send_counter;
     msg.mutable_networking_sockets()->set_message_number(message_number);
     connect_socket->second.packet_send_counter += 1;
@@ -816,7 +818,44 @@ void Steam_Networking_Sockets::SendMessages( int nMessages, SteamNetworkingMessa
     std::lock_guard<std::recursive_mutex> lock(global_mutex);
     for (int i = 0; i < nMessages; ++i) {
         int64 out_number = 0;
-        int result = SendMessageToConnection(pMessages[i]->m_conn, pMessages[i]->m_pData, pMessages[i]->m_cbSize, pMessages[i]->m_nFlags, &out_number);
+        int result = k_EResultInvalidParam;
+
+        if (pMessages[i]) {
+            auto connect_socket = sbcs->connect_sockets.find(pMessages[i]->m_conn);
+            if (connect_socket == sbcs->connect_sockets.end()) {
+                result = k_EResultInvalidParam;
+            } else if (connect_socket->second.status == CONNECT_SOCKET_CLOSED || connect_socket->second.status == CONNECT_SOCKET_TIMEDOUT) {
+                result = k_EResultNoConnection;
+            } else if (connect_socket->second.status != CONNECT_SOCKET_CONNECTED && connect_socket->second.status != CONNECT_SOCKET_CONNECTING) {
+                result = k_EResultInvalidState;
+            } else {
+                Common_Message msg;
+                msg.set_source_id(connect_socket->second.created_by.ConvertToUint64());
+                msg.set_dest_id(connect_socket->second.remote_identity.GetSteamID64());
+                msg.set_allocated_networking_sockets(new Networking_Sockets);
+                msg.mutable_networking_sockets()->set_type(Networking_Sockets::DATA);
+                msg.mutable_networking_sockets()->set_virtual_port(connect_socket->second.virtual_port);
+                msg.mutable_networking_sockets()->set_real_port(connect_socket->second.real_port);
+                msg.mutable_networking_sockets()->set_connection_id_from(connect_socket->first);
+                msg.mutable_networking_sockets()->set_connection_id(connect_socket->second.remote_id);
+                msg.mutable_networking_sockets()->set_data(pMessages[i]->m_pData, pMessages[i]->m_cbSize);
+                msg.mutable_networking_sockets()->set_lane(pMessages[i]->m_idxLane);
+
+                uint64 message_number = connect_socket->second.packet_send_counter;
+                msg.mutable_networking_sockets()->set_message_number(message_number);
+                connect_socket->second.packet_send_counter += 1;
+
+                bool reliable = false;
+                if (pMessages[i]->m_nFlags & k_nSteamNetworkingSend_Reliable) reliable = true;
+                if (network->sendTo(&msg, reliable)) {
+                    out_number = message_number;
+                    result = k_EResultOK;
+                } else {
+                    result = k_EResultFail;
+                }
+            }
+        }
+
         if (pOutMessageNumberOrResult) {
             if (result == k_EResultOK) {
                 pOutMessageNumberOrResult[i] = out_number;

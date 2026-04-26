@@ -50,7 +50,7 @@ const static std::vector<std::string> interface_patterns = {
     R"(STEAMVIDEO_INTERFACE_V\d+)"
 };
 
-unsigned int findinterface(
+size_t findinterface(
     std::ofstream &out_file,
     const std::string &file_contents,
     const std::string &interface_patt)
@@ -60,15 +60,32 @@ unsigned int findinterface(
     auto begin = std::sregex_iterator(file_contents.cbegin(), file_contents.cend(), interface_regex);
     auto end = std::sregex_iterator();
 
-    unsigned int matches = 0;
-
+    std::vector<std::string> matches;
     for (std::sregex_iterator i = begin; i != end; ++i)
     {
-        out_file << i->str() << std::endl;
-        ++matches;
+        matches.push_back(i->str());
     }
 
-    return matches;
+    if (interface_patt == R"(SteamClient\d+)" &&
+        matches.size() > 1 &&
+        std::find(matches.begin(), matches.end(), "SteamClient017") != matches.end())
+    {
+        // In newer SDKs, legacy steam_api.dll interface exports were removed except for SteamClient(),
+        // which still returns SteamClient017.
+        auto rm = std::remove_if(matches.begin(), matches.end(), [](const std::string &item)
+            {
+                return (item != "SteamClient017");
+            }
+        );
+        matches.erase(rm, matches.end());
+    }
+
+    for (const std::string &match : matches)
+    {
+        out_file << match << std::endl;
+    }
+
+    return matches.size();
 }
 
 int main(int argc, char *argv[])
@@ -107,7 +124,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    unsigned int total_matches = 0;
+    size_t total_matches = 0;
 
     for (const auto &patt : interface_patterns)
     {
