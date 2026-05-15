@@ -1,3 +1,3 @@
 @echo off
 
-call "package_win.bat" vs2022/debug 1
+call "package_win.bat" vs2026/debug 1

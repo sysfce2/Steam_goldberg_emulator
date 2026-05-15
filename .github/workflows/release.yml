@@ -21,7 +21,7 @@ jobs:
 
   emu-win-prep:
     needs: ["emu-win-all"]
-    runs-on: "windows-2022"
+    runs-on: "windows-2025-vs2026"
     steps:
       # on Windows Git will auto change line ending to CRLF, not preferable
       - name: "Ensure LF line ending"
@@ -61,13 +61,13 @@ jobs:
       - name: "Package build (release)"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
-        run: package_win.bat vs2022\release
+        run: package_win.bat vs2026\release
 
       # package (debug mode)
       - name: "Package build (debug)"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
-        run: package_win.bat vs2022\debug 1
+        run: package_win.bat vs2026\debug 1
 
       # release (debug + release modes) if this is a tag push
       - name: "Release"
@@ -82,7 +82,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-release-${{ github.sha }}"
-          path: "build/package/win/vs2022/*release*"
+          path: "build/package/win/vs2026/*release*"
           if-no-files-found: "error"
           compression-level: 0
           retention-days: 7
@@ -92,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-debug-${{ github.sha }}"
-          path: "build/package/win/vs2022/*debug*"
+          path: "build/package/win/vs2026/*debug*"
           if-no-files-found: "error"
           compression-level: 0
           retention-days: 7
@@ -105,7 +105,7 @@ jobs:
 
   emu-linux-prep:
     needs: ["emu-linux-all"]
-    runs-on: "ubuntu-22.04"
+    runs-on: "ubuntu-24.04"
     steps:
       # we need branch because it has package scripts
       - name: "Checkout branch"
@@ -151,13 +151,13 @@ jobs:
       - name: "Package build (release)"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
-        run: ./package_linux.sh gmake2/release
+        run: ./package_linux.sh gmake/release
 
       # package (debug mode)
       - name: "Package build (debug)"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
-        run: ./package_linux.sh gmake2/debug 1
+        run: ./package_linux.sh gmake/debug 1
 
       # release (debug + release modes) if this is a tag push
       - name: "Release"
@@ -172,7 +172,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-linux-release-${{ github.sha }}"
-          path: "build/package/linux/gmake2/*release*"
+          path: "build/package/linux/gmake/*release*"
           if-no-files-found: "error"
           compression-level: 0
           retention-days: 7
@@ -182,7 +182,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-linux-debug-${{ github.sha }}"
-          path: "build/package/linux/gmake2/*debug*"
+          path: "build/package/linux/gmake/*debug*"
           if-no-files-found: "error"
           compression-level: 0
           retention-days: 7

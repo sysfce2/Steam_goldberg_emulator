@@ -22,7 +22,7 @@ public:
 
 	virtual void OnLogonSuccess() = 0;
 	virtual void OnLogonFailure( EResult eResult ) = 0;
-	virtual void OnLoggedOff() = 0;
+	virtual void OnLoggedOff( EResult eResult ) = 0;
 	virtual void OnBeginLogonRetry() = 0;
 	virtual void HandleVACChallenge( int nClientGameID, uint8 *pubChallenge, int cubChallenge ) = 0;
 	virtual void GSHandleClientApprove( CSteamID &steamID ) = 0;

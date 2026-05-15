@@ -77,6 +77,11 @@ struct Steam_Pipe {
     bool got_last_cb{};
 };
 
+struct User_Ref {
+    HSteamUser user{};
+    HSteamPipe pipe{};
+};
+
 class Steam_Client :
 public ISteamClient001,
 public ISteamClient002,
@@ -191,10 +196,41 @@ public:
     bool gameserver_has_ipv6_functions{};
     int steamclient_version{};
     bool using_old_callbacks{};
+
+    int client_user_ref_count{};
+
+    template <class T>
+    class Reusable_Numbers {
+        T counter{};
+        std::priority_queue<T, std::vector<T>, std::greater<>> freed_numbers{};
+
+    public:
+        T get_number()
+        {
+            T retval{};
+            if (!freed_numbers.empty()) {
+                retval = freed_numbers.top();
+                freed_numbers.pop();
+            } else {
+                if (!counter) ++counter;
+                retval = counter;
+                ++counter;
+            }
+
+            return retval;
+        }
+
+        void free_number(T number)
+        {
+            freed_numbers.push(number);
+        }
+    };
     
-    uint32 steam_pipe_counter = 1;
-    std::priority_queue<uint32, std::vector<uint32>, std::greater<>> freed_steam_pipes{};
+    Reusable_Numbers<uint32> steam_pipe_numbers{};
     std::map<HSteamPipe, Steam_Pipe> steam_pipes{};
+
+    Reusable_Numbers<uint32> old_user_ref_numbers{};
+    std::map<HSteamUser, User_Ref> old_user_refs{};
 
 
     Steam_Client();
@@ -440,6 +476,7 @@ public:
     bool is_caller_special_k();
     void try_start_specialk_injection();
 
+    HSteamUser create_old_user_ref(HSteamUser hUser, HSteamPipe hSteamPipe);
     HSteamPipe get_pipe_for_user(HSteamUser hUser);
 
 };

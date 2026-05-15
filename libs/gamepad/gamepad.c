@@ -27,7 +27,7 @@
 #	include <unistd.h>
 #	include <dirent.h>
 #	include <sys/stat.h>
-#	include <time.h>
+#	include <sys/inotify.h>
 #else
 #	error "Unknown platform in gamepad.c"
 #endif
@@ -73,6 +73,13 @@ static GAMEPAD_STATE STATE[4];
 /* Note whether a gamepad is currently connected */
 #define FLAG_CONNECTED	(1<<0)
 #define FLAG_RUMBLE		(1<<1)
+#if defined(__linux__)
+static int GAMEPAD_WATCH_FD = -1;
+static GAMEPAD_BOOL GAMEPAD_DEVICE_SCAN_PENDING = GAMEPAD_FALSE;
+#ifdef GAMEPAD_TESTING
+static unsigned int GAMEPAD_TEST_DETECT_COUNT = 0;
+#endif
+#endif
 
 /* Prototypes for utility functions */
 static void GamepadResetState		(GAMEPAD_DEVICE gamepad);
@@ -80,6 +87,11 @@ static void GamepadUpdateCommon		(void);
 static void GamepadUpdateDevice		(GAMEPAD_DEVICE gamepad);
 static void GamepadUpdateStick		(GAMEPAD_AXIS* axis, float deadzone);
 static void GamepadUpdateTrigger	(GAMEPAD_TRIGINFO* trig);
+#if defined(__linux__)
+static void GamepadPollDeviceChanges(void);
+static void GamepadRequestDeviceScan(void);
+static void GamepadInitDeviceWatch(void);
+#endif
 
 /* Various values of PI */
 #define PI_1_4	0.78539816339744f
@@ -209,6 +221,9 @@ static void GamepadRemoveDevice(const char* devPath);
 
 static void GamepadDetect()
 {
+#ifdef GAMEPAD_TESTING
+	++GAMEPAD_TEST_DETECT_COUNT;
+#endif
 	DIR *folder;
 	struct dirent *dent;
 
@@ -237,6 +252,41 @@ static void GamepadDetect()
 	}
 }
 
+#if defined(__linux__)
+static void GamepadRequestDeviceScan(void)
+{
+	GAMEPAD_DEVICE_SCAN_PENDING = GAMEPAD_TRUE;
+}
+
+static void GamepadInitDeviceWatch(void)
+{
+	GAMEPAD_WATCH_FD = inotify_init();
+	if (GAMEPAD_WATCH_FD < 0) {
+		return;
+	}
+
+	fcntl(GAMEPAD_WATCH_FD, F_SETFL, O_NONBLOCK);
+	fcntl(GAMEPAD_WATCH_FD, F_SETFD, FD_CLOEXEC);
+
+	if (inotify_add_watch(GAMEPAD_WATCH_FD, "/dev/input",
+		IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB | IN_DELETE_SELF | IN_MOVE_SELF) < 0) {
+		close(GAMEPAD_WATCH_FD);
+		GAMEPAD_WATCH_FD = -1;
+	}
+}
+
+static void GamepadPollDeviceChanges(void)
+{
+	if (GAMEPAD_WATCH_FD < 0) {
+		return;
+	}
+
+	char buffer[sizeof(struct inotify_event) * 16];
+	while (read(GAMEPAD_WATCH_FD, buffer, sizeof(buffer)) > 0) {
+		GamepadRequestDeviceScan();
+	}
+}
+#endif
 
 
 /* Helper to add a new device */
@@ -377,9 +427,6 @@ static void GamepadRemoveDevice(const char* devPath) {
 }
 
 void GamepadInit(void) {
-	struct udev_list_entry* devices;
-	struct udev_list_entry* item;
-	struct udev_enumerate* enu;
 	int i;
 
 	/* initialize connection state */
@@ -388,17 +435,22 @@ void GamepadInit(void) {
 		STATE[i].fd = STATE[i].effect = -1;
 	}
 
+#if defined(__linux__)
+	GAMEPAD_DEVICE_SCAN_PENDING = GAMEPAD_FALSE;
+	GamepadInitDeviceWatch();
+#endif
+
 	GamepadDetect();
 }
 
 void GamepadUpdate(void) {
-	static unsigned long last = 0;
-	unsigned long cur = time(NULL);
-
-	if (last + 2 < cur) {
+#if defined(__linux__)
+	GamepadPollDeviceChanges();
+	if (GAMEPAD_DEVICE_SCAN_PENDING) {
+		GAMEPAD_DEVICE_SCAN_PENDING = GAMEPAD_FALSE;
 		GamepadDetect();
-		last = cur;
 	}
+#endif
 
 	GamepadUpdateCommon();
 }
@@ -544,7 +596,24 @@ void GamepadShutdown(void) {
 			close(STATE[i].fd);
 		}
 	}
+
+#if defined(__linux__)
+	if (GAMEPAD_WATCH_FD != -1) {
+		close(GAMEPAD_WATCH_FD);
+		GAMEPAD_WATCH_FD = -1;
+	}
+#endif
 }
+
+#if defined(__linux__) && defined(GAMEPAD_TESTING)
+unsigned int GamepadTestDetectCount(void) {
+	return GAMEPAD_TEST_DETECT_COUNT;
+}
+
+void GamepadTestSignalDeviceChange(void) {
+	GamepadRequestDeviceScan();
+}
+#endif
 
 void GamepadSetRumble(GAMEPAD_DEVICE gamepad, float left, float right, unsigned int rumble_length_ms) {
 	if (STATE[gamepad].fd != -1) {

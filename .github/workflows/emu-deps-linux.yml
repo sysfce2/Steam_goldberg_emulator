@@ -10,7 +10,7 @@ permissions:
   contents: "write"
 
 env:
-  PREMAKE_ACTION: "gmake2"
+  PREMAKE_ACTION: "gmake"
   DEPS_CACHE_KEY: "emu-deps-linux"
   DEPS_CACHE_DIR: "build/deps/linux"
 
@@ -22,7 +22,7 @@ env:
 
 jobs:
   deps-build:
-    runs-on: "ubuntu-22.04"
+    runs-on: "ubuntu-24.04"
     if: ${{ !cancelled() }}
 
     steps:
@@ -75,4 +75,4 @@ jobs:
         run: |
           export CMAKE_GENERATOR="Unix Makefiles"
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5-deps.lua --64-build --32-build --all-ext --all-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=linux gmake2
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5-deps.lua --64-build --32-build --all-ext --all-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=linux gmake

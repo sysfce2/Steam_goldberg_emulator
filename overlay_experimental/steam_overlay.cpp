@@ -653,6 +653,8 @@ void Steam_Overlay::create_fonts()
     // non-latin characters look ugly and squeezed without this horizontal spacing
     font_cfg.GlyphExtraAdvanceX = settings->overlay_appearance.font_glyph_extra_spacing_x;
     // Y-axis spacing removed: ImGui replaced GlyphExtraSpacing (ImVec2) with GlyphExtraAdvanceX (float) in 2025
+    // font_cfg.GlyphExtraSpacing.x = settings->overlay_appearance.font_glyph_extra_spacing_x; 
+    // font_cfg.GlyphExtraSpacing.y = settings->overlay_appearance.font_glyph_extra_spacing_y;
 
     for (const auto &ach : achievements) {
         font_builder.AddText(ach.title.c_str());
@@ -723,7 +725,7 @@ void Steam_Overlay::create_fonts()
     
     // With ImGui 1.92+ and ImGuiBackendFlags_RendererHasTextures, the backend
     // builds the font atlas automatically — no need to call Build() manually.
-    PRINT_DEBUG("fonts added to atlas (backend will build automatically)");
+    PRINT_DEBUG("isbuilt fonts atlas (result=%i)", (int)res);
 
     reset_LastError();
 }
@@ -2699,6 +2701,9 @@ bool Steam_Overlay::try_load_ach_icon(Overlay_Achievement &ach, bool achieved, b
             icon_decoded_data = image_info->data;
             srgb_decode_pixels_if_needed(_renderer, settings->overlay_appearance.image_gamma,
                 (uint8_t*)icon_decoded_data.data(), (size_t)iw * ih);
+            //int icon_size = static_cast<int>(settings->overlay_appearance.icon_size);
+            //icon_rsrc->SetAutoLoad(InGameOverlay::ResourceAutoLoad_t::OnUse);
+            //icon_rsrc->AttachResource((void*)image_info->data.c_str(), icon_size, icon_size);
             icon_rsrc->AttachResource((void*)icon_decoded_data.data(), (uint32_t)iw, (uint32_t)ih);
         }
         

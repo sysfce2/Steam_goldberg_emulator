@@ -318,6 +318,11 @@ GAMEPAD_API GAMEPAD_STICKDIR GamepadStickDir(GAMEPAD_DEVICE device, GAMEPAD_STIC
  */
 GAMEPAD_API GAMEPAD_BOOL GamepadStickDirTriggered(GAMEPAD_DEVICE device, GAMEPAD_STICK stick, GAMEPAD_STICKDIR dir);
 
+#if defined(GAMEPAD_TESTING) && defined(__linux__)
+GAMEPAD_API unsigned int GamepadTestDetectCount(void);
+GAMEPAD_API void GamepadTestSignalDeviceChange(void);
+#endif
+
 #if defined(__cplusplus)
 } /* extern "C" */
 #endif

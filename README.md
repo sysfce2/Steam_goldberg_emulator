@@ -140,8 +140,8 @@ The only times you'll need to rebuild them is either when their separete build f
 Open CMD in the repo folder, then run the following
 * To build using `Visual Studio`
   ```batch
-  set "CMAKE_GENERATOR=Visual Studio 17 2022"
-  third-party\common\win\premake\premake5.exe --file=premake5-deps.lua --64-build --32-build   --all-ext --all-build --verbose --os=windows vs2022
+  set "CMAKE_GENERATOR=Visual Studio 18 2026"
+  third-party\common\win\premake\premake5.exe --file=premake5-deps.lua --64-build --32-build   --all-ext --all-build --verbose --os=windows vs2026
   ```
 * To build using `MSYS2` **this is currently experimental and will not work due to ABI differences**  
   <details>
@@ -192,14 +192,14 @@ This will:
 Open CMD in the repo folder, then run the following
 * For `Visual Studio 2022`
   ```batch
-  third-party\common\win\premake\premake5.exe --file=premake5.lua --genproto --os=windows vs2022
-  ```
-  You can then go to the folder `build\project\vs2022\win` and open the produced `.sln` file in Visual Studio.  
-  Or, if you prefer to do it from command line, open the `Developer Command Prompt for VS 2022` inside the above folder, then:  
+  third-party\common\win\premake\premake5.exe --file=premake5.lua --genproto --os=windows vs2026
+  ```  
+  You can then go to the folder `build\project\vs2026\win` and open the produced `.sln` file in Visual Studio.  
+  Or, if you prefer to do it from command line, open the `Developer Command Prompt for VS 2026` inside the above folder, then:  
   ```batch
-  msbuild /nologo /v:n /p:Configuration=release,Platform=Win32 gse.sln
-  
-  msbuild /nologo /v:n /p:Configuration=release,Platform=x64 gse.sln
+  msbuild /nologo /v:n /p:Configuration=release,Platform=Win32 gbe.slnx
+
+  msbuild /nologo /v:n /p:Configuration=release,Platform=x64 gbe.slnx
   ```
   
 * For `MSYS2` **this is currently experimental and will not work due to ABI differences**  
@@ -308,7 +308,7 @@ Open CMD in the repos's directory, then run this script
 ```batch
 package_win.bat <build_folder>
 ```
-`build_folder` is any folder inside `build\win`, for example: `vs2022\release`  
+`build_folder` is any folder inside `build\win`, for example: `vs2026\release`  
 The above example will create a `.7z` archive inside `build\package\win\`
 
 ### On Linux:

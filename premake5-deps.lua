@@ -1,11 +1,11 @@
-require("premake", ">=5.0.0-beta2")
+require("premake", ">=5.0.0-beta8")
 
 -- don't forget to set env var CMAKE_GENERATOR to one of these values:
 -- https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html#manual:cmake-generators(7)
 -- common ones
 -- ============
 -- Unix Makefiles
--- Visual Studio 17 2022
+-- Visual Studio 18 2026
 -- MSYS Makefiles
 
 local os_iden = '' -- identifier
@@ -104,6 +104,12 @@ newoption {
     description = "Extract portaudio",
 }
 
+newoption {
+    category = "extract",
+    trigger = "ext-sdl",
+    description = "Extract sdl",
+}
+
 -- build
 newoption {
     category = "build",
@@ -172,6 +178,12 @@ newoption {
     category = "build",
     trigger = "build-portaudio",
     description = "Build portaudio",
+}
+
+newoption {
+    category = "build",
+    trigger = "build-sdl",
+    description = "Build sdl",
 }
 
 local function merge_list(src, dest)
@@ -340,7 +352,7 @@ local function cmake_build(dep_folder, is_32, extra_cmd_defs, c_flags_init, cxx_
     -- write toolchain file
     local toolchain_file_content = ''
     if _OPTIONS["cmake-toolchain"] then
-        toolchain_file_content='include(' .. _OPTIONS["cmake-toolchain"] .. ')\n\n'
+        toolchain_file_content = 'include(' .. _OPTIONS["cmake-toolchain"] .. ')\n\n'
     end
     if #cflags_init_str > 0 then
         toolchain_file_content = toolchain_file_content .. 'set(CMAKE_C_FLAGS_INIT "' .. cflags_init_str .. '" )\n'
@@ -464,6 +476,9 @@ if _OPTIONS["ext-opus"] or _OPTIONS["all-ext"] then
 end
 if _OPTIONS["ext-portaudio"] or _OPTIONS["all-ext"] then
     table.insert(deps_to_extract, { 'portaudio/portaudio.tar.gz', 'portaudio' })
+end
+if _OPTIONS["ext-sdl"] or _OPTIONS["all-ext"] then
+    table.insert(deps_to_extract, { 'sdl/sdl.tar.gz', 'sdl' })
 end
 
 -- start extraction
@@ -667,6 +682,7 @@ if _OPTIONS["build-curl"] or _OPTIONS["all-build"] then
         "CURL_USE_MBEDTLS=ON",
         -- "CURL_USE_SCHANNEL=ON",
         -- "CURL_CA_FALLBACK=ON", -- removed: only works with OpenSSL since curl 8.19.0
+        "CURL_CA_FALLBACK=OFF",
 
         -- fix building on Arch Linux
         "CURL_USE_LIBSSH2=OFF",
@@ -822,5 +838,25 @@ if _OPTIONS["build-portaudio"] or _OPTIONS["all-build"] then
     end
     if _OPTIONS["64-build"] then
         cmake_build('portaudio', false, portaudio_common_defs)
+    end
+end
+
+if _OPTIONS["build-sdl"] or _OPTIONS["all-build"] then
+    local sdl_common_defs = {
+        -- enable / disable SDL subsystems
+        "SDL_AUDIO=OFF",
+        "SDL_VIDEO=OFF",
+        "SDL_HIDAPI=OFF",
+        "SDL_SENSOR=OFF",
+        "SDL_DIALOG=OFF",
+        "SDL_TRAY=OFF",
+        "SDL_UNIX_CONSOLE_BUILD=ON",
+    }
+
+    if _OPTIONS["32-build"] then
+        cmake_build('sdl', true, sdl_common_defs)
+    end
+    if _OPTIONS["64-build"] then
+        cmake_build('sdl', false, sdl_common_defs)
     end
 end

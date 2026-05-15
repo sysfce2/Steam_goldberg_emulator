@@ -22,54 +22,56 @@
 
 typedef void (*OnLogonSuccessFunc)();
 typedef void (*OnLogonFailureFunc)(EResult);
-typedef void (*OnLoggedOffFunc)();
+typedef void (*OnLoggedOffFunc)(EResult);
 typedef void (*OnBeginLogonRetryFunc)();
-typedef void (*HandleVACChallengeFunc)(int, uint8 *, int);
-typedef void (*GSHandleClientApproveFunc)(CSteamID &);
-typedef void (*GSHandleClientDenyFunc)(CSteamID &, EDenyReason);
-typedef void (*GSHandleClientKickFunc)(CSteamID &, EDenyReason);
+typedef void (*GSHandleClientApproveFunc)(uint64);
+typedef void (*GSHandleClientDenyFunc)(uint64, EDenyReason);
+typedef void (*GSHandleClientKickFunc)(uint64, EDenyReason);
+typedef int (*Steam2GetValueFunc)(const char *, char *, int);
 
-class CCAPICMCallBack : public ICMCallback
+class CAPI_CMCallback : public ICMCallback, public ISteam2Auth
 {
+    OnLogonSuccessFunc OnLogonSuccess_ptr{};
+    OnLogonFailureFunc OnLogonFailure_ptr{};
+    OnLoggedOffFunc OnLoggedOff_ptr{};
+    OnBeginLogonRetryFunc OnBeginLogonRetry_ptr{};
+    GSHandleClientApproveFunc GSHandleClientApprove_ptr{};
+    GSHandleClientDenyFunc GSHandleClientDeny_ptr{};
+    GSHandleClientKickFunc GSHandleClientKick_ptr{};
+    Steam2GetValueFunc GetValue_ptr{};
+
 public:
-    CCAPICMCallBack(OnLogonSuccessFunc func1,
+    CAPI_CMCallback(OnLogonSuccessFunc func1,
         OnLogonFailureFunc func2,
         OnLoggedOffFunc func3,
         OnBeginLogonRetryFunc func4,
-        HandleVACChallengeFunc func5,
-        GSHandleClientApproveFunc func6,
-        GSHandleClientDenyFunc func7,
-        GSHandleClientKickFunc func8)
+        GSHandleClientApproveFunc func5,
+        GSHandleClientDenyFunc func6,
+        GSHandleClientKickFunc func7,
+        Steam2GetValueFunc func8)
     {
         OnLogonSuccess_ptr = func1;
         OnLogonFailure_ptr = func2;
         OnLoggedOff_ptr = func3;
         OnBeginLogonRetry_ptr = func4;
-        HandleVACChallenge_ptr = func5;
-        GSHandleClientApprove_ptr = func6;
-        GSHandleClientDeny_ptr = func7;
-        GSHandleClientKick_ptr = func8;
+        GSHandleClientApprove_ptr = func5;
+        GSHandleClientDeny_ptr = func6;
+        GSHandleClientKick_ptr = func7;
+        GetValue_ptr = func8;
     }
-    ~CCAPICMCallBack() {}
+    ~CAPI_CMCallback() {}
 
     void OnLogonSuccess() { OnLogonSuccess_ptr(); }
     void OnLogonFailure(EResult eResult) { OnLogonFailure_ptr(eResult); }
-    void OnLoggedOff() { OnLoggedOff_ptr(); }
+    void OnLoggedOff(EResult eResult) { OnLoggedOff_ptr(eResult); }
     void OnBeginLogonRetry() { OnBeginLogonRetry_ptr(); }
-    void HandleVACChallenge(int nClientGameID, uint8 *pubChallenge, int cubChallenge) { HandleVACChallenge_ptr(nClientGameID, pubChallenge, cubChallenge); }
-    void GSHandleClientApprove(CSteamID &steamID) { GSHandleClientApprove_ptr(steamID); }
-    void GSHandleClientDeny(CSteamID &steamID, EDenyReason eDenyReason) { GSHandleClientDeny_ptr(steamID, eDenyReason); }
-    void GSHandleClientKick(CSteamID &steamID, EDenyReason eDenyReason) { GSHandleClientKick_ptr(steamID, eDenyReason); }
+    void HandleVACChallenge(int nClientGameID, uint8 *pubChallenge, int cubChallenge) {}
+    void GSHandleClientApprove(CSteamID &steamID) { GSHandleClientApprove_ptr(steamID.ConvertToUint64()); }
+    void GSHandleClientDeny(CSteamID &steamID, EDenyReason eDenyReason) { GSHandleClientDeny_ptr(steamID.ConvertToUint64(), eDenyReason); }
+    void GSHandleClientKick(CSteamID &steamID, EDenyReason eDenyReason) { GSHandleClientKick_ptr(steamID.ConvertToUint64(), eDenyReason); }
 
-private:
-    OnLogonSuccessFunc OnLogonSuccess_ptr{};
-    OnLogonFailureFunc OnLogonFailure_ptr{};
-    OnLoggedOffFunc OnLoggedOff_ptr{};
-    OnBeginLogonRetryFunc OnBeginLogonRetry_ptr{};
-    HandleVACChallengeFunc HandleVACChallenge_ptr{};
-    GSHandleClientApproveFunc GSHandleClientApprove_ptr{};
-    GSHandleClientDenyFunc GSHandleClientDeny_ptr{};
-    GSHandleClientKickFunc GSHandleClientKick_ptr{};
+    int GetValue(const char *var, char *buf, int bufsize) { return GetValue_ptr(var, buf, bufsize); }
+    int GetServerReadableTicket(uint32 unk1, uint32 unk2, void *unk3, uint32 unk4, uint32 *unk5) { return 0; }
 };
 
 #endif // __INCLUDED_CAPICMCALLBACK_H__

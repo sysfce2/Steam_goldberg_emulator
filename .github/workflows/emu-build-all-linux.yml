@@ -10,7 +10,7 @@ permissions:
   contents: "write"
 
 env:
-  PREMAKE_ACTION: "gmake2"
+  PREMAKE_ACTION: "gmake"
   DEPS_CACHE_KEY: "emu-deps-linux"
   DEPS_CACHE_DIR: "build/deps/linux"
 
@@ -29,7 +29,7 @@ jobs:
   builds-matrix-linux:
     name: "build"
     needs: ["deps"]
-    runs-on: "ubuntu-22.04"
+    runs-on: "ubuntu-24.04"
     if: ${{ !cancelled() }}
     continue-on-error: true
 
@@ -46,8 +46,10 @@ jobs:
             # tools
             "tool_lobby_connect",
             "tool_generate_interfaces",
+            # tests
+            "test_gamepad_linux",
           ]
-        arch: ["x64", "x32"]
+        arch: ["x64", "x86"]
         cfg: ["debug", "release"]
 
     steps:
@@ -98,7 +100,7 @@ jobs:
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake2
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
 
       # mandatory Linux packages
       - name: "Install required packages"
@@ -119,7 +121,7 @@ jobs:
       # build target
       - name: "Build target"
         shell: "bash"
-        working-directory: "${{ github.workspace }}/build/project/gmake2/linux"
+        working-directory: "${{ github.workspace }}/build/project/gmake/linux"
         run: |
           echo "dry run..."
           make -n -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_${{ matrix.arch }} ${{ matrix.prj }}

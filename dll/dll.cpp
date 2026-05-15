@@ -2030,24 +2030,24 @@ STEAMCLIENT_API steam_bool Steam3_GSSetStatus( HSteamUser hUser, int32 nAppIdSer
     return gs->Obsolete_GSSetStatus(nAppIdServed, unServerFlags, cPlayers, cPlayersMax, cBotPlayers, unGamePort, pchServerName, pchGameDir, pchMapName, pchVersion);
 }
 
-static std::map<HSteamUser, CCAPICMCallBack> capi_cmcallback_map;
+static std::map<HSteamUser, CAPI_CMCallback> capi_cmcallback_map;
 
 STEAMCLIENT_API void Steam3_Init( HSteamUser hUser,
     OnLogonSuccessFunc func1,
     OnLogonFailureFunc func2,
     OnLoggedOffFunc func3,
     OnBeginLogonRetryFunc func4,
-    HandleVACChallengeFunc func5,
-    GSHandleClientApproveFunc func6,
-    GSHandleClientDenyFunc func7,
-    GSHandleClientKickFunc func8 )
+    GSHandleClientApproveFunc func5,
+    GSHandleClientDenyFunc func6,
+    GSHandleClientKickFunc func7,
+    Steam2GetValueFunc func8 )
 {
     PRINT_DEBUG_ENTRY();
     get_steam_client()->steamclient_version = 2;
     ISteamUser002 *su = reinterpret_cast<ISteamUser002 *>(get_steam_client()->GetISteamUser(hUser, "SteamUser002"));
-    CCAPICMCallBack new_cmcallback(func1, func2, func3, func4, func5, func6, func7, func8);
+    CAPI_CMCallback new_cmcallback(func1, func2, func3, func4, func5, func6, func7, func8);
     auto [it, _] = capi_cmcallback_map.insert_or_assign(hUser, new_cmcallback);
-    su->Init(&it->second, nullptr);
+    su->Init(static_cast<ICMCallback *>(&it->second), static_cast<ISteam2Auth *>(&it->second));
 }
 // SteamClient002 -----------------------------------------------------
 

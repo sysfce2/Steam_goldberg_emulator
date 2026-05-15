@@ -321,15 +321,7 @@ HSteamPipe Steam_Client::CreateSteamPipe()
 {
     PRINT_DEBUG_ENTRY();
 
-    HSteamPipe pipe{};
-    if (!freed_steam_pipes.empty()) {
-        pipe = freed_steam_pipes.top();
-        freed_steam_pipes.pop();
-    } else {
-        if (!steam_pipe_counter) ++steam_pipe_counter;
-        pipe = steam_pipe_counter;
-        ++steam_pipe_counter;
-    }
+    HSteamPipe pipe = steam_pipe_numbers.get_number();
 
     PRINT_DEBUG("  returned pipe handle %i", pipe);
     steam_pipes[pipe] = { Steam_Pipe_Type::NO_USER, false };
@@ -345,7 +337,7 @@ bool Steam_Client::BReleaseSteamPipe( HSteamPipe hSteamPipe )
 {
     PRINT_DEBUG("%i", hSteamPipe);
     if (steam_pipes.count(hSteamPipe)) {
-        freed_steam_pipes.push(hSteamPipe);
+        steam_pipe_numbers.free_number(hSteamPipe);
         return steam_pipes.erase(hSteamPipe) > 0;
     }
 
@@ -362,20 +354,23 @@ HSteamUser Steam_Client::ConnectToGlobalUser( HSteamPipe hSteamPipe )
         return 0;
     }
 
-    userLogIn();
+    if (client_user_ref_count == 0) {
+        userLogIn();
 
-    // initialize GC now so that we have user's inventory ready right away
-    steam_game_coordinator->initialize_gc();
-    
-    // games like appid 1740720 and 2379780 do not call SteamAPI_RunCallbacks() or SteamAPI_ManualDispatch_RunFrame() or Steam_BGetCallback()
-    // hence all run_callbacks() will never run, which might break the assumption that these callbacks are always run
-    // also networking callbacks won't run
-    // hence we spawn the background thread here which trigger all run_callbacks() and run networking callbacks
-    PRINT_DEBUG("started background thread");
-    background_thread->start(this);
+        // initialize GC now so that we have user's inventory ready right away
+        steam_game_coordinator->initialize_gc();
 
-    steam_overlay->SetupOverlay();
-    
+        // games like appid 1740720 and 2379780 do not call SteamAPI_RunCallbacks() or SteamAPI_ManualDispatch_RunFrame() or Steam_BGetCallback()
+        // hence all run_callbacks() will never run, which might break the assumption that these callbacks are always run
+        // also networking callbacks won't run
+        // hence we spawn the background thread here which trigger all run_callbacks() and run networking callbacks
+        PRINT_DEBUG("started background thread");
+        background_thread->start(this);
+
+        steam_overlay->SetupOverlay();
+    }
+
+    client_user_ref_count++;
     steam_pipes[hSteamPipe] = {Steam_Pipe_Type::CLIENT, false};
     return CLIENT_HSTEAMUSER;
 }
@@ -412,7 +407,7 @@ HSteamUser Steam_Client::CreateLocalUser( HSteamPipe *phSteamPipe )
 // NOT THREADSAFE - ensure that no other threads are accessing Steamworks API when calling
 void Steam_Client::ReleaseUser( HSteamPipe hSteamPipe, HSteamUser hUser )
 {
-    PRINT_DEBUG_ENTRY();
+    PRINT_DEBUG("%i %i", hSteamPipe, hUser);
 
     if (!steam_pipes.count(hSteamPipe))
         return;
@@ -424,7 +419,13 @@ void Steam_Client::ReleaseUser( HSteamPipe hSteamPipe, HSteamUser hUser )
 
         serverShutdown();
     } else if (hUser == CLIENT_HSTEAMUSER) {
-        clientShutdown();
+        if (client_user_ref_count > 0) {
+            client_user_ref_count--;
+
+            if (client_user_ref_count == 0) {
+                clientShutdown();
+            }
+        }
     }
 }
 
@@ -1051,42 +1052,53 @@ HSteamUser Steam_Client::CreateGlobalInstance()
 {
     PRINT_DEBUG_ENTRY();
     HSteamPipe pipe = 0;
-    return CreateGlobalUser(&pipe);
+    HSteamUser user = CreateGlobalUser(&pipe);
+    return create_old_user_ref(user, pipe);
 }
 
 HSteamUser Steam_Client::ConnectToGlobalInstance()
 {
     PRINT_DEBUG_ENTRY();
-    HSteamPipe pipe = get_pipe_for_user(CLIENT_HSTEAMUSER);
-    if (!pipe) {
-        pipe = CreateSteamPipe();
+    if (steamclient_version < 4) {
+        for (auto &[key, val] : old_user_refs) {
+            if (val.user == CLIENT_HSTEAMUSER) {
+                return key;
+            }
+        }
     }
 
-    return ConnectToGlobalUser(pipe);
+    HSteamPipe pipe = CreateSteamPipe();
+    HSteamUser user = ConnectToGlobalUser(pipe);
+    return create_old_user_ref(user, pipe);
 }
 
 HSteamUser Steam_Client::CreateLocalInstance()
 {
     PRINT_DEBUG_ENTRY();
     HSteamPipe pipe = 0;
-    return CreateLocalUser(&pipe);
+    HSteamUser user = CreateLocalUser(&pipe);
+    return create_old_user_ref(user, pipe);
 }
 
 void Steam_Client::ReleaseInstance( HSteamUser hSteamUser )
 {
     PRINT_DEBUG_ENTRY();
-    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
-    if (pipe) {
-        ReleaseUser(pipe, hSteamUser);
-        BReleaseSteamPipe(pipe);
-    }
+    auto it = old_user_refs.find(hSteamUser);
+    if (it == old_user_refs.end()) return;
+
+    ReleaseUser(it->second.pipe, it->second.user);
+    BReleaseSteamPipe(it->second.pipe);
+
+    old_user_ref_numbers.free_number(hSteamUser);
+    old_user_refs.erase(it);
 }
 
 ISteamUser *Steam_Client::GetISteamUser( HSteamUser hSteamUser, const char *pchVersion )
 {
     PRINT_DEBUG_ENTRY();
-    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
-    return GetISteamUser(hSteamUser, pipe, pchVersion);
+    if (!old_user_refs.count(hSteamUser)) return nullptr;
+    User_Ref &user_ref = old_user_refs[hSteamUser];
+    return GetISteamUser(user_ref.user, user_ref.pipe, pchVersion);
 }
 
 // retrieves the IVac interface associated with the handle
@@ -1119,8 +1131,9 @@ bool Steam_Client::BMainLoop( uint64 time )
 ISteamGameServer *Steam_Client::GetISteamGameServer( HSteamUser hSteamUser, const char *pchVersion )
 {
     PRINT_DEBUG_ENTRY();
-    HSteamPipe pipe = get_pipe_for_user(hSteamUser);
-    return GetISteamGameServer(hSteamUser, pipe, pchVersion);
+    if (!old_user_refs.count(hSteamUser)) return nullptr;
+    User_Ref &user_ref = old_user_refs[hSteamUser];
+    return GetISteamGameServer(user_ref.user, user_ref.pipe, pchVersion);
 }
 // SteamClient004 -----------------------------------------------------
 
@@ -1185,6 +1198,13 @@ void Steam_Client::SetEUniverse( EUniverse universe )
     PRINT_DEBUG_TODO();
 }
 // SteamClient005 -----------------------------------------------------
+
+HSteamUser Steam_Client::create_old_user_ref(HSteamUser hUser, HSteamPipe hSteamPipe)
+{
+    HSteamUser ref = old_user_ref_numbers.get_number();
+    old_user_refs[ref] = { hUser, hSteamPipe };
+    return ref;
+}
 
 HSteamPipe Steam_Client::get_pipe_for_user(HSteamUser hUser)
 {
