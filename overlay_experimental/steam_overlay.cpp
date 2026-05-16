@@ -725,7 +725,7 @@ void Steam_Overlay::create_fonts()
     
     // With ImGui 1.92+ and ImGuiBackendFlags_RendererHasTextures, the backend
     // builds the font atlas automatically — no need to call Build() manually.
-    PRINT_DEBUG("isbuilt fonts atlas (result=%i)", (int)res);
+    PRINT_DEBUG("fonts atlas built automatically...")
 
     reset_LastError();
 }
