@@ -197,9 +197,9 @@ Open CMD in the repo folder, then run the following
   You can then go to the folder `build\project\vs2026\win` and open the produced `.sln` file in Visual Studio.  
   Or, if you prefer to do it from command line, open the `Developer Command Prompt for VS 2026` inside the above folder, then:  
   ```batch
-  msbuild /nologo /v:n /p:Configuration=release,Platform=Win32 gbe.slnx
+  msbuild /nologo /v:n /p:Configuration=release,Platform=Win32 gse.slnx
 
-  msbuild /nologo /v:n /p:Configuration=release,Platform=x64 gbe.slnx
+  msbuild /nologo /v:n /p:Configuration=release,Platform=x64 gse.slnx
   ```
   
 * For `MSYS2` **this is currently experimental and will not work due to ABI differences**  
