@@ -848,13 +848,11 @@ project "api_regular"
     ---------
     -- x32 libs search dir
     filter { "platforms:x86", }
-        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
-        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
         }
@@ -980,14 +978,12 @@ project "api_experimental"
     ---------
     -- x32 libs search dir
     filter { "platforms:x86", }
-        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
             x32_deps_overlay_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
-        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
             x64_deps_overlay_libdir,
@@ -1119,14 +1115,12 @@ project "steamclient_experimental"
     ---------
     -- x32 libs search dir
     filter { "platforms:x86", }
-        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
             x32_deps_overlay_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
-        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
             x64_deps_overlay_libdir,
@@ -1214,13 +1208,11 @@ project "tool_lobby_connect"
     ---------
     -- x32 libs search dir
     filter { "platforms:x86", }
-        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
-        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
         }
@@ -1700,13 +1692,11 @@ project "steamclient_regular"
     ---------
     -- x32 libs search dir
     filter { "platforms:x86", }
-        links { x32_portaudio_link }
         libdirs {
             x32_deps_libdir,
         }
     -- x64 libs search dir
     filter { "platforms:x64", }
-        links { x64_portaudio_link }
         libdirs {
             x64_deps_libdir,
         }
