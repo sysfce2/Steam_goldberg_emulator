@@ -304,7 +304,7 @@ class Steam_Overlay
         Overlay_Achievement *ach = nullptr
     );
 
-    void play_overlay_sound(const char* specific_key, const char* fallback_key = nullptr, const unsigned char* baked_fallback = nullptr);
+    void play_overlay_sound(const char* sound_key);
     void notify_sound_user_invite(friend_window_state& friend_state);
     void notify_sound_chat_message(friend_window_state& friend_state);
     void notify_sound_user_achievement();

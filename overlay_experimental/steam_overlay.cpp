@@ -28,8 +28,6 @@
 #include "overlay/steam_overlay_translations.h"
 // fonts
 #include "fonts/unifont.hpp"
-// builtin audio
-#include "overlay/notification.h"
 #include "overlay_bridge.h"
 
 // forward declaration — defined later in this file
@@ -753,6 +751,40 @@ void Steam_Overlay::load_audio()
             PRINT_DEBUG("loaded '%s' (read %i/%u bytes)", file_path.c_str(), read, file_size);
         }
     }
+
+    // Cascade inheritance: populate empty specific-type slots from their nearest generic fallback.
+    // This means a user only needs overlay_friend_notification.wav and all friend/lobby types
+    // will automatically use it, unless they provide a more specific file.
+    auto inherit = [](std::vector<char> &dst, const std::vector<char> &src) {
+        if (dst.empty() && !src.empty()) dst = src;
+    };
+
+    auto& friend_gen  = wav_files.at("overlay_friend_notification.wav");
+    auto& ach_unlock  = wav_files.at("overlay_achievement_notification.wav");
+    auto& join_resp   = wav_files.at("overlay_lobby_join_response.wav");
+    auto& join_acc    = wav_files.at("overlay_lobby_join_accepted.wav");
+    auto& join_deny   = wav_files.at("overlay_lobby_join_denied.wav");
+    auto& ach_prog    = wav_files.at("overlay_achievement_progress.wav");
+
+    // join_response is the intermediate for accepted/denied — fill it from friend first
+    inherit(join_resp, friend_gen);
+    // now accepted/denied inherit from join_response (which may itself be the friend sound)
+    inherit(join_acc,  join_resp);
+    inherit(join_deny, join_resp);
+    // achievement progress inherits from achievement unlock
+    inherit(ach_prog,  ach_unlock);
+    // all remaining friend-derived types inherit directly from the friend generic
+    for (const char* key : {
+        "overlay_invite_notification.wav",
+        "overlay_chat_notification.wav",
+        "overlay_auto_accept_notification.wav",
+        "overlay_lobby_join_request.wav",
+        "overlay_lobby_kicked.wav",
+        "overlay_friend_lobby.wav",
+        "overlay_lobby_status.wav",
+    }) {
+        inherit(wav_files.at(key), friend_gen);
+    }
 }
 
 void Steam_Overlay::load_achievements_data()
@@ -990,30 +1022,16 @@ void Steam_Overlay::obscure_game_input(bool state) {
     }
 }
 
-// Play a notification sound using a priority chain:
-//   1. specific per-type file  (e.g. "overlay_invite_notification.wav")
-//   2. generic friend fallback (e.g. "overlay_friend_notification.wav")
-//   3. baked-in compiled bytes (notif_invite_wav from notification.h)
-// Drop the desired WAV files into the game's or global "sounds/" folder to override.
-void Steam_Overlay::play_overlay_sound(const char* specific_key, const char* fallback_key, const unsigned char* baked_fallback)
+// Play a notification sound for the given key.
+// load_audio() pre-populates each slot via cascade inheritance so the key is always ready
+// when any WAV files are present. Drop WAV files into the game's or global "sounds/" folder.
+void Steam_Overlay::play_overlay_sound(const char* sound_key)
 {
 #ifdef __WINDOWS__
-    if (specific_key) {
-        auto it = wav_files.find(specific_key);
-        if (it != wav_files.end() && !it->second.empty()) {
-            PlaySoundA((LPCSTR)it->second.data(), nullptr, SND_ASYNC | SND_MEMORY);
-            return;
-        }
-    }
-    if (fallback_key) {
-        auto it = wav_files.find(fallback_key);
-        if (it != wav_files.end() && !it->second.empty()) {
-            PlaySoundA((LPCSTR)it->second.data(), nullptr, SND_ASYNC | SND_MEMORY);
-            return;
-        }
-    }
-    if (baked_fallback) {
-        PlaySoundA((LPCSTR)baked_fallback, nullptr, SND_ASYNC | SND_MEMORY);
+    if (!sound_key) return;
+    auto it = wav_files.find(sound_key);
+    if (it != wav_files.end() && !it->second.empty()) {
+        PlaySoundA((LPCSTR)it->second.data(), nullptr, SND_ASYNC | SND_MEMORY);
     }
 #endif
 }
@@ -1024,7 +1042,7 @@ void Steam_Overlay::notify_sound_user_invite(friend_window_state& friend_state)
 
     if (!(friend_state.window_state & window_state_show)) {
         friend_state.window_state |= window_state_need_attention;
-        play_overlay_sound("overlay_invite_notification.wav", "overlay_friend_notification.wav", notif_invite_wav);
+        play_overlay_sound("overlay_invite_notification.wav");
     }
 }
 
@@ -1033,7 +1051,7 @@ void Steam_Overlay::notify_sound_chat_message(friend_window_state& friend_state)
     if (settings->disable_overlay_friend_notification) return;
 
     if (!(friend_state.window_state & window_state_show)) {
-        play_overlay_sound("overlay_chat_notification.wav", "overlay_friend_notification.wav", notif_invite_wav);
+        play_overlay_sound("overlay_chat_notification.wav");
     }
 }
 
@@ -1041,33 +1059,33 @@ void Steam_Overlay::notify_sound_user_achievement()
 {
     if (settings->disable_overlay_achievement_notification) return;
 
-    play_overlay_sound("overlay_achievement_notification.wav", nullptr, nullptr);
+    play_overlay_sound("overlay_achievement_notification.wav");
 }
 
 void Steam_Overlay::notify_sound_auto_accept_friend_invite()
 {
-    play_overlay_sound("overlay_auto_accept_notification.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    play_overlay_sound("overlay_auto_accept_notification.wav");
 }
 
 void Steam_Overlay::notify_sound_lobby_join()
 {
     if (settings->disable_overlay_friend_notification) return;
 
-    play_overlay_sound("overlay_lobby_join_request.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    play_overlay_sound("overlay_lobby_join_request.wav");
 }
 
 void Steam_Overlay::notify_sound_friend_lobby()
 {
     if (settings->disable_overlay_friend_notification) return;
 
-    play_overlay_sound("overlay_friend_lobby.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    play_overlay_sound("overlay_friend_lobby.wav");
 }
 
 void Steam_Overlay::notify_sound_lobby_kicked()
 {
     if (settings->disable_overlay_friend_notification) return;
 
-    play_overlay_sound("overlay_lobby_kicked.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    play_overlay_sound("overlay_lobby_kicked.wav");
 }
 
 void Steam_Overlay::notify_sound_lobby_join_response(bool accepted)
@@ -1076,9 +1094,9 @@ void Steam_Overlay::notify_sound_lobby_join_response(bool accepted)
 
     // accepted/denied each have their own file; both fall back to the generic response sound
     if (accepted) {
-        play_overlay_sound("overlay_lobby_join_accepted.wav", "overlay_lobby_join_response.wav", notif_invite_wav);
+        play_overlay_sound("overlay_lobby_join_accepted.wav");
     } else {
-        play_overlay_sound("overlay_lobby_join_denied.wav", "overlay_lobby_join_response.wav", notif_invite_wav);
+        play_overlay_sound("overlay_lobby_join_denied.wav");
     }
 }
 
@@ -1086,13 +1104,12 @@ void Steam_Overlay::notify_sound_achievement_progress()
 {
     if (settings->disable_overlay_achievement_notification) return;
 
-    // falls back to the achievement-unlock sound if no dedicated progress sound is provided
-    play_overlay_sound("overlay_achievement_progress.wav", "overlay_achievement_notification.wav", nullptr);
+    play_overlay_sound("overlay_achievement_progress.wav");
 }
 
 void Steam_Overlay::notify_sound_lobby_status()
 {
-    play_overlay_sound("overlay_lobby_status.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    play_overlay_sound("overlay_lobby_status.wav");
 }
 
 int find_free_id(std::vector<int> &ids, int base)
