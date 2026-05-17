@@ -184,15 +184,15 @@ jobs:
         shell: "bash"
         run: |
           any=false
-          [[ "${{ steps.cache-ssq.outputs.cache-hit }}"            != "true" ]] || [[ "${{ inputs.rebuild_ssq }}"            == "true" ]] && any=true
-          [[ "${{ steps.cache-zlib.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_zlib }}"           == "true" ]] && any=true
-          [[ "${{ steps.cache-mbedtls.outputs.cache-hit }}"        != "true" ]] || [[ "${{ inputs.rebuild_mbedtls }}"        == "true" ]] && any=true
-          [[ "${{ steps.cache-curl.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_curl }}"           == "true" ]] && any=true
-          [[ "${{ steps.cache-protobuf.outputs.cache-hit }}"       != "true" ]] || [[ "${{ inputs.rebuild_protobuf }}"       == "true" ]] && any=true
-          [[ "${{ steps.cache-ingame-overlay.outputs.cache-hit }}" != "true" ]] || [[ "${{ inputs.rebuild_ingame_overlay }}" == "true" ]] && any=true
-          [[ "${{ steps.cache-opus.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_opus }}"           == "true" ]] && any=true
-          [[ "${{ steps.cache-portaudio.outputs.cache-hit }}"      != "true" ]] || [[ "${{ inputs.rebuild_portaudio }}"      == "true" ]] && any=true
-          [[ "${{ steps.cache-sdl.outputs.cache-hit }}"            != "true" ]] || [[ "${{ inputs.rebuild_sdl }}"            == "true" ]] && any=true
+          if [[ "${{ steps.cache-ssq.outputs.cache-hit }}"            != "true" ]] || [[ "${{ inputs.rebuild_ssq }}"            == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-zlib.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_zlib }}"           == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-mbedtls.outputs.cache-hit }}"        != "true" ]] || [[ "${{ inputs.rebuild_mbedtls }}"        == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-curl.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_curl }}"           == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-protobuf.outputs.cache-hit }}"       != "true" ]] || [[ "${{ inputs.rebuild_protobuf }}"       == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-ingame-overlay.outputs.cache-hit }}" != "true" ]] || [[ "${{ inputs.rebuild_ingame_overlay }}" == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-opus.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_opus }}"           == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-portaudio.outputs.cache-hit }}"      != "true" ]] || [[ "${{ inputs.rebuild_portaudio }}"      == "true" ]]; then any=true; fi
+          if [[ "${{ steps.cache-sdl.outputs.cache-hit }}"            != "true" ]] || [[ "${{ inputs.rebuild_sdl }}"            == "true" ]]; then any=true; fi
           echo "needed=$any" >> $GITHUB_OUTPUT
 
       # checkout and clone sources only when at least one dep needs building
