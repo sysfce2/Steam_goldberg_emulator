@@ -2,9 +2,25 @@ name: "Build emu (Linux)"
 
 on:
   workflow_call:
-    # needed since it allows this to become a reusable workflow
+    inputs:
+      branch:
+        description: 'Branch to build'
+        type: string
+        default: 'dev'
+      commit:
+        description: 'Commit SHA to build (empty = latest on branch)'
+        type: string
+        default: ''
   workflow_dispatch:
-    # allows manual trigger
+    inputs:
+      branch:
+        description: 'Branch to build'
+        type: string
+        default: 'dev'
+      commit:
+        description: 'Commit SHA to build (leave empty for latest on branch)'
+        type: string
+        default: ''
 
 permissions:
   contents: "write"
@@ -25,6 +41,9 @@ jobs:
     name: "Restore or build deps"
     if: ${{ !cancelled() }}
     uses: "./.github/workflows/emu-deps-linux.yml"
+    with:
+      branch: ${{ inputs.branch || 'dev' }}
+      commit: ${{ inputs.commit || '' }}
 
   builds-matrix-linux:
     name: "build"
@@ -56,6 +75,13 @@ jobs:
       # clone branch
       - name: "Checkout branch"
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+
+      - name: "Capture build commit SHA"
+        id: "build_ref"
+        shell: "bash"
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
 
 
@@ -116,7 +142,7 @@ jobs:
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
 
       # build target
       - name: "Build target"
@@ -132,7 +158,7 @@ jobs:
       - name: "Upload target package"
         uses: actions/upload-artifact@v7
         with:
-          name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ github.sha }}"
+          name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ steps.build_ref.outputs.sha }}"
           path: "build/linux"
           if-no-files-found: "error"
           compression-level: 9
