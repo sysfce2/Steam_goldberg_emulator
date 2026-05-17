@@ -192,12 +192,59 @@ jobs:
 
 
       # deps
-      - name: "Restore deps"
-        id: "emu-deps-cache-step"
+      - name: "Restore deps (ssq)"
         uses: actions/cache@v5
         with:
-          key: "${{ env.DEPS_CACHE_KEY }}-${{ env.PREMAKE_ACTION }}"
-          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+          key: "${{ env.DEPS_CACHE_KEY }}-ssq-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/libssq"
+
+      - name: "Restore deps (zlib)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-zlib-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/zlib"
+
+      - name: "Restore deps (mbedtls)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-mbedtls-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/mbedtls"
+
+      - name: "Restore deps (curl)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-curl-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/curl"
+
+      - name: "Restore deps (protobuf)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-protobuf-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/protobuf"
+
+      - name: "Restore deps (ingame_overlay)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-ingame-overlay-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/ingame_overlay"
+
+      - name: "Restore deps (opus)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-opus-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/opus"
+
+      - name: "Restore deps (portaudio)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-portaudio-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/portaudio"
+
+      - name: "Restore deps (sdl)"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-sdl-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/sdl"
 
       # extra helpers/tools, these are not built inside the deps build dir
       - name: "Clone third-party build helpers (common/win)"
