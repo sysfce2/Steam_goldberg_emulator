@@ -21,6 +21,42 @@ on:
         description: 'Commit SHA to build (leave empty for latest on branch)'
         type: string
         default: ''
+      rebuild_ssq:
+        description: 'Force rebuild ssq (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_zlib:
+        description: 'Force rebuild zlib (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_mbedtls:
+        description: 'Force rebuild mbedtls (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_curl:
+        description: 'Force rebuild curl (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_protobuf:
+        description: 'Force rebuild protobuf (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_ingame_overlay:
+        description: 'Force rebuild ingame_overlay (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_opus:
+        description: 'Force rebuild opus (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_portaudio:
+        description: 'Force rebuild portaudio (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_sdl:
+        description: 'Force rebuild sdl (ignore cache)'
+        type: boolean
+        default: false
 
 permissions:
   contents: "write"
@@ -51,45 +87,184 @@ jobs:
           git config --system core.autocrlf false
           git config --global core.autocrlf false
 
-      - name: "Lookup cache for deps"
-        id: "emu-deps-cache-step"
+      # per-dep cache lookups
+      - name: "Lookup cache for ssq"
+        id: "cache-ssq"
         uses: actions/cache@v5
         with:
-          key: "${{ env.DEPS_CACHE_KEY }}-${{ env.PREMAKE_ACTION }}"
-          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+          key: "${{ env.DEPS_CACHE_KEY }}-ssq-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/libssq"
 
-      # we need branch because it has build scripts
-      - name: "Checkout with submodules"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+      - name: "Lookup cache for zlib"
+        id: "cache-zlib"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-zlib-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/zlib"
+
+      - name: "Lookup cache for mbedtls"
+        id: "cache-mbedtls"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-mbedtls-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/mbedtls"
+
+      - name: "Lookup cache for curl"
+        id: "cache-curl"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-curl-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/curl"
+
+      - name: "Lookup cache for protobuf"
+        id: "cache-protobuf"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-protobuf-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/protobuf"
+
+      - name: "Lookup cache for ingame_overlay"
+        id: "cache-ingame-overlay"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-ingame-overlay-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/ingame_overlay"
+
+      - name: "Lookup cache for opus"
+        id: "cache-opus"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-opus-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/opus"
+
+      - name: "Lookup cache for portaudio"
+        id: "cache-portaudio"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-portaudio-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/portaudio"
+
+      - name: "Lookup cache for sdl"
+        id: "cache-sdl"
+        uses: actions/cache@v5
+        with:
+          key: "${{ env.DEPS_CACHE_KEY }}-sdl-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}/sdl"
+
+      # determine if any dep needs (re)building
+      - name: "Check if any dep rebuild needed"
+        id: "needs-build"
+        shell: "bash"
+        run: |
+          any=false
+          [[ "${{ steps.cache-ssq.outputs.cache-hit }}"            != "true" ]] || [[ "${{ inputs.rebuild_ssq }}"            == "true" ]] && any=true
+          [[ "${{ steps.cache-zlib.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_zlib }}"           == "true" ]] && any=true
+          [[ "${{ steps.cache-mbedtls.outputs.cache-hit }}"        != "true" ]] || [[ "${{ inputs.rebuild_mbedtls }}"        == "true" ]] && any=true
+          [[ "${{ steps.cache-curl.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_curl }}"           == "true" ]] && any=true
+          [[ "${{ steps.cache-protobuf.outputs.cache-hit }}"       != "true" ]] || [[ "${{ inputs.rebuild_protobuf }}"       == "true" ]] && any=true
+          [[ "${{ steps.cache-ingame-overlay.outputs.cache-hit }}" != "true" ]] || [[ "${{ inputs.rebuild_ingame_overlay }}" == "true" ]] && any=true
+          [[ "${{ steps.cache-opus.outputs.cache-hit }}"           != "true" ]] || [[ "${{ inputs.rebuild_opus }}"           == "true" ]] && any=true
+          [[ "${{ steps.cache-portaudio.outputs.cache-hit }}"      != "true" ]] || [[ "${{ inputs.rebuild_portaudio }}"      == "true" ]] && any=true
+          [[ "${{ steps.cache-sdl.outputs.cache-hit }}"            != "true" ]] || [[ "${{ inputs.rebuild_sdl }}"            == "true" ]] && any=true
+          echo "needed=$any" >> $GITHUB_OUTPUT
+
+      # checkout and clone sources only when at least one dep needs building
+      - name: "Checkout branch"
+        if: steps.needs-build.outputs.needed == 'true'
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit || inputs.branch || 'dev' }}
 
       - name: "Clone third-party deps (common/win)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+        if: steps.needs-build.outputs.needed == 'true'
         uses: actions/checkout@v6
         with:
           ref: "third-party/common/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/common/win"
 
       - name: "Clone third-party deps (deps/win)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+        if: steps.needs-build.outputs.needed == 'true'
         uses: actions/checkout@v6
         with:
           ref: "third-party/deps/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
 
       - name: "Clone third-party deps (deps/common)"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+        if: steps.needs-build.outputs.needed == 'true'
         uses: actions/checkout@v6
         with:
           ref: "third-party/deps/common"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/common"
 
-      - name: "Build deps"
-        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+      # per-dep build steps (only run when cache missed or force-rebuild requested)
+      - name: "Build ssq"
+        if: steps.cache-ssq.outputs.cache-hit != 'true' || inputs.rebuild_ssq == true
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
           set "CMAKE_GENERATOR=Visual Studio 18 2026"
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --64-build --32-build --all-ext --all-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-ssq --build-ssq --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build zlib"
+        if: steps.cache-zlib.outputs.cache-hit != 'true' || inputs.rebuild_zlib == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-zlib --build-zlib --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build mbedtls"
+        if: steps.cache-mbedtls.outputs.cache-hit != 'true' || inputs.rebuild_mbedtls == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-mbedtls --build-mbedtls --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build curl"
+        if: steps.cache-curl.outputs.cache-hit != 'true' || inputs.rebuild_curl == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-curl --build-curl --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build protobuf"
+        if: steps.cache-protobuf.outputs.cache-hit != 'true' || inputs.rebuild_protobuf == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-protobuf --build-protobuf --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build ingame_overlay"
+        if: steps.cache-ingame-overlay.outputs.cache-hit != 'true' || inputs.rebuild_ingame_overlay == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-ingame_overlay --build-ingame_overlay --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build opus"
+        if: steps.cache-opus.outputs.cache-hit != 'true' || inputs.rebuild_opus == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-opus --build-opus --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build portaudio"
+        if: steps.cache-portaudio.outputs.cache-hit != 'true' || inputs.rebuild_portaudio == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-portaudio --build-portaudio --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
+
+      - name: "Build sdl"
+        if: steps.cache-sdl.outputs.cache-hit != 'true' || inputs.rebuild_sdl == true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          set "CMAKE_GENERATOR=Visual Studio 18 2026"
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-sdl --build-sdl --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
