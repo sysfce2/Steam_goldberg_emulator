@@ -242,7 +242,13 @@ jobs:
           ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5-deps.lua --ext-mbedtls --build-mbedtls --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=linux gmake
 
       - name: "Build curl"
-        if: steps.cache-curl.outputs.cache-hit != 'true' || inputs.rebuild_curl == true
+        if: |
+          steps.cache-curl.outputs.cache-hit != 'true' ||
+          inputs.rebuild_curl == true ||
+          steps.cache-zlib.outputs.cache-hit != 'true' ||
+          inputs.rebuild_zlib == true ||
+          steps.cache-mbedtls.outputs.cache-hit != 'true' ||
+          inputs.rebuild_mbedtls == true
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
@@ -250,7 +256,11 @@ jobs:
           ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5-deps.lua --ext-curl --build-curl --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=linux gmake
 
       - name: "Build protobuf"
-        if: steps.cache-protobuf.outputs.cache-hit != 'true' || inputs.rebuild_protobuf == true
+        if: |
+          steps.cache-protobuf.outputs.cache-hit != 'true' ||
+          inputs.rebuild_protobuf == true ||
+          steps.cache-zlib.outputs.cache-hit != 'true' ||
+          inputs.rebuild_zlib == true
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
