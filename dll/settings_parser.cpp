@@ -633,15 +633,17 @@ static uint32 parse_steam_app_id(const std::string &program_path)
     }
 
     PRINT_DEBUG("appid_env %u gameid_env: %u overlay_gameid: %u", appid_env, gameid_env, overlay_gameid);
-    if (appid_env) {
+
+    // some games set env-vars fake value as '1' in case of 2780710
+    if (appid_env != 0 && appid_env != 1) {
         appid = appid_env;
     }
 
-    if (gameid_env) {
+    if (gameid_env != 0 && gameid_env != 1) {
         appid = gameid_env;
     }
 
-    if (overlay_gameid) {
+    if (overlay_gameid != 0 && overlay_gameid != 1) {
         appid = overlay_gameid;
     }
 
