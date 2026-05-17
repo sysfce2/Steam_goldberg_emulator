@@ -5,7 +5,15 @@ on:
     tags:
       - "release-*"
   workflow_dispatch:
-    # allows manual trigger
+    inputs:
+      branch:
+        description: 'Branch to build'
+        type: string
+        default: 'dev'
+      commit:
+        description: 'Commit SHA to build (leave empty for latest on branch)'
+        type: string
+        default: ''
 
 permissions:
   contents: "write"
@@ -18,6 +26,9 @@ jobs:
     name: "Emu win all"
     if: ${{ !cancelled() }}
     uses: "./.github/workflows/emu-build-all-win.yml"
+    with:
+      branch: ${{ inputs.branch || 'dev' }}
+      commit: ${{ inputs.commit || '' }}
 
   emu-win-prep:
     needs: ["emu-win-all"]
@@ -26,6 +37,13 @@ jobs:
       # we need branch because it has package scripts
       - name: "Checkout branch"
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+
+      - name: "Capture build commit SHA"
+        id: "build_ref"
+        shell: "bash"
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       # on Windows Git will auto change line ending to CRLF, not preferable
       - name: "Ensure LF line ending"
@@ -47,7 +65,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: "build/win"
-          pattern: "emu-win-*-${{ github.sha }}"
+          pattern: "emu-win-*-${{ steps.build_ref.outputs.sha }}"
           merge-multiple: true
 
       # print files
@@ -81,7 +99,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
-          name: "release-emu-win-release-${{ github.sha }}"
+          name: "release-emu-win-release-${{ steps.build_ref.outputs.sha }}"
           path: "build/package/win/vs2026/*release*"
           if-no-files-found: "error"
           compression-level: 0
@@ -92,7 +110,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
-          name: "release-emu-win-debug-${{ github.sha }}"
+          name: "release-emu-win-debug-${{ steps.build_ref.outputs.sha }}"
           path: "build/package/win/vs2026/*debug*"
           if-no-files-found: "error"
           compression-level: 0
@@ -103,6 +121,9 @@ jobs:
     name: "Emu linux all"
     if: ${{ !cancelled() }}
     uses: "./.github/workflows/emu-build-all-linux.yml"
+    with:
+      branch: ${{ inputs.branch || 'dev' }}
+      commit: ${{ inputs.commit || '' }}
 
   emu-linux-prep:
     needs: ["emu-linux-all"]
@@ -111,6 +132,13 @@ jobs:
       # we need branch because it has package scripts
       - name: "Checkout branch"
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+
+      - name: "Capture build commit SHA"
+        id: "build_ref"
+        shell: "bash"
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: "Clone third-party deps (deps/linux)"
         uses: actions/checkout@v6
@@ -123,7 +151,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: "build/linux"
-          pattern: "emu-linux-*-${{ github.sha }}"
+          pattern: "emu-linux-*-${{ steps.build_ref.outputs.sha }}"
           merge-multiple: true
 
       # fix folder permissions! not sure why this fails
@@ -172,7 +200,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
-          name: "release-emu-linux-release-${{ github.sha }}"
+          name: "release-emu-linux-release-${{ steps.build_ref.outputs.sha }}"
           path: "build/package/linux/gmake/*release*"
           if-no-files-found: "error"
           compression-level: 0
@@ -183,7 +211,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
-          name: "release-emu-linux-debug-${{ github.sha }}"
+          name: "release-emu-linux-debug-${{ steps.build_ref.outputs.sha }}"
           path: "build/package/linux/gmake/*debug*"
           if-no-files-found: "error"
           compression-level: 0
