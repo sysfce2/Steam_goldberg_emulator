@@ -90,18 +90,6 @@ jobs:
         working-directory: "${{ github.workspace }}"
         run: sudo chmod -R 777 "${{ github.workspace }}"
 
-      # generate project files
-      - name: "Set build date"
-        shell: "bash"
-        run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
-
-      - name: "Generate project files"
-        shell: "bash"
-        working-directory: "${{ github.workspace }}"
-        run: |
-          sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
-
       # mandatory Linux packages
       - name: "Install required packages"
         shell: "bash"
@@ -117,6 +105,18 @@ jobs:
           sudo apt install -y libgl-dev # needed for overlay build (header files such as GL/gl.h)
           sudo apt install -y libx11-dev:i386 # needed for overlay build
           # sudo apt install -y binutils # (optional) contains the tool 'readelf' mainly, and other usefull binary stuff
+
+      # generate project files
+      - name: "Set build date"
+        shell: "bash"
+        run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
+
+      - name: "Generate project files"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ github.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
 
       # build target
       - name: "Build target"
