@@ -23,6 +23,10 @@ jobs:
     needs: ["emu-win-all"]
     runs-on: "windows-2025-vs2026"
     steps:
+      # we need branch because it has package scripts
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+
       # on Windows Git will auto change line ending to CRLF, not preferable
       - name: "Ensure LF line ending"
         shell: "cmd"
@@ -31,10 +35,6 @@ jobs:
           git config --local core.autocrlf false
           git config --system core.autocrlf false
           git config --global core.autocrlf false
-
-      # we need branch because it has package scripts
-      - name: "Checkout branch"
-        uses: actions/checkout@v6
 
       - name: "Clone third-party deps (deps/win)"
         uses: actions/checkout@v6
