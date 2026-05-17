@@ -1070,11 +1070,29 @@ void Steam_Overlay::notify_sound_lobby_kicked()
     play_overlay_sound("overlay_lobby_kicked.wav", "overlay_friend_notification.wav", notif_invite_wav);
 }
 
-void Steam_Overlay::notify_sound_lobby_join_response()
+void Steam_Overlay::notify_sound_lobby_join_response(bool accepted)
 {
     if (settings->disable_overlay_friend_notification) return;
 
-    play_overlay_sound("overlay_lobby_join_response.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    // accepted/denied each have their own file; both fall back to the generic response sound
+    if (accepted) {
+        play_overlay_sound("overlay_lobby_join_accepted.wav", "overlay_lobby_join_response.wav", notif_invite_wav);
+    } else {
+        play_overlay_sound("overlay_lobby_join_denied.wav", "overlay_lobby_join_response.wav", notif_invite_wav);
+    }
+}
+
+void Steam_Overlay::notify_sound_achievement_progress()
+{
+    if (settings->disable_overlay_achievement_notification) return;
+
+    // falls back to the achievement-unlock sound if no dedicated progress sound is provided
+    play_overlay_sound("overlay_achievement_progress.wav", "overlay_achievement_notification.wav", nullptr);
+}
+
+void Steam_Overlay::notify_sound_lobby_status()
+{
+    play_overlay_sound("overlay_lobby_status.wav", "overlay_friend_notification.wav", notif_invite_wav);
 }
 
 int find_free_id(std::vector<int> &ids, int base)
@@ -1247,7 +1265,7 @@ void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id
 
     notifications.emplace_back(notif);
     allow_renderer_frame_processing(true);
-    notify_sound_lobby_join_response();
+    notify_sound_lobby_join_response(accepted);
 }
 
 void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name, uint64 source_id)
@@ -5645,7 +5663,7 @@ void Steam_Overlay::AddAchievementNotification(const std::string &ach_name, nloh
             } else if (for_progress && !settings->disable_overlay_achievement_progress) { // progress indication is shown for locked achievements only
                 // post notification if this isn't a progress, or a progress and the user didn't disable these notifications
                 post_achievement_notification(a, for_progress);
-                // don't play sound
+                notify_sound_achievement_progress();
             }
             break;
         }
@@ -5675,12 +5693,16 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
             get_steam_client()->steam_matchmaking->GetLobbyOwner(lobby) == settings->get_local_steam_id();
         if (is_owner) {
             std::string msg = "Lobby created (" + std::to_string(lobby.ConvertToUint64()) + ")";
-            if (!submit_notification(notification_type::lobby_status, msg)) {
+            if (submit_notification(notification_type::lobby_status, msg)) {
+                notify_sound_lobby_status();
+            } else {
                 pending_lobby_notifications.push_back(msg);
             }
         }
     } else if (had_lobby && !i_have_lobby) {
-        if (!submit_notification(notification_type::lobby_status, "Lobby closed")) {
+        if (submit_notification(notification_type::lobby_status, "Lobby closed")) {
+            notify_sound_lobby_status();
+        } else {
             pending_lobby_notifications.push_back("Lobby closed");
         }
         // Clear lobby chat history
@@ -5699,11 +5721,15 @@ void Steam_Overlay::steam_run_callback_update_my_lobby()
         std::string sname = sd.server_name();
         std::string msg = "Game server started";
         if (!sname.empty()) msg += " (" + sname + ")";
-        if (!submit_notification(notification_type::lobby_status, msg)) {
+        if (submit_notification(notification_type::lobby_status, msg)) {
+            notify_sound_lobby_status();
+        } else {
             pending_lobby_notifications.push_back(msg);
         }
     } else if (had_server && !have_server) {
-        if (!submit_notification(notification_type::lobby_status, "Game server stopped")) {
+        if (submit_notification(notification_type::lobby_status, "Game server stopped")) {
+            notify_sound_lobby_status();
+        } else {
             pending_lobby_notifications.push_back("Game server stopped");
         }
     }
@@ -5883,7 +5909,9 @@ void Steam_Overlay::steam_run_callback()
     // Flush any notifications that were queued before the overlay was ready
     if (!pending_lobby_notifications.empty()) {
         for (auto &msg : pending_lobby_notifications) {
-            submit_notification(notification_type::lobby_status, msg);
+            if (submit_notification(notification_type::lobby_status, msg)) {
+                notify_sound_lobby_status();
+            }
         }
         pending_lobby_notifications.clear();
     }

@@ -276,15 +276,19 @@ class Steam_Overlay
     std::atomic<int64_t> bridge_last_heartbeat_ms{0}; // steady_clock ms, 0 = never connected
 
     std::map<std::string, std::vector<char>> wav_files{
-        { "overlay_achievement_notification.wav", {} }, // achievement unlocked
-        { "overlay_friend_notification.wav",      {} }, // generic friend/lobby fallback
-        { "overlay_invite_notification.wav",      {} }, // game invite from friend
+        { "overlay_achievement_notification.wav",  {} }, // achievement unlocked
+        { "overlay_achievement_progress.wav",      {} }, // achievement progress (not yet unlocked)
+        { "overlay_friend_notification.wav",       {} }, // generic friend/lobby fallback
+        { "overlay_invite_notification.wav",       {} }, // game invite from friend
         { "overlay_chat_notification.wav",         {} }, // chat message
         { "overlay_auto_accept_notification.wav",  {} }, // auto-accepted invite
         { "overlay_lobby_join_request.wav",        {} }, // someone requests to join your lobby
-        { "overlay_lobby_join_response.wav",       {} }, // your join request was accepted/denied
+        { "overlay_lobby_join_response.wav",       {} }, // generic fallback for accepted/denied
+        { "overlay_lobby_join_accepted.wav",       {} }, // your lobby join request was accepted
+        { "overlay_lobby_join_denied.wav",         {} }, // your lobby join request was denied
         { "overlay_lobby_kicked.wav",              {} }, // you were kicked from a lobby
         { "overlay_friend_lobby.wav",              {} }, // a friend entered a lobby
+        { "overlay_lobby_status.wav",              {} }, // lobby/server status change (created, closed, etc.)
     };
 
     Steam_Overlay(Steam_Overlay const&) = delete;
@@ -308,7 +312,9 @@ class Steam_Overlay
     void notify_sound_lobby_join();
     void notify_sound_friend_lobby();
     void notify_sound_lobby_kicked();
-    void notify_sound_lobby_join_response();
+    void notify_sound_lobby_join_response(bool accepted);
+    void notify_sound_achievement_progress();
+    void notify_sound_lobby_status();
 
     // Right click on friend
     void build_friend_context_menu(Friend const& frd, friend_window_state &state);
