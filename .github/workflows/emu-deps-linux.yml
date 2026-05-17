@@ -34,14 +34,23 @@ jobs:
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
 
       # we need branch because it has build scripts
-      - name: "Checkout with submodules"
+      - name: "Checkout branch"
         if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
-        shell: "bash"
-        working-directory: "${{ github.workspace }}"
-        run: |
-          git clone https://github.com/${{ github.repository }}.git .
-          git checkout ${{ github.sha }}
-          git submodule update --init --recursive
+        uses: actions/checkout@v6
+
+      - name: "Clone third-party deps (common/linux)"
+        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/common/linux"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/linux"
+
+      - name: "Clone third-party deps (deps/common)"
+        if: steps.emu-deps-cache-step.outputs.cache-hit != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/deps/common"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/common"
 
       # fix folder permissions! not sure why this fails
       # nested subdirs "build/linux/release" cause permission problems
