@@ -1278,6 +1278,9 @@ static void render_notifications(effect_runtime *runtime)
             switch (n.type) {
             case GSE_NOTIF_INVITE:
             case GSE_NOTIF_LOBBY_JOIN_REQ:
+            case GSE_NOTIF_LOBBY_JOIN_RESP:  // dismiss button
+            case GSE_NOTIF_LOBBY_KICKED:    // dismiss button
+            case GSE_NOTIF_FRIEND_LOBBY:    // "Request to Join" + "Close"
                 notif_h += btn_h;
                 break;
             case GSE_NOTIF_MESSAGE:
@@ -1382,9 +1385,12 @@ static void render_notifications(effect_runtime *runtime)
         case GSE_NOTIF_ACHIEVEMENT:
         case GSE_NOTIF_ACHIEVEMENT_PROG:
         case GSE_NOTIF_AUTO_ACCEPT_INVITE:
+            flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            break;
         case GSE_NOTIF_LOBBY_JOIN_RESP:
         case GSE_NOTIF_LOBBY_KICKED:
-            flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+            // dismissable via button — keep NoBringToFrontOnFocus but allow input
+            flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
         case GSE_NOTIF_MESSAGE:
             // Interactive if there's a source friend (Open Chat button), otherwise passive
@@ -1479,6 +1485,13 @@ static void render_notifications(effect_runtime *runtime)
                     if (s_bridge.ExpireNotification)
                         s_bridge.ExpireNotification(n.id);
                 }
+                ImGui::SameLine();
+                if (ImGui::Button(translationRefuse[s_current_language])) {
+                    if (s_bridge.FriendAction && n.source_friend_id)
+                        s_bridge.FriendAction(n.source_friend_id, 6); // GSE_FRIEND_ACTION_REFUSE_INVITE
+                    if (s_bridge.ExpireNotification)
+                        s_bridge.ExpireNotification(n.id);
+                }
                 break;
             case GSE_NOTIF_LOBBY_JOIN_REQ:
                 render_notif_friend_header(n.source_friend_id);
@@ -1496,10 +1509,18 @@ static void render_notifications(effect_runtime *runtime)
             case GSE_NOTIF_LOBBY_JOIN_RESP:
                 render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
+                if (ImGui::Button(translationClose[s_current_language])) {
+                    if (s_bridge.ExpireNotification)
+                        s_bridge.ExpireNotification(n.id);
+                }
                 break;
             case GSE_NOTIF_LOBBY_KICKED:
                 render_notif_friend_header(n.source_friend_id);
                 ImGui::TextWrapped("%s", n.message);
+                if (ImGui::Button(translationClose[s_current_language])) {
+                    if (s_bridge.ExpireNotification)
+                        s_bridge.ExpireNotification(n.id);
+                }
                 break;
             case GSE_NOTIF_FRIEND_LOBBY:
                 render_notif_friend_header(n.source_friend_id);
@@ -1507,6 +1528,11 @@ static void render_notifications(effect_runtime *runtime)
                 if (ImGui::Button("Request to Join")) {
                     if (s_bridge.RequestJoinFriendLobby)
                         s_bridge.RequestJoinFriendLobby(n.id);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(translationClose[s_current_language])) {
+                    if (s_bridge.ExpireNotification)
+                        s_bridge.ExpireNotification(n.id);
                 }
                 break;
             case GSE_NOTIF_AUTO_ACCEPT_INVITE:

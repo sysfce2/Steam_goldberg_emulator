@@ -296,6 +296,7 @@ class Steam_Overlay
     void notify_sound_user_invite(friend_window_state& friend_state);
     void notify_sound_user_achievement();
     void notify_sound_auto_accept_friend_invite();
+    void notify_sound_lobby_join();
 
     // Right click on friend
     void build_friend_context_menu(Friend const& frd, friend_window_state &state);

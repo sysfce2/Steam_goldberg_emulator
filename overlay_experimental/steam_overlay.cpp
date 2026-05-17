@@ -1031,6 +1031,20 @@ void Steam_Overlay::notify_sound_auto_accept_friend_invite()
 #endif
 }
 
+void Steam_Overlay::notify_sound_lobby_join()
+{
+    if (settings->disable_overlay_friend_notification) return;
+
+#ifdef __WINDOWS__
+    auto wav_data = wav_files.find("overlay_friend_notification.wav");
+    if (wav_files.end() != wav_data && wav_data->second.size()) {
+        PlaySoundA((LPCSTR)&wav_data->second[0], NULL, SND_ASYNC | SND_MEMORY);
+    } else {
+        PlaySoundA((LPCSTR)notif_invite_wav, NULL, SND_ASYNC | SND_MEMORY);
+    }
+#endif
+}
+
 int find_free_id(std::vector<int> &ids, int base)
 {
     std::sort(ids.begin(), ids.end());
@@ -1177,6 +1191,7 @@ void Steam_Overlay::poll_lobby_join_requests()
         notifications.emplace_back(notif);
         allow_renderer_frame_processing(true);
         obscure_game_input(true);
+        notify_sound_lobby_join();
     }
 }
 
@@ -1536,7 +1551,7 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_progress);
     
     case notification_type::auto_accept_invite:
-        return Notification::default_show_time;
+        return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
     
     case notification_type::lobby_join_request:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
@@ -1548,7 +1563,7 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
 
     case notification_type::lobby_status:
-        return Notification::default_show_time;
+        return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
     }
 
     PRINT_DEBUG("ERROR unhandled type %i", (int)type);
@@ -1644,7 +1659,7 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
-        noti_height = friend_header_height + ljrr_msg_height + global_style.WindowPadding.y;
+        noti_height = friend_header_height + ljrr_msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
     }
     break;
     case notification_type::lobby_kicked: {
@@ -1655,7 +1670,7 @@ void Steam_Overlay::set_next_notification_pos(std::pair<float, float> scrn_size,
             false,
             noti_width - padding_all_sides - global_style.ItemSpacing.x
         ).y;
-        noti_height = friend_header_height + lk_msg_height + global_style.WindowPadding.y;
+        noti_height = friend_header_height + lk_msg_height + settings->overlay_appearance.font_size + global_style.WindowPadding.y;
     }
     break;
     default: PRINT_DEBUG("ERROR: unhandled notification type %i", (int)noti.type); break;
@@ -1931,11 +1946,11 @@ void Steam_Overlay::build_notifications(float width, float height)
             break;
 
             case notification_type::lobby_join_request_response:
-                extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+                extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
 
             case notification_type::lobby_kicked:
-                extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+                extra_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
             break;
 
             case notification_type::friend_lobby_available:
@@ -2000,12 +2015,20 @@ void Steam_Overlay::build_notifications(float width, float height)
                 case notification_type::invite: {
                     render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
-                    if (ImGui::Button(translationJoin[current_language])) {
-                        it->frd->second.window_state |= window_state_join;
-                        friend_actions_temp.push(it->frd->first);
-                        // when we click "accept game invite" from someone else, we want to remove this notification immediately since it's no longer relevant
-                        // this assignment will make the notification elapsed time insanely large
-                        it->start_time = {};
+                    if (it->frd) {
+                        if (ImGui::Button(translationJoin[current_language])) {
+                            it->frd->second.window_state |= window_state_join;
+                            friend_actions_temp.push(it->frd->first);
+                            // when we click "accept game invite" from someone else, we want to remove this notification immediately since it's no longer relevant
+                            // this assignment will make the notification elapsed time insanely large
+                            it->start_time = {};
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button(translationRefuse[current_language])) {
+                            it->frd->second.window_state &= ~(window_state_lobby_invite | window_state_rich_invite);
+                            it->frd->second.chat_history.append("[INVITE REFUSED] You declined the invite\n");
+                            it->start_time = {};
+                        }
                     }
                 }
                 break;
@@ -2048,11 +2071,17 @@ void Steam_Overlay::build_notifications(float width, float height)
                 case notification_type::lobby_join_request_response:
                     render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
+                    if (ImGui::Button(translationClose[current_language])) {
+                        it->start_time = {};
+                    }
                 break;
 
                 case notification_type::lobby_kicked:
                     render_notif_friend_header(it->source_friend_id);
                     ImGui::TextWrapped("%s", it->message.c_str());
+                    if (ImGui::Button(translationClose[current_language])) {
+                        it->start_time = {};
+                    }
                 break;
 
                 case notification_type::friend_lobby_available: {
@@ -2062,6 +2091,10 @@ void Steam_Overlay::build_notifications(float width, float height)
                         Steam_Matchmaking *mm = get_steam_client()->steam_matchmaking;
                         PRINT_DEBUG("user requesting join to lobby %" PRIu64 " (friend %" PRIu64 ")", it->join_request_lobby_id, it->source_friend_id);
                         mm->JoinLobby(CSteamID((uint64)it->join_request_lobby_id));
+                        it->start_time = {};
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(translationClose[current_language])) {
                         it->start_time = {};
                     }
                 }
@@ -5475,6 +5508,16 @@ void Steam_Overlay::FriendDisconnect(Friend _friend)
     auto it = friends.find(_friend);
     if (it != friends.end())
         friends.erase(it);
+
+    // Clean up pending lobby join request tracking for the disconnecting peer
+    uint64 disc_id = _friend.id();
+    for (auto jit = notified_lobby_join_requests.begin(); jit != notified_lobby_join_requests.end(); ) {
+        if (jit->second == disc_id)
+            jit = notified_lobby_join_requests.erase(jit);
+        else
+            ++jit;
+    }
+    notified_friend_lobbies.erase(disc_id);
 }
 
 void Steam_Overlay::FriendUpdate(Friend _friend)
@@ -5528,6 +5571,7 @@ void Steam_Overlay::FriendUpdate(Friend _friend)
                 notifications.emplace_back(notif);
                 allow_renderer_frame_processing(true);
                 obscure_game_input(true);
+                notify_sound_lobby_join();
                 PRINT_DEBUG("friend %" PRIu64 " lobby notification for lobby %" PRIu64 "", friend_id, friend_lobby);
             }
         }
@@ -6607,6 +6651,8 @@ void Steam_Overlay::Bridge_FriendAction(uint64_t steam_id, int action)
                     state.window_state |= window_state_join;
                     has_friend_action.push(frd);
                 }
+                break;
+            case 3: // copy ID — client-side only (addon handles clipboard), no backend action needed
                 break;
             case 4: // chat
                 state.window_state |= window_state_show;
