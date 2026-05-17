@@ -11,6 +11,42 @@ on:
         description: 'Commit SHA to build (empty = latest on branch)'
         type: string
         default: ''
+      rebuild_ssq:
+        description: 'Force rebuild ssq (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_zlib:
+        description: 'Force rebuild zlib (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_mbedtls:
+        description: 'Force rebuild mbedtls (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_curl:
+        description: 'Force rebuild curl (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_protobuf:
+        description: 'Force rebuild protobuf (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_ingame_overlay:
+        description: 'Force rebuild ingame_overlay (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_opus:
+        description: 'Force rebuild opus (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_portaudio:
+        description: 'Force rebuild portaudio (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_sdl:
+        description: 'Force rebuild sdl (ignore cache)'
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       branch:

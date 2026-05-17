@@ -14,6 +14,42 @@ on:
         description: 'Commit SHA to build (leave empty for latest on branch)'
         type: string
         default: ''
+      rebuild_ssq:
+        description: 'Force rebuild ssq (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_zlib:
+        description: 'Force rebuild zlib (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_mbedtls:
+        description: 'Force rebuild mbedtls (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_curl:
+        description: 'Force rebuild curl (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_protobuf:
+        description: 'Force rebuild protobuf (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_ingame_overlay:
+        description: 'Force rebuild ingame_overlay (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_opus:
+        description: 'Force rebuild opus (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_portaudio:
+        description: 'Force rebuild portaudio (ignore cache)'
+        type: boolean
+        default: false
+      rebuild_sdl:
+        description: 'Force rebuild sdl (ignore cache)'
+        type: boolean
+        default: false
 
 permissions:
   contents: "write"
@@ -29,6 +65,15 @@ jobs:
     with:
       branch: ${{ inputs.branch || 'dev' }}
       commit: ${{ inputs.commit || '' }}
+      rebuild_ssq: ${{ inputs.rebuild_ssq || false }}
+      rebuild_zlib: ${{ inputs.rebuild_zlib || false }}
+      rebuild_mbedtls: ${{ inputs.rebuild_mbedtls || false }}
+      rebuild_curl: ${{ inputs.rebuild_curl || false }}
+      rebuild_protobuf: ${{ inputs.rebuild_protobuf || false }}
+      rebuild_ingame_overlay: ${{ inputs.rebuild_ingame_overlay || false }}
+      rebuild_opus: ${{ inputs.rebuild_opus || false }}
+      rebuild_portaudio: ${{ inputs.rebuild_portaudio || false }}
+      rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
   emu-win-prep:
     needs: ["emu-win-all"]
@@ -124,6 +169,15 @@ jobs:
     with:
       branch: ${{ inputs.branch || 'dev' }}
       commit: ${{ inputs.commit || '' }}
+      rebuild_ssq: ${{ inputs.rebuild_ssq || false }}
+      rebuild_zlib: ${{ inputs.rebuild_zlib || false }}
+      rebuild_mbedtls: ${{ inputs.rebuild_mbedtls || false }}
+      rebuild_curl: ${{ inputs.rebuild_curl || false }}
+      rebuild_protobuf: ${{ inputs.rebuild_protobuf || false }}
+      rebuild_ingame_overlay: ${{ inputs.rebuild_ingame_overlay || false }}
+      rebuild_opus: ${{ inputs.rebuild_opus || false }}
+      rebuild_portaudio: ${{ inputs.rebuild_portaudio || false }}
+      rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
   emu-linux-prep:
     needs: ["emu-linux-all"]
