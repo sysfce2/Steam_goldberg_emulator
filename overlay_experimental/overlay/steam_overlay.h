@@ -276,8 +276,15 @@ class Steam_Overlay
     std::atomic<int64_t> bridge_last_heartbeat_ms{0}; // steady_clock ms, 0 = never connected
 
     std::map<std::string, std::vector<char>> wav_files{
-        { "overlay_achievement_notification.wav", std::vector<char>{} },
-        { "overlay_friend_notification.wav", std::vector<char>{} },
+        { "overlay_achievement_notification.wav", {} }, // achievement unlocked
+        { "overlay_friend_notification.wav",      {} }, // generic friend/lobby fallback
+        { "overlay_invite_notification.wav",      {} }, // game invite from friend
+        { "overlay_chat_notification.wav",         {} }, // chat message
+        { "overlay_auto_accept_notification.wav",  {} }, // auto-accepted invite
+        { "overlay_lobby_join_request.wav",        {} }, // someone requests to join your lobby
+        { "overlay_lobby_join_response.wav",       {} }, // your join request was accepted/denied
+        { "overlay_lobby_kicked.wav",              {} }, // you were kicked from a lobby
+        { "overlay_friend_lobby.wav",              {} }, // a friend entered a lobby
     };
 
     Steam_Overlay(Steam_Overlay const&) = delete;
@@ -293,10 +300,15 @@ class Steam_Overlay
         Overlay_Achievement *ach = nullptr
     );
 
+    void play_overlay_sound(const char* specific_key, const char* fallback_key = nullptr, const unsigned char* baked_fallback = nullptr);
     void notify_sound_user_invite(friend_window_state& friend_state);
+    void notify_sound_chat_message(friend_window_state& friend_state);
     void notify_sound_user_achievement();
     void notify_sound_auto_accept_friend_invite();
     void notify_sound_lobby_join();
+    void notify_sound_friend_lobby();
+    void notify_sound_lobby_kicked();
+    void notify_sound_lobby_join_response();
 
     // Right click on friend
     void build_friend_context_menu(Friend const& frd, friend_window_state &state);

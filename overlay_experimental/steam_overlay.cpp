@@ -990,20 +990,50 @@ void Steam_Overlay::obscure_game_input(bool state) {
     }
 }
 
+// Play a notification sound using a priority chain:
+//   1. specific per-type file  (e.g. "overlay_invite_notification.wav")
+//   2. generic friend fallback (e.g. "overlay_friend_notification.wav")
+//   3. baked-in compiled bytes (notif_invite_wav from notification.h)
+// Drop the desired WAV files into the game's or global "sounds/" folder to override.
+void Steam_Overlay::play_overlay_sound(const char* specific_key, const char* fallback_key, const unsigned char* baked_fallback)
+{
+#ifdef __WINDOWS__
+    if (specific_key) {
+        auto it = wav_files.find(specific_key);
+        if (it != wav_files.end() && !it->second.empty()) {
+            PlaySoundA((LPCSTR)it->second.data(), nullptr, SND_ASYNC | SND_MEMORY);
+            return;
+        }
+    }
+    if (fallback_key) {
+        auto it = wav_files.find(fallback_key);
+        if (it != wav_files.end() && !it->second.empty()) {
+            PlaySoundA((LPCSTR)it->second.data(), nullptr, SND_ASYNC | SND_MEMORY);
+            return;
+        }
+    }
+    if (baked_fallback) {
+        PlaySoundA((LPCSTR)baked_fallback, nullptr, SND_ASYNC | SND_MEMORY);
+    }
+#endif
+}
+
 void Steam_Overlay::notify_sound_user_invite(friend_window_state& friend_state)
 {
     if (settings->disable_overlay_friend_notification) return;
 
     if (!(friend_state.window_state & window_state_show)) {
         friend_state.window_state |= window_state_need_attention;
-#ifdef __WINDOWS__
-        auto wav_data = wav_files.find("overlay_friend_notification.wav");
-        if (wav_files.end() != wav_data && wav_data->second.size()) {
-            PlaySoundA((LPCSTR)&wav_data->second[0], NULL, SND_ASYNC | SND_MEMORY);
-        } else {
-            PlaySoundA((LPCSTR)notif_invite_wav, NULL, SND_ASYNC | SND_MEMORY);
-        }
-#endif
+        play_overlay_sound("overlay_invite_notification.wav", "overlay_friend_notification.wav", notif_invite_wav);
+    }
+}
+
+void Steam_Overlay::notify_sound_chat_message(friend_window_state& friend_state)
+{
+    if (settings->disable_overlay_friend_notification) return;
+
+    if (!(friend_state.window_state & window_state_show)) {
+        play_overlay_sound("overlay_chat_notification.wav", "overlay_friend_notification.wav", notif_invite_wav);
     }
 }
 
@@ -1011,38 +1041,40 @@ void Steam_Overlay::notify_sound_user_achievement()
 {
     if (settings->disable_overlay_achievement_notification) return;
 
-#ifdef __WINDOWS__
-    auto wav_data = wav_files.find("overlay_achievement_notification.wav");
-    if (wav_files.end() != wav_data && wav_data->second.size()) {
-        PlaySoundA((LPCSTR)&wav_data->second[0], NULL, SND_ASYNC | SND_MEMORY);
-    }
-#endif
+    play_overlay_sound("overlay_achievement_notification.wav", nullptr, nullptr);
 }
 
 void Steam_Overlay::notify_sound_auto_accept_friend_invite()
 {
-#ifdef __WINDOWS__
-    auto wav_data = wav_files.find("overlay_friend_notification.wav");
-    if (wav_files.end() != wav_data && wav_data->second.size()) {
-        PlaySoundA((LPCSTR)&wav_data->second[0], NULL, SND_ASYNC | SND_MEMORY);
-    } else {
-        PlaySoundA((LPCSTR)notif_invite_wav, NULL, SND_ASYNC | SND_MEMORY);
-    }
-#endif
+    play_overlay_sound("overlay_auto_accept_notification.wav", "overlay_friend_notification.wav", notif_invite_wav);
 }
 
 void Steam_Overlay::notify_sound_lobby_join()
 {
     if (settings->disable_overlay_friend_notification) return;
 
-#ifdef __WINDOWS__
-    auto wav_data = wav_files.find("overlay_friend_notification.wav");
-    if (wav_files.end() != wav_data && wav_data->second.size()) {
-        PlaySoundA((LPCSTR)&wav_data->second[0], NULL, SND_ASYNC | SND_MEMORY);
-    } else {
-        PlaySoundA((LPCSTR)notif_invite_wav, NULL, SND_ASYNC | SND_MEMORY);
-    }
-#endif
+    play_overlay_sound("overlay_lobby_join_request.wav", "overlay_friend_notification.wav", notif_invite_wav);
+}
+
+void Steam_Overlay::notify_sound_friend_lobby()
+{
+    if (settings->disable_overlay_friend_notification) return;
+
+    play_overlay_sound("overlay_friend_lobby.wav", "overlay_friend_notification.wav", notif_invite_wav);
+}
+
+void Steam_Overlay::notify_sound_lobby_kicked()
+{
+    if (settings->disable_overlay_friend_notification) return;
+
+    play_overlay_sound("overlay_lobby_kicked.wav", "overlay_friend_notification.wav", notif_invite_wav);
+}
+
+void Steam_Overlay::notify_sound_lobby_join_response()
+{
+    if (settings->disable_overlay_friend_notification) return;
+
+    play_overlay_sound("overlay_lobby_join_response.wav", "overlay_friend_notification.wav", notif_invite_wav);
 }
 
 int find_free_id(std::vector<int> &ids, int base)
@@ -1215,6 +1247,7 @@ void Steam_Overlay::add_lobby_join_request_response_notification(uint64 lobby_id
 
     notifications.emplace_back(notif);
     allow_renderer_frame_processing(true);
+    notify_sound_lobby_join_response();
 }
 
 void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name, uint64 source_id)
@@ -1237,6 +1270,7 @@ void Steam_Overlay::add_lobby_kicked_notification(uint64 lobby_id, const std::st
 
     notifications.emplace_back(notif);
     allow_renderer_frame_processing(true);
+    notify_sound_lobby_kicked();
 }
 
 void Steam_Overlay::show_test_achievement()
@@ -5571,7 +5605,7 @@ void Steam_Overlay::FriendUpdate(Friend _friend)
                 notifications.emplace_back(notif);
                 allow_renderer_frame_processing(true);
                 obscure_game_input(true);
-                notify_sound_lobby_join();
+                notify_sound_friend_lobby();
                 PRINT_DEBUG("friend %" PRIu64 " lobby notification for lobby %" PRIu64 "", friend_id, friend_lobby);
             }
         }
@@ -5939,7 +5973,7 @@ void Steam_Overlay::networking_msg_received(Common_Message *msg)
             }
 
             add_chat_message_notification(friend_info->first.name() + ": " + steam_message.message(), &(*friend_info));
-            notify_sound_user_invite(friend_info->second);
+            notify_sound_chat_message(friend_info->second);
         }
     }
 }
