@@ -96,6 +96,7 @@ on:
 
 permissions:
   contents: "write"
+  actions: "write"
 
 env:
   PREMAKE_ACTION: "vs2026"
