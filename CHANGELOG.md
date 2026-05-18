@@ -1,59 +1,570 @@
+## 2026/05/17
 
+* **[alex47exe]** overlay: per-notification-type configurable WAV sound files in `steam_settings/sounds/`; full load-time fallback chain (`<type>.wav` → `notification.wav` → silence); example WAV files and `sounds/README.md` included
+* **[alex47exe]** overlay: fixed 9 notification UX issues — non-intrusive when overlay open, no input stealing, interactive buttons still clickable, reduced flickering on friend status updates
+* **[alex47exe]** CI: branch/commit selection inputs threaded through all build, deps, and release workflows
+* **[alex47exe]** CI: 9 per-dep caches (`ssq`, `zlib`, `mbedtls`, `curl`, `protobuf`, `ingame_overlay`, `opus`, `portaudio`, `sdl`); per-dep force-rebuild boolean inputs
+* **[alex47exe]** CI: cascade rebuild conditions — `zlib`/`mbedtls` changes trigger `curl` rebuild; `zlib` changes trigger `protobuf` rebuild
+* **[alex47exe]** CI: fixed bash operator-precedence bug in `needs-build` check that silently prevented cache-miss builds
+* **[alex47exe]** CI: Windows and Linux release builds run in parallel
+* **[alex47exe]** build: split portaudio/SDL cmake flags by OS in deps build
 
-## 2024/7/29
+---
 
+## 2026/05/16
 
-* **[alex47exe]** major overhaul of **generate_emu_config** - custom configs, proper ini parsing, better logging and error handling, helper tools:
+* **[NicknineTheEagle]** fixes for old interfaces
+* **[onthebed]** fix gamepad: stop polling HID devices every callback, reducing CPU usage
+* **[Detanup01]** update build toolchain to Visual Studio 2026
+* **[Detanup01]** fix appid detection
+
+---
+
+## 2026/04/25
+
+* **[NicknineTheEagle]** update old interface function signatures
+* **[NicknineTheEagle]** `SteamGameServer_Init` old-version support + callback fix
+* **[NicknineTheEagle]** fixes for Source query handler (store version name, protocol version, merge mod/game dir fields)
+* **[universal963]** fail correctly if `SteamAPI_ManualDispatch_FreeLastCallback()` is not called before `SteamAPI_ManualDispatch_GetNextCallback()`
+* **[NicknineTheEagle]** update pipe-index handling + fix interface generator for newer DLLs; bind flags on pipes
+* **[Rustbeard86]** fix `SteamNetworkingSockets` lane propagation and `SendMessages` path for Enshrouded P2P
+
+---
+
+## 2026/04/17
+
+* **[alex47exe]** overlay: live brightness/contrast/gamma adjustment sliders in the native overlay; dedicated sliders in the ReShade addon panel
+* **[alex47exe]** overlay: debounced slider updates to avoid per-frame texture cache flush; native texture cache invalidation on adjustment change
+* **[alex47exe]** overlay: FP16 HDR texture uploads with complete inline colour wrapping; colour transforms apply to images only (not UI/text)
+* **[alex47exe]** overlay: R10G10B10A2 PQ vs SDR detection fix; linear HDR tone-mapping path for SDR displays
+
+---
+
+## 2026/04/15
+
+* **[alex47exe]** overlay: full HDR/SDR color-space detection for native and ReShade addon — FP16, R10G10B10A2 PQ, SDR linear, and sRGB swap chains; sRGB image gamma correction
+* **[alex47exe]** overlay: renderer/display info row added to the info panel with rich format strings and per-display HDR details
+* **[alex47exe]** ReShade addon: D3D9 alt-tab crash fixed; coldloader bridge discovery added
+* **[alex47exe]** build: premake5 workspace renamed from `gbe` to `gse`; all `.sln`/`.slnx` references updated
+* **[alex47exe]** build: fixed zlib lib name for v1.3.2 (`zlibstatic` → `zs`); disabled `CURL_CA_FALLBACK` (only compatible with OpenSSL); fixed portaudio platform-suffixed lib names (`portaudio_static_x86`/`_x64`)
+* **[alex47exe]** build: updated all third-party deps to latest (libssq MSVC build fix; ingame_overlay OpenGL-hook hang fix); updated abseil library list for abseil `20250512.1`
+
+---
+
+## 2026/04/14
+
+* **[alex47exe]** overlay: optional notification disabling when ReShade or Special K is detected (configurable per-tool)
+* **[alex47exe]** overlay: expanded proxy DLL scan list from 13 to 30 entries; ASI Loader detection added
+
+---
+
+## 2026/04/13
+
+* **[alex47exe]** overlay: comprehensive third-party tool/overlay detection — Special K, ReShade, RTSS, OBS, and more; categorised by type
+* **[alex47exe]** overlay: per-process renderer detection appended to process tree dump; process tree dump with command-line capture (Windows + Linux)
+* **[alex47exe]** overlay: renderer proxy DLL detection with full paths; Vulkan layer enumeration included
+* **[alex47exe]** emu: auto-inject Special K via SKIF on game launch (opt-in); `specialk_service_duration` config for games with launchers; skip SKIF service start if already running
+* **[alex47exe]** emu: graceful unknown interface handling when Special K or other injectors are active; `exit_on_unknown_interface` config option
+* **[alex47exe]** emu: enriched missing-interface diagnostic reports; sanitized user profile path in `EMU_MISSING_INTERFACE.txt`
+* **[alex47exe]** overlay: fully rewritten FPS/frametime stats tracking — proper ring-buffer and accurate 1%/0.1% lows; display updates every 500 ms; granular stats settings window (graphs, percentiles, timeframe)
+* **[alex47exe]** overlay: "Lobby created" notification fires only when the local user is the owner; "Has Lobby"/"In Lobby" friend status shown
+
+---
+
+## 2026/04/12
+
+* **[alex47exe]** overlay: lobby chat window added; lobby/server created and destroyed notifications
+* **[alex47exe]** overlay: Leave Lobby button and right-click context menu entry for non-owners; owner sees member management options
+* **[alex47exe]** overlay: "Invite" and "Invite All" restricted to lobby owner; friends directly joinable when they have a lobby, no invite required
+* **[alex47exe]** overlay: skip friend lobby notification if the user is already in that lobby
+* **[alex47exe]** overlay: IP range shown per adapter in Networks panel; adapter names with local IPs in ReShade addon
+* **[alex47exe]** network: multiple IPs tracked per peer; friends shown on all adapters matching their IP; subnet matching byte-order fix
+* **[alex47exe]** overlay: fix lobby/server notifications not displaying when overlay initialises late
+* **[alex47exe]** overlay: fix IP/port resolution for cross-app friends; fix Linux `ifreq` macro clash
+* **[alex47exe]** overlay: disable docking and hide overlay when ReShade menu opens; fix mouse cursor lost when ReShade menu is open
+
+---
+
+## 2026/04/11
+
+* **[alex47exe]** overlay: Networks panel showing all local adapters with connected users grouped by subnet; detected IP for local user and friends; Copy IP button
+* **[alex47exe]** overlay: friends list redesigned to 3-line layout with 32 px avatars in both overlays; notifications include avatar + 3-line friend info (invite, message, join request, kick); notifications auto-sized (min 25% width)
+* **[alex47exe]** overlay: kick/remove lobby member feature with notifications to all members
+* **[alex47exe]** overlay: lobby join request response system with result notifications; `GSE_NotifAppearance` bridge for ReShade config access
+
+---
+
+## 2026/04/10
+
+* **[alex47exe]** overlay: updated for ImGui 1.92 API (`IMGUI_DISABLE_OBSOLETE_FUNCTIONS`); fixed struct layout mismatch crash (imgui.cpp:10583); removed manual font atlas `Build()` call
+* **[alex47exe]** overlay: friends list redesigned with status groups (In Game/Online/Away/Offline) and game names; Friends window restructured with local user header and dynamic buttons
+* **[alex47exe]** overlay: configurable cross-app friend messaging (`crossapp_messaging` option); lobby/invite/join actions blocked for cross-app friends
+* **[alex47exe]** overlay: lobby join request notifications with Accept/Decline buttons; chat redesigned as single tabbed window with 64 px friend header
+* **[alex47exe]** overlay: achievement Groups tab for SteamHunters data; alphabetical and hidden sort toggles; Simulate/Reset buttons; fake progress simulation
+* **[alex47exe]** network: `[DISCONNECT-DIAG]` logging added to all disconnect code paths
+
+---
+
+## 2026/04/09
+
+* **[alex47exe]** overlay: chat refactored as tabbed window with avatars (native); avatar support added to native overlay; Chat button in both native and ReShade addon overlays
+* **[alex47exe]** overlay: lobby status, connect string, and launch command shown in friend detail view; notifications always rendered on top (both overlays)
+* **[alex47exe]** ReShade addon: swap chain and renderer info panel; FriendUpdate proto for real-time friend data sync; translation support; achievement grouping by DLC
+* **[alex47exe]** CI: fixed deps cache not being saved (removed `lookup-only` flag); skip package install in Linux deps workflow on cache hit
+
+---
+
+## 2026/04/08
+
+* **[alex47exe]** ReShade addon overlay: initial implementation with C ABI bridge (`reshade_addon_overlay` build target); block game input while overlay is open; software cursor support
+* **[alex47exe]** overlay: info panel showing monitor gamut, transfer function, colour range, and per-display HDR metadata; emu build commit hash and date displayed
+* **[alex47exe]** overlay bridge: `enable_experimental_bridge` setting; bridge v9 late-init and notification fixes; Linux build guards added
+* **[alex47exe]** CI: use `git clone` + `submodule update` to respect pinned submodule commits; quoted `EMU_BUILD_STRING`/`EMU_BUILD_DATE_STRING` premake defines; `ingame_overlay` pinned to c03a8aa6
+
+---
+
+## 2026/04/07
+
+* **[alex47exe]** overlay: SCE browser organised into tabs per category; AnimatedSticker and StartupMovie item types added; larger cells with uniform size; rich per-type item info displayed
+* **[alex47exe]** overlay: sRGB decode and HDR10/R10G10B10A2 detection fixes; rich renderer display format strings
+
+---
+
+## 2026/04/06
+
+* **[alex47exe]** overlay: SCE bulk asset downloader with per-type progress bars; download-progress window (25% wide) and asset browser window (≥50% wide)
+* **[alex47exe]** overlay: SCE browser — card grid layout matching the SCE website style; lazy thumbnail loading with GPU texture cache; background thumbnail download and full-size preview popup; click-to-preview for all asset types; Prev/Next buttons and A/D keys for background preview navigation
+* **[alex47exe]** overlay: achievement global % cached to `achievements_st.json` with configurable TTL; raw Steam API JSON stored; SteamCardExchange fetch/parse/cache for all 12 item types
+
+---
+
+## 2026/04/05
+
+* **[alex47exe]** overlay: achievement window completely redesigned — tabs, search bar, SteamHunters integration (Groups tab); progress bars on all stat-tracked achievements; total completion progress bar in header; Simulate/Reset debug buttons; in-progress symbol and shadow text on bar
+* **[alex47exe]** overlay: fetch Steam global achievement % from Steam Web API; sort achievements by unlocked (recent first), by global %, hidden last
+* **[alex47exe]** overlay: `disable_overlay_activated_callback` config option added
+
+---
+
+## 2026/03/28
+
+* **[xan105]** add SteamInput controller-type override
+* **[NicknineTheEagle]** SteamGameServer fixes; always trigger logoff on server shutdown; SteamID fix
+* **[otavepto]** basic implementation for some mods functions from SDK 1.64
+* **[otavepto]** allow changing overlay toggle keys via ini config file
+* **[otavepto]** minor changes to build scripts
+* **[NicknineTheEagle]** further work on Game Coordinator
+
+---
+
+## 2026/03/15
+
+* **[NicknineTheEagle]** SteamInventory `items.json` fixes
+* **[Detanup01]** bump to SDK 1.64
+* **[Detanup01]** add check before trying to access `steam_settings` folder
+* **[NicknineTheEagle]** initial work on Game Coordinator
+
+---
+
+## 2026/03/10
+
+* **[NicknineTheEagle]** fire Steam2 deny callback for denied Steam2 auth requests
+* **[NicknineTheEagle]** broadcast to 10 ports for peer discovery
+* **[NicknineTheEagle]** organize old SDK functions
+* **[NicknineTheEagle]** fully implement `Steam_GameServer::BGetUserAchievementStatus()`
+* **[NicknineTheEagle]** implement `ISteamUserItems` and `ISteamGameServerItems`
+* **[NicknineTheEagle]** SteamGameServer improvements; fix callbacks for pre-1.02x SDKs
+* **[PaLaS0]** fix `SetConnectionPollGroup` removing connection from wrong poll group
+* **[NotAndreh]** implementation of `Steam_AppTicket::GetAppOwnershipTicketData()`
+* **[NicknineTheEagle]** various fixes; minimal socket fixes
+* **[Detanup01]** AppTicket improvements
+
+> ⚠️ **Breaking:** new ticket format is now **ON** by default; old ticket format `MIN_SIZE` raised to 24 — older clients cannot connect unless they are using the new ticket format
+
+---
+
+## 2026/02/19
+
+* **[Detanup01]** Lobby-Connect fix & QoL improvements
+* **[universal963]** restore `account_avatar_default`
+* **[Rustbeard86]** add `purchased_keys.txt` support
+* **[otavepto]** handle numeric achievement progress
+
+---
+
+## 2026/02/16
+
+* **[alex47exe]** configs: updated example `configs.ini`
+* **[alex47exe]** build: updated `ingame_overlay` dependency
+
+---
+
+## 2026/01/19
+
+* **[universal963]** update to SDK 1.63
+* **[GogoVang]** update `disable_achievement_progress` example in settings
+* **[otavepto]** revert a breaking regression in P2P networking
+
+---
+
+## 2025/11/27
+
+* **[otavepto]** add undocumented `ISteamClient` v022 and v023
+* **[wunnr]** auto send invites to friends in game
+* **[otavepto]** fix regression in P2P networking caused by a data race condition
+* **[otavepto]** allow changing packet-sharing behavior in old P2P networking via ini config
+* **[Detanup01]** fix `SteamInternal_CreateInterface` throwing
+
+---
+
+## 2025/11/05
+
+* **[otavepto]** fix performance regression caused by voice chat; disable voice chat by default
+* **[wunnr]** add `GseSavePath` environment variable for overriding the emu save path
+
+---
+
+## 2025/10/29
+
+* **[universal963]** add `free_weekend` option for `Steam_Apps`
+* **[otavepto]** new functionality to create cloud-save directories at startup
+* **[otavepto]** invalidate context-init counter after any call to init/shutdown, fixing double-init/double-shutdown bugs
+
+---
+
+## 2025/09/13
+
+* **[otavepto]** rewrite P2P networking code to allow sharing the connection pool between the gameserver and client
+* **[NotAndreh]** fix playtime tick not being consistently called
+* **[universal963]** fix stubs for `FilterText()` and `InitFilterText()`
+
+---
+
+## 2025/09/07
+
+* **[alex47exe]** configs: updated docs to recommend gen_emu_cfg from gse_fork_tools for complete, auto-generated configurations
+
+---
+
+## 2025/08/29
+
+* **[NotAndreh]** persistent playtime — playtime is now saved across sessions
+* **[otavepto]** experimental emulation of old `Steam.dll` library
+* fix `GetWebApiTicket`
+
+---
+
+## 2025/08/15
+
+> ⚠️ **Breaking:** new ticket format is now **ON** by default; old ticket format `MIN_SIZE` raised to 24
+
+* **[otavepto]** support more stub variants
+* **[otavepto]** minor updates to build scripts
+* **[otavepto]** fix old `Steam_Apps::FillProofOfPurchaseKey()`
+* **[otavepto]** cold client loader: auto detect `steam_appid.txt` if AppId is empty
+* **[suprovsky / notgitgit]** fix `SteamUser023` interface issue for `steamclient_experimental`
+* **[NicknineTheEagle]** added legacy interfaces
+* **[NicknineTheEagle]** revert `pid` registry value in the loader
+* **[otavepto]** update steamclient stub return code + enforce `cdecl` calling convention
+* **[otavepto]** inflate size of `gameoverlayrenderer` stub to avoid basic size detection
+* **[otavepto]** add missing `__wrap_xxx` exports for Linux build
+* **[otavepto]** avoid sending chat entry ID = 0 in `GetLobbyChatEntry()`
+* **[otavepto]** fix return code for `CreateInterface()`
+* **[NicknineTheEagle]** auth manager changes
+* **[otavepto]** minor updates to steamclient loader script for Linux
+* **[otavepto]** minor fix for Linux experimental build `.so` loading
+* **[Detanup01]** more fixes on voice chat
+
+> Voice chat is experimental; works mainly on Windows at this time
+
+---
+
+## 2025/07/22
+
+* **[alex47exe]** emu: fix `SteamUser023` interface issue for `steamclient_experimental`
+* **[alex47exe]** build: add exit code to `rebuild_win.bat`
+
+---
+
+## 2025/07/20
+
+* **[GogoVang]** update and rename `stats.EXAMPLE.txt` to `stats.EXAMPLE.json`
+* **[GogoVang]** `migrate_gse`: support for new `stats.json` format
+* **[universal963]** allow returning an empty path in `Steam_Apps::GetAppInstallDir()`
+* **[universal963]** various fixes to `Steam_UGC` functions
+* **[universal963]** fix missing callback and result in `Steam_Networking_Sockets`
+* **[universal963]** implement `Steam_User_Stats::GetUserStat()`
+* **[NicknineTheEagle]** fix old `SteamGameServer` interfaces
+* **[NicknineTheEagle]** added `.gitattributes`
+* **[notgitgit]** add ticket functionality and encrypted savegames
+* **[NicknineTheEagle]** implement `steamclient.dll` C exports
+* **[universal963]** update deps in libs folder
+* **[NicknineTheEagle]** various bug fixes; clamp callback result output instead of failing
+* **[Detanup01]** voice chat implementation; fix `VoiceSystem` initialization; new deps premake file
+* **[Edremon]** fix various building issues
+
+---
+
+## 2025/04/20
+
+* minimum Ubuntu version for builds raised to 22.04
+
+---
+
+## 2025/04/19
+
+* **[alex47exe]** build: fix Linux build
+
+---
+
+## 2025/04/18
+
+> ⚠️ **Breaking:** `stats.txt` is replaced by `stats.json`
+
+* **[Zekiu]** update Polish translation for overlay
+* **[universal963]** fix `GetItemState()`
+* **[universal963]** initial implementation of `GetGlobalStat()`
+* **[ugurkahriman]** updated Turkish translation
+
+---
+
+## 2025/03/27
+
+* **[universal963]** update to SDK 1.62
+
+---
+
+## 2025/03/13
+
+* **[universal963]** patches to `steam_overlay.cpp`
+* **[rcyggdra]** update `steam_overlay_translations.h`
+* **[universal963]** attempt to fix Simplified Chinese character display in overlay
+* **[mlabalabala]** fix missing `break;` statement
+* **[rcyggdra]** add FPS cap option control for overlay
+
+---
+
+## 2025/02/15
+
+* **[alex47exe]** gen_emu_cfg: moved to a dedicated repository (gse_fork_tools)
+
+---
+
+## 2025/02/08
+
+* **[Bleibeidl]** mark optional steps in mods setup as such
+* **[universal963]** update JSON format for `default_items.json`
+* **[Detanup01]** achievement images fallback when the image file is missing
+
+---
+
+## 2025/01/09
+
+* **[universal963]** update Simplified Chinese translation for overlay
+* **[otavepto]** fix detection of broken bind
+* **[otavepto]** attempt to fix some memory leaks
+* **[otavepto]** `loadlib` fix for Linux
+* **[universal963]** implement page logic for all UGC query APIs
+
+> From this release onwards, builds are no longer marked experimental
+
+---
+
+## 2024/12/08
+
+* **[alex47exe]** configs: updated default `configs.overlay.ini` and `mods.EXAMPLE.json`
+* **[alex47exe]** configs: renamed `my_preview_image.jpg` to `preview.jpg`
+
+---
+
+## 2024/12/07 (experimental)
+
+* **[otavepto]** minor updates
+* **[Clone5030]** update `installed_app_ids.EXAMPLE.txt`
+* **[otavepto]** fix for accessing mod details struct + querying tags count
+* **[Edremon]** implement `GetUGCDetails()`
+* **[Edremon]** fix broken emulator when `libsteam_api.so` is symlinked
+* **[Edremon]** fix `total_files_sizes` fallback
+* **[otavepto]** overlay: FPS/frametime/playtime display
+* **[otavepto]** add some old interfaces
+* **[otavepto]** fix gamestats interface; write to JSON instead of CSV
+* **[otavepto]** handle local files via protocol `file:/` in HTTP
+* **[otavepto]** implement some functions
+
+---
+
+## 2024/11/24 (experimental)
+
+* **[otavepto]** support a bind variant from 2014
+* **[Edremon]** fix building on Linux; link Linux experimental build with X11
+* **[Anadius]** access duplicated keys in VDF correctly in `parse_controller_vdf.py`
+* updated overlay and some dependencies
+* added SDK 1.61
+
+---
+
+## 2024/11/11
+
+* **[alex47exe]** gen_emu_cfg: integrated `appid_finder` — fixed VDF duplicate-key parsing, added missing `beautifulsoup4`/`lxml` dependencies
+* **[alex47exe]** gen_emu_cfg: fix duplicate steam interfaces for RUNE ini
+
+---
+
+## 2024/11/09
+
+* **[universal963]** implement `ISteamUGC019`
+* **[otavepto]** implement `ISteamMasterServerUpdater` as a proxy for `ISteamGameServer`
+* updated `ingame_overlay` dependency
+
+---
+
+## 2024/11/05
+
+* **[universal963]** initial implementation of `ISteamFriends001` to `ISteamFriends002`
+* **[otavepto]** support older version of mod details struct; add missing callback/call-result for failure
+* **[otavepto]** trigger callback + call-result for failure in `SendQueryUGCRequest()`
+* **[detiam]** fix credentials in `generate_emu_config`
+
+---
+
+## 2024/10/25
+
+* **[universal963]** initial implementation of `ISteamUser004` to `ISteamUser008`
+* **[Detanup01]** `ISteamUtils001` implementation
+
+---
+
+## 2024/10/21
+
+* **[alex47exe]** gen_emu_cfg: fix `-rel` argument
+
+---
+
+## 2024/10/20
+
+* **[otavepto]** implement `ISteamAppDisableUpdate001`
+* **[universal963]** fix possible memory leaks in `network.cpp`
+
+---
+
+## 2024/10/14
+
+* **[alex47exe]** emu: `is_beta_branch` now correctly parsed from `app::general` instead of `main::general`
+* **[alex47exe]** gen_emu_cfg: fix login (thanks to Sak32009); copy `_DEFAULT` folders on Linux; replace `%outdir%` with `$outdir` in Linux build scripts; update `top_owners_ids.txt`
+* **[alex47exe]** gen_emu_cfg: fix controller config errors for appid 427520 and 1477940
+* **[alex47exe]** gen_emu_cfg: fix steam ID for generated codex ini
+* **[alex47exe]** CI: release workflow improvements
+
+---
+
+## 2024/10/06
+
+* **[universal963]** correct undocumented API in `ISteamNetworkingSockets010` and `ISteamNetworkingSockets011`
+* **[otavepto]** support older bind variants + auto unload on success or timeout
+* add more interfaces to `generate_interfaces`
+
+---
+
+## 2024/09/15
+
+* **[M4RCK5]** lobby connect improvements + MBTL fix
+* **[Detanup01]** update stubdrm
+
+---
+
+## 2024/09/06
+
+* **[otavepto]** implementation for some missing client functions
+* **[otavepto]** dramatically decrease startup locking/halt time when overlay is enabled
+* **[Edremon]** fix building with wine-wrapped MSVC
+* **[Sak32009]** update third-party build/win; fix MSBuild warnings; improve `generate_interfaces.cpp`
+* **[Sak32009]** varied fixes and improvements; fix MSBuild warnings
+* **[universal963]** more accurate API behaviors fix
+* **[Sak32009]** compile `stb_image_resize2` as a static library
+* **[Detanup01]** update CI runner versions
+
+---
+
+## 2024/08/20
+
+* **[otavepto]** add some missing implementations
+* **[otavepto]** implement `Steam_User_Stats::GetAchievementIcon()`
+* **[otavepto]** update `migrate_gse` to write branch info in the correct file
+* **[otavepto]** fixes for `Steam_Http` class
+* **[Sak32009]** update third-party and libs deps; improve `package_win_release.bat` and `build_win_premake.bat`; add `generate_credits.bat`
+* **[otavepto]** allow saving stats from `ISteamGameStats` to CSV files
+
+---
+
+## 2024/08/17
+
+* **[otavepto]** random fixes/changes; fixes for some crashes + behavior enhancements
+* **[otavepto]** allow disabling the internal achievement-progress reporting for stats tied to achievements
+* **[DogancanYr]** README update
+
+---
+
+## 2024/08/03
+
+* **[alex47exe]** gse_acw_helper: switched archive format to `.zip`
+* **[alex47exe]** gse_debug_switch: added missing `steam_api64`/`steamclient64` entries
+* **[alex47exe]** CI: fix compatibility with upstream fork, re-enabling auto-merge
+
+---
+
+## 2024/07/29
+
+* **[alex47exe]** major overhaul of `generate_emu_config` - custom configs, proper ini parsing, better logging and error handling, helper tools:
 
     * add `-def1` ... `-def5` arguments, which can be used to generate your preferred custom config  
         if no `-def` argument is provided, `-def1` will be used by default, to automatically copy from the following folders: 
-        * `.\_DEFAULT\0` ............... essential emu files, like latest GSE dlls (*steam_api.dll* and *steam_api64.dll*)
+        * `.\_DEFAULT\0` ............... essential emu files, like latest GSE dlls (`steam_api.dll` and `steam_api64.dll`)
         * `.\_DEFAULT\1` ............... other GSE files and folders, including default ini files
         * `.\_DEFAULT\<appid>` ... other GSE files and folders, but only for the current `<appid>`, if the folder exists 
-    * (Windows only) add some useful helper tools, written in *AutoIt3*:
+    * (Windows only) add some useful helper tools, written in `AutoIt3`:
     
-        * **gse_acw_helper.exe** - add the required achievements schema db files for *Achievement Watcher*, if  .\steam_misc\extra_acw\extra_acw.zip file exists (if generated by `generate_emu_config.exe -acw <appid>`)
-        * **gse_debug_switch.exe** - automatically switch between release and debug versions of the emulator, if *steam_api.7z* / *steam_api64.7z* file exists (or *steamclient.7z* / *steamclient64.7z*, if you use the steamclient version)
+        * `gse_acw_helper.exe` - add the required achievements schema db files for `Achievement Watcher`, if  .\steam_misc\extra_acw\extra_acw.zip file exists (if generated by `generate_emu_config.exe -acw <appid>`)
+        * `gse_debug_switch.exe` - automatically switch between release and debug versions of the emulator, if `steam_api.7z` / `steam_api64.7z` file exists (or `steamclient.7z` / `steamclient64.7z`, if you use the steamclient version)
           paths to release and debug files inside 7z, can be customized in .\steam_misc\tools\au3\scripts\gse_debug_switch.ini
-        * **gse_generate_interfaces.exe** - simple x64-x86 launcher for *generate_interfaces.exe*
-          it also writes all found steam interfaces to CODEX *steam_emu.ini* (if generated by `generate_emu_config -cdx <appid>`)  
+        * `gse_generate_interfaces.exe` - simple x64-x86 launcher for `generate_interfaces.exe`
+          it also writes all found steam interfaces to CODEX `steam_emu.ini` (if generated by `generate_emu_config -cdx <appid>`)  
           make sure to name your original dll to one of these formats, so it can automatically find its interfaces:
           * `valve_api.dll / valve_api64.dll`
           * `steam_api.dll.bak / steam_api64.dll.bak` or `steam_api.dll.org / steam_api64.dll.org`
           * `steam_api.bak / steam_api64.bak` or `steam_api.org / steam_api64.org`
           * `steam_api_orig.dll / steam_api64_orig.dll` or `steam_api_legit.dll / steam_api64_legit.dll`
-        * **gse_lobby_connect.exe** - simple x64-x86 launcher for *lobby_connect.exe*
+        * `gse_lobby_connect.exe` - simple x64-x86 launcher for `lobby_connect.exe`
     * new folder structure, compatible with current and future helper tools --- default arguments are `-acw -cdx -clr <appid>`  
       NEVER delete `.\steam_misc\app_backup`, `.\steam_misc\app_info`, `.\steam_misc\tools` and `.\steam_settings` folders  
       MIGHT need `.\steam_misc\extra_acw` and `.\steam_misc\extra_cdx` for compatibility with Achievement Watcher and CODEX 
     * add `-scx` argument to automatically download images / videos for trading cards, backgrounds, badges, emoticons and other tradable items 
-        unfortunately I couldn't find any direct steam api method to download the files, so I had to write a rudimentary web scrapper to extract the download links from a third-party website, hence the *scx_gen.py* script might need updating in the future if the website design changes
+        unfortunately I couldn't find any direct steam api method to download the files, so I had to write a rudimentary web scrapper to extract the download links from a third-party website, hence the `scx_gen.py` script might need updating in the future if the website design changes
     * download screenshots and videos:
     
         * download thumbnails for both screenshots and videos, and compress them to `.zip` files
         * screenshots and videos are now numbered from first to last published, as in the Steam store page
         * add `-vids_low` / `-vids_max` arguments to download all videos, in low and / or high quality
-    * create / update .\\*top_owners_ids.txt* when .\\*top_owners_ids.html* is present
+    * create / update `./top_owners_ids.txt` when `./top_owners_ids.html` is present
     * generate controller action sets txt files for all found controller vdf configs, and zip them inside .\steam_misc\app_backup\app_backup.zip  
         by default, the emu supports only `xboxone` and `xbox360` controller configs, though if the're are any issues with the default supported controller action sets inside .\steam_settings\controller folder, you could try to unpack and overwrite action sets for other unsupported controller configs
-    * (Windows only) add *AdvancedRun* launchers (cmd console + silent) for `.bat` files and `.py` scripts
-* **[alex47exe]** major overhaul of **migrate_gse** - uses the same `.\_DEFAULT\0` and `.\_DEFAULT\1` folder structure for default configs  
-  it can convert old `.txt` format to `.ini` format, minus *branches.json*, which would require using *top_owners_ids.txt* and some login code from **generate_emu_config**, which should actually be used to properly generate the config files, instead of converting from the old `.txt` format
-* **[alex47exe]** *generate_interfaces.exe* - find all Steam Interfaces instead of only old ones   
-the emu will ignore the ones it doesn't require, while we'll have the complete list to write it to CODEX *steam_emu.ini*
-* **[alex47exe]** *lobby_connect.exe* - improve cmd console text alignment
+    * (Windows only) add `AdvancedRun` launchers (cmd console + silent) for `.bat` files and `.py` scripts
+* **[alex47exe]** major overhaul of `migrate_gse` - uses the same `.\_DEFAULT\0` and `.\_DEFAULT\1` folder structure for default configs  
+  it can convert old `.txt` format to `.ini` format, minus `branches.json`, which would require using `top_owners_ids.txt` and some login code from `generate_emu_config`, which should actually be used to properly generate the config files, instead of converting from the old `.txt` format
+* **[alex47exe]** `generate_interfaces.exe` - find all Steam Interfaces instead of only old ones   
+the emu will ignore the ones it doesn't require, while we'll have the complete list to write it to CODEX `steam_emu.ini`
+* **[alex47exe]** `lobby_connect.exe` - improve cmd console text alignment
 * **[alex47exe]** `mods_img` instead of `mod_images` (better folder consistency), better example for `mods_img`, minor tweaks to `.ini` and `.md` files
 
 ---
 
-## 2024/7/28
+## 2024/07/28
 
 * **[Detanup01]** fix GetISteamGenericInterface() when asking for Interface `STEAMTIMELINE_INTERFACE_V001`
 * **[KGHTW]** fix Steam Datagram Error
 
 ---
 
-## 2024/7/7
+## 2024/07/07
 
 * **[Detanup01]** implement SDK v1.60, also thanks to **[universal963]** for the help in testing some functions
 * **[Detanup01]** add implementation for new interfaces:
@@ -94,7 +605,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/6/21
+## 2024/06/21
 
 * fix the conditions for achievement progress indication when a game updates a stat which is tied to an achievement  
   now the user achievements will be updated and saved, and an overlay notification will be triggered  
@@ -129,7 +640,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/6/17
+## 2024/06/17
 
 * **[Detanup01]** add more missing interfaces: `ISteamVideo`, `ISteamGameStats`
 * upgrade python runtime used by the scripts (`generate_emu_config` and `migrate_gse`) to v3.12  
@@ -140,7 +651,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/6/12
+## 2024/06/12
 
 * **[Detanup01]** add `premake` build scripts, allowing the project to be built with different toolsets with ease on different platforms
   for example the project could be built with `Visual Studio` on Windows, or via the `make` tool on Linux
@@ -188,7 +699,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/5/5
+## 2024/05/05
 
 * **[Clompress]** update Turkish translation  
 * fixed a mistake where the interface `ISteamUser` `v022` was not added to the list of supported versions
@@ -197,7 +708,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/30
+## 2024/04/30
 
 * **[schmurger]** added a sliding animation for the overlay notifications  
   the duration of the animation could be changed using the new option `Notification_Animation` in `configs.overlay.ini`  
@@ -217,13 +728,13 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/25 (hotfix 1)
+## 2024/04/25 (hotfix 1)
 
 * fixed mismatching push/pop for the overlay style, resulting in a crash when the default colors are changed
 
 ---
 
-## 2024/4/25
+## 2024/04/25
 
 * **[schmurger]** improved achievement notification:
   - added new overlay appearance option `Notification_Rounding` which allows increasing the roundness of the notifications corners
@@ -236,7 +747,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/23
+## 2024/04/23
 
 * fixed local saving + ignore the global settings folder entirely when using the local save option for a full portable behavior
 * reverted all changes made to `find_interfaces` tool and reverted the format back to the original one, which allows loading `steam_interfaces.txt`
@@ -245,7 +756,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/21
+## 2024/04/21
 
 * **[Clompress]** corrected Turkish translation
 * allow changing the name of the base/global folder used to store save data, suggested by **[Clompress]**  
@@ -256,19 +767,17 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
   - `-skip_con`: skip downloading & generating controller configuration files  
   - `-skip_inv`: skip downloading & generating inventory data (`items.json` & `default_items.json`)  
 
----
-
-* **[breaking]** move most settings inside `.ini` files:
-  - `configs.main.ini`: configurations for the emu itself
-  - `configs.user.ini`: configurations specific to the user
-  - `configs.app.ini`: configurations specific to the game/app
-  - `configs.overlay.ini`: configurations of the overlay  
-
-   they could be placed inside the local `steam_settings` folder,  
-   or inside the new global settings folder `GSE Saves/settings`, located at `%appdata%\GSE Saves\settings\` on Windows for example  
-  you can create a global `.ini` file `GSE Saves/settings/config.xxx.ini` for the common options, and another local one `steam_settings/config.xxx.ini` for the game-specific options, and the emu will merge them  
-
-  To avoid confusion, the global saves folder is changed to be `GSE Saves` by default 
+> ⚠️ **Breaking:** move most settings inside `.ini` files:
+> - `configs.main.ini`: configurations for the emu itself
+> - `configs.user.ini`: configurations specific to the user
+> - `configs.app.ini`: configurations specific to the game/app
+> - `configs.overlay.ini`: configurations of the overlay
+>
+> they could be placed inside the local `steam_settings` folder,
+> or inside the new global settings folder `GSE Saves/settings`, located at `%appdata%\GSE Saves\settings\` on Windows for example
+> you can create a global `.ini` file `GSE Saves/settings/config.xxx.ini` for the common options, and another local one `steam_settings/config.xxx.ini` for the game-specific options, and the emu will merge them
+>
+> To avoid confusion, the global saves folder is changed to be `GSE Saves` by default
 
 * new tool `migrate_gse` to convert either your global `settings` folder, or your local `steam_settings` folder from the old format to the new one
   - run the tool without arguments to let it convert the global settings folder
@@ -278,10 +787,10 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
   check its own dedicated readme
 
----
+> ⚠️ **Breaking:** changed the environment variable `SteamAppPath` to `GseAppPath`, which is used to override the program path detected by the emu
 
-* **[breaking]** changed the environment variable `SteamAppPath` to `GseAppPath`, which is used to override the program path detected by the emu
-* **[breaking]** removed the setting `disable_account_avatar` in favor of the new one `enable_account_avatar`, this feature is now disabled by default
+> ⚠️ **Breaking:** removed the setting `disable_account_avatar` in favor of the new one `enable_account_avatar`, this feature is now disabled by default
+
 * introduced a new behavior in the emu, which makes it by default add a lot of Steam builtin and preowned IDs to the DLC list, and the emu's list of installed apps  
   you can disable this via the option `disable_steam_preowned_ids` in `configs.main.ini`
 * added a workaround for Steam Input, set `disable_steamoverlaygameid_env_var=1` inside `configs.main.ini`, might not work though
@@ -300,7 +809,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/11 (2)
+## 2024/04/11 (fix 2)
 
 * **[Clompress]** Turkish translation for the overlay
 * added callbacks alongside call results in various interfaces, allowing some games to work properly
@@ -318,17 +827,16 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/11
+## 2024/04/11
 
-* **[breaking]** load overlay audio from `sounds` subfolder, either from the local game settings folder `steam_settings/sounds`,  
-  or from the global settings folder `Goldberg SteamEmu Settings/settings/sounds`
+> ⚠️ **Breaking:** load overlay audio from `sounds` subfolder, either from the local game settings folder `steam_settings/sounds`, or from the global settings folder `Goldberg SteamEmu Settings/settings/sounds`
 * allow loading the overlay fonts from the global settings folder `Goldberg SteamEmu Settings/settings/fonts`
 * added missing example overlay `.wav` file
 * updated readme files + added some which were missing + removed invalid avatar example
 
 ---
 
-## 2024/4/10
+## 2024/04/10
 
 * properly implement `Steam_Apps::GetAvailableGameLanguages()`
 * ensure current emu language is inside `supported_languages` list
@@ -336,13 +844,11 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
   since some games don't call `SteamAPI_RunCallbacks()` or `SteamAPI_ManualDispatch_RunFrame()` or `Steam_BGetCallback()`  
   hence all run_callbacks() will never run, also networking callbacks won't run
 
-  ---
 
-* **[breaking]** introduced a new config file `enable_experimental_overlay.txt`, which deprecates the config file `disable_overlay.txt`  
-  in many occasions this feature was a source of crashes, so it's better to make it an opt-in option  
-  otherwise, the `experimental` and `Cold Client` builds of the emu will crash by default on startup for some apps/games 
+> ⚠️ **Breaking:** introduced a new config file `enable_experimental_overlay.txt`, which deprecates the config file `disable_overlay.txt`
+> in many occasions this feature was a source of crashes, so it's better to make it an opt-in option
+> otherwise, the `experimental` and `Cold Client` builds of the emu will crash by default on startup for some apps/games
 
-  ---
 
 * decrease the periodicity of the background thread to `~100ms`, also prevent it from running if the callbacks are already running
 * output each function name in the debug log
@@ -352,13 +858,13 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/4/3 (hotfix 1)
+## 2024/04/03 (hotfix 1)
 
 * load achievements strings before creating fonts, so that their glyphs ranges are taken into consideration
 
 ---
 
-## 2024/4/3
+## 2024/04/03
 
 * **[detiam]** fix linking errors when building on archlinux
 * **[detiam]** optimize Linux deps build script:
@@ -404,7 +910,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/3/17
+## 2024/03/17
 
 * **[bitsynth]** Fix Age of Empires 2: Definitive Edition, the game expects the app itself to be an owned DLC,  
   otherwise most options will be disabled
@@ -413,7 +919,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/3/16
+## 2024/03/16
 
 * manage overlay cursor input/clipping and internal frame processing in a better way,
   should prevent more games from pausing to display notifications
@@ -428,7 +934,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/3/9
+## 2024/03/09
 
 * prevent notifications that do not require interaction from stealing focus 
 * check for success when creating the overlay popup window
@@ -438,7 +944,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/3/8 (hotfix 1)
+## 2024/03/08 (hotfix 1)
 
 * don't allow posting overlay achievements notifications when the overlay isn't ready yet
 * don't run overlay callback when it isn't ready yet
@@ -446,7 +952,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/3/8
+## 2024/03/08
 
 * updated the ingame overlay project, suggested by **[CHESIRE721]**  
   Thanks to **[Nemirtingas]** for the amazing project: https://github.com/Nemirtingas/ingame_overlay
@@ -482,7 +988,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/2/29
+## 2024/02/29
 
 * revert the changes to `steam_matchmaking_servers` and only enable them via the 2 new config files:
   - `matchmaking_server_list_actual_type.txt`: enable the behavior which allows steam matchmaking to use the actual type of the requestd server list, otherwise it's always LAN
@@ -494,14 +1000,14 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/2/24
+## 2024/02/24
 
 * build the python scripts `achievements_gen.py` and `parse_controller_vdf.py` into binary form using `pyinstaller` for a more user friendly usage, suggested by **[DogancanYr]**
 * change the scripts `achievements_gen.py` and `parse_controller_vdf.py` to accept multiple files
 
 ---
 
-## 2024/2/23
+## 2024/02/23
 
 * more accurately handle and download steamhttp requests in multi-threaded manner:
   - hanlde `GET`, `HEAD`, `POST`
@@ -510,12 +1016,11 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 * new config file `force_steamhttp_success.txt` in `steam_settings` folder, which forces the API `Steam_HTTP::SendHTTPRequest()` to always succeed
 
----
-* **[breaking]** deprecated the config file `http_online.txt` in favor of the new one `download_steamhttp_requests.txt`
+> ⚠️ **Breaking:** deprecated the config file `http_online.txt` in favor of the new one `download_steamhttp_requests.txt`
 
 ---
 
-## 2024/2/20
+## 2024/02/20
 
 * generate_emu_config: allow setting the steam id of apps/games owners from an external file `top_owners_ids.txt` beside the script, suggested by **[M4RCK5]**
 * generate_emu_config: support the new format for `supported_languages`
@@ -524,31 +1029,29 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/2/13
+## 2024/02/13
 
 * cold client loader: validate the PE signature before attempting to detect arch
 
 ---
 
-## 2024/2/10
+## 2024/02/10
 
 * a hacky fix for the overlay on directx12, currently very slow when loading images
 * limit the attempts to load the achievements images, to prevent a never ending FPS drop
 
 ---
 
-## 2024/2/7
+## 2024/02/07
 
 * new persistent modes for cold client loader, mode 2 is a more accurate simulation and allows launching apps from their .exe
 * allow setting the IP country via the file `ip_country.txt`
 
----
-
-* **[Breaking]** changed the ini sections of the cold client loader
+> ⚠️ **Breaking:** changed the ini sections of the cold client loader
 
 ---
 
-## 2024/1/26
+## 2024/01/26
 
 * **[Detanup01]** added a new command line option for the tool `generate_emu_config` to disable the generation of `disable_xxx.txt` files,  
   suggested by **[Vlxst]**
@@ -558,7 +1061,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/1/25
+## 2024/01/25
 
 * added new options to the overlay to allow copying a friend's ID, plus current player ID, suggested by **[Vlxst]**
 * added a new option to the overlay to invite all friends playing the same game, suggested by **[Vlxst]**
@@ -580,7 +1083,7 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/1/20
+## 2024/01/20
 
 * **[Detanup01]** added implementation for `Steam_Remote_Storage::EnumerateUserSubscribedFiles()` +   
   mods files handles in `Steam_Remote_Storage::UGCDownload()` + `Steam_Remote_Storage::UGCDownloadToLocation()`  
@@ -616,14 +1119,14 @@ the emu will ignore the ones it doesn't require, while we'll have the complete l
 
 ---
 
-## 2024/1/5
+## 2024/01/05
 
 * **[Detanup01]** Fixed parsing of old Steam interfaces, reported by **[LuKeStorm]**: https://cs.rin.ru/forum/viewtopic.php?p=2971639#p2971639  
 * refactored the tool `find_intrfaces` to search accurately for old interfaces  
 
 ---
 
-## 2024/1/3  
+## 2024/01/03
 
 * added a new option to the Windows version of the client loader to aid in debugging  
 the option is called `ResumeByDebugger`, and setting it to `1` will prevent the loader from  
