@@ -243,11 +243,6 @@ jobs:
         shell: "bash"
         run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-
-
-
-
-
       # deps
       - name: "Restore combined deps cache"
         uses: actions/cache/restore@v5
@@ -274,7 +269,16 @@ jobs:
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
-      - name: "Download proto_gen artifact"
+      - name: "Generate proto files (attempt)"
+        id: "gen_proto_attempt"
+        continue-on-error: true
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --os=windows vs2026
+
+      - name: "Download proto_gen artifact (fallback)"
+        if: steps.gen_proto_attempt.outcome == 'failure'
         uses: actions/download-artifact@v8
         with:
           name: "proto-gen-win-vs2026-${{ steps.build_ref.outputs.sha }}"
@@ -284,7 +288,7 @@ jobs:
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --win-icon-gen --64-build --32-build vs2026
 
       # build target
       - name: "Build target"
