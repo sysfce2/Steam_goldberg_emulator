@@ -266,7 +266,7 @@ jobs:
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
       - name: "Download proto_gen artifact"
-        uses: actions/download-artifact@v4.1.3
+        uses: actions/download-artifact@v8
         with:
           name: "proto-gen-linux-${{ env.PREMAKE_ACTION }}-${{ steps.build_ref.outputs.sha }}"
           path: "proto_gen/linux"
