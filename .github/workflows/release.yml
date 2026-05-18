@@ -135,7 +135,7 @@ jobs:
       # release (debug + release modes) if this is a tag push
       - name: "Release"
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: "build/package/win/**/*"
 
@@ -245,7 +245,7 @@ jobs:
       # release (debug + release modes) if this is a tag push
       - name: "Release"
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: "build/package/linux/**/*"
 
