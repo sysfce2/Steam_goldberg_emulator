@@ -1923,7 +1923,7 @@ static void dump_process_tree()
         FILE* sf = fopen(stat_path, "r");
         if (sf) {
             char stat_buf[4096]{};
-            fread(stat_buf, 1, sizeof(stat_buf) - 1, sf);
+            (void)fread(stat_buf, 1, sizeof(stat_buf) - 1, sf);
             fclose(sf);
             // format: pid (comm) state ppid ... field22=starttime
             // find the last ')' to skip comm which may contain spaces/parens
@@ -2545,7 +2545,7 @@ void append_renderer_info()
             fseek(rf, 0, SEEK_SET);
             if (file_size > 0) {
                 std::string content(file_size, '\0');
-                fread(&content[0], 1, file_size, rf);
+                (void)fread(&content[0], 1, file_size, rf);
                 fclose(rf);
 
                 const std::string placeholder = "  Renderers: (pending - detected after init)\n";
