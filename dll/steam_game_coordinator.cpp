@@ -189,8 +189,8 @@ std::string Steam_Game_Coordinator::build_protomsg_header(uint32 msg_type, JobID
     ser_var<ProtoBufMsgHeader_t>(message, hdr);
     size_t msg_len_before = message.size();
     if (!protohdr.AppendToString(&message)) {
-        PRINT_DEBUG("build_protomsg_header: AppendToString failed, message rolled back");
-        message.resize(msg_len_before);
+        PRINT_DEBUG("build_protomsg_header: AppendToString failed, returning empty message");
+        return {};
     }
 
     return message;
