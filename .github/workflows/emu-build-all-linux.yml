@@ -238,7 +238,7 @@ jobs:
 
       # upload artifact/package to github Actions
       - name: "Upload target package"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v8
         with:
           name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ steps.build_ref.outputs.sha }}"
           path: "build/linux"
