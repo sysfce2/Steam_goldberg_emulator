@@ -174,9 +174,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/restore@v5
         with:
-          key: "emu-deps-linux-all-${{ env.PREMAKE_ACTION }}-${{ github.run_id }}"
-          restore-keys: |
-            emu-deps-linux-all-${{ env.PREMAKE_ACTION }}-
+          key: "emu-deps-linux-all-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
 
       # extra helpers/tools, these are not built inside the deps build dir
