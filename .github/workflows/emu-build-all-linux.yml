@@ -127,9 +127,55 @@ jobs:
       rebuild_portaudio: ${{ inputs.rebuild_portaudio || false }}
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
+  gen-proto:
+    name: "Generate proto files"
+    needs: ["deps"]
+    runs-on: "ubuntu-24.04"
+    if: ${{ !cancelled() }}
+
+    steps:
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+
+      - name: "Capture build commit SHA"
+        id: "build_ref"
+        shell: "bash"
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: "Restore combined deps cache"
+        uses: actions/cache/restore@v5
+        with:
+          key: "emu-deps-linux-all-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+          fail-on-cache-miss: true
+
+      - name: "Clone third-party build helpers (common/linux)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/common/linux"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/linux"
+
+      - name: "Generate proto files"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake
+
+      - name: "Upload proto_gen artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: "proto-gen-linux-${{ env.PREMAKE_ACTION }}-${{ steps.build_ref.outputs.sha }}"
+          path: "proto_gen/linux"
+          if-no-files-found: "error"
+          retention-days: 1
+          overwrite: true
+
   builds-matrix-linux:
     name: "build"
-    needs: ["deps"]
+    needs: ["deps", "gen-proto"]
     runs-on: "ubuntu-24.04"
     if: ${{ !cancelled() }}
     continue-on-error: true
@@ -172,11 +218,11 @@ jobs:
 
       # deps
       - name: "Restore combined deps cache"
-        continue-on-error: true
         uses: actions/cache/restore@v5
         with:
           key: "emu-deps-linux-all-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+          fail-on-cache-miss: true
 
       # extra helpers/tools, these are not built inside the deps build dir
       - name: "Clone third-party build helpers (common/linux)"
@@ -219,12 +265,18 @@ jobs:
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
+      - name: "Download proto_gen artifact"
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: "proto-gen-linux-${{ env.PREMAKE_ACTION }}-${{ steps.build_ref.outputs.sha }}"
+          path: "proto_gen/linux"
+
       - name: "Generate project files"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
 
       # build target
       - name: "Build target"

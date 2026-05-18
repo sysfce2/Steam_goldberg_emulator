@@ -126,9 +126,66 @@ jobs:
       rebuild_portaudio: ${{ inputs.rebuild_portaudio || false }}
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
+  gen-proto:
+    name: "Generate proto files"
+    needs: ["deps"]
+    runs-on: "windows-2025-vs2026"
+    if: ${{ !cancelled() }}
+
+    steps:
+      # on Windows Git will auto change line ending to CRLF, not preferable
+      - name: "Ensure LF line ending"
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          git config --system core.autocrlf false
+          git config --global core.autocrlf false
+
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+
+      - name: "Capture build commit SHA"
+        id: "build_ref"
+        shell: "bash"
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: "Restore combined deps cache"
+        uses: actions/cache/restore@v5
+        with:
+          key: "emu-deps-win-all-${{ env.PREMAKE_ACTION }}"
+          path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+          fail-on-cache-miss: true
+
+      - name: "Clone third-party build helpers (common/win)"
+        uses: actions/checkout@v6
+        with:
+          ref: "third-party/common/win"
+          path: "${{env.THIRD_PARTY_BASE_DIR}}/common/win"
+
+      - name: "Set build date"
+        shell: "bash"
+        run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
+
+      - name: "Generate proto files"
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --os=windows vs2026
+
+      - name: "Upload proto_gen artifact"
+        uses: actions/upload-artifact@v7
+        with:
+          name: "proto-gen-win-vs2026-${{ steps.build_ref.outputs.sha }}"
+          path: "proto_gen/win"
+          if-no-files-found: "error"
+          retention-days: 1
+          overwrite: true
+
   builds-matrix-win:
     name: "build"
-    needs: ["deps"]
+    needs: ["deps", "gen-proto"]
     runs-on: "windows-2025-vs2026"
     if: ${{ !cancelled() }}
     continue-on-error: true
@@ -193,11 +250,11 @@ jobs:
 
       # deps
       - name: "Restore combined deps cache"
-        continue-on-error: true
         uses: actions/cache/restore@v5
         with:
           key: "emu-deps-win-all-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
+          fail-on-cache-miss: true
 
       # extra helpers/tools, these are not built inside the deps build dir
       - name: "Clone third-party build helpers (common/win)"
@@ -217,11 +274,17 @@ jobs:
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
+      - name: "Download proto_gen artifact"
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: "proto-gen-win-vs2026-${{ steps.build_ref.outputs.sha }}"
+          path: "proto_gen/win"
+
       - name: "Generate project files"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
 
       # build target
       - name: "Build target"
