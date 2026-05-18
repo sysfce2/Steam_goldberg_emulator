@@ -288,7 +288,7 @@ jobs:
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --win-icon-gen --64-build --32-build vs2026
+          ${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
 
       # build target
       - name: "Build target"
