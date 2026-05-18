@@ -212,12 +212,7 @@ jobs:
             # reshade addon overlay
             "reshade_addon_overlay",
           ]
-        arch: ["x64", "Win32"]
         cfg: ["debug", "release"]
-
-        exclude:
-          - prj: lib_steam_old
-            arch: x64
 
     steps:
       # on Windows Git will auto change line ending to CRLF, not preferable
@@ -291,17 +286,24 @@ jobs:
           "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
 
       # build target
-      - name: "Build target"
+      - name: "Build x64"
+        if: matrix.prj != 'lib_steam_old'
         shell: "cmd"
         working-directory: "${{ github.workspace }}/build/project/vs2026/win"
         run: |
-          msbuild /nologo /target:${{ matrix.prj }} /m:1 -p:CL_MPCount=${{ env.MAX_PARALLEL_JOBS }} /v:n /p:Configuration=${{ matrix.cfg }},Platform=${{ matrix.arch }} gse.slnx
+          msbuild /nologo /target:${{ matrix.prj }} /m:1 -p:CL_MPCount=${{ env.MAX_PARALLEL_JOBS }} /v:n /p:Configuration=${{ matrix.cfg }},Platform=x64 gse.slnx
+
+      - name: "Build Win32"
+        shell: "cmd"
+        working-directory: "${{ github.workspace }}/build/project/vs2026/win"
+        run: |
+          msbuild /nologo /target:${{ matrix.prj }} /m:1 -p:CL_MPCount=${{ env.MAX_PARALLEL_JOBS }} /v:n /p:Configuration=${{ matrix.cfg }},Platform=Win32 gse.slnx
 
       # upload artifact/package to github Actions
       - name: "Upload target package"
         uses: actions/upload-artifact@v7
         with:
-          name: "emu-win-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ steps.build_ref.outputs.sha }}"
+          name: "emu-win-${{ matrix.prj }}-${{ matrix.cfg }}-${{ steps.build_ref.outputs.sha }}"
           path: "build/win"
           if-no-files-found: "error"
           compression-level: 9

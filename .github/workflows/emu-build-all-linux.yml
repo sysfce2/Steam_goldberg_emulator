@@ -196,7 +196,6 @@ jobs:
             # tests
             "test_gamepad_linux",
           ]
-        arch: ["x64", "x86"]
         cfg: ["debug", "release"]
 
     steps:
@@ -284,20 +283,29 @@ jobs:
           ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
 
       # build target
-      - name: "Build target"
+      - name: "Build x64"
         shell: "bash"
         working-directory: "${{ github.workspace }}/build/project/gmake/linux"
         run: |
           echo "dry run..."
-          make -n -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_${{ matrix.arch }} ${{ matrix.prj }}
+          make -n -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_x64 ${{ matrix.prj }}
           echo "actual run..."
-          make -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_${{ matrix.arch }} ${{ matrix.prj }}
+          make -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_x64 ${{ matrix.prj }}
+
+      - name: "Build x86"
+        shell: "bash"
+        working-directory: "${{ github.workspace }}/build/project/gmake/linux"
+        run: |
+          echo "dry run..."
+          make -n -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_x86 ${{ matrix.prj }}
+          echo "actual run..."
+          make -j ${{ env.MAX_PARALLEL_JOBS }} config=${{ matrix.cfg }}_x86 ${{ matrix.prj }}
 
       # upload artifact/package to github Actions
       - name: "Upload target package"
         uses: actions/upload-artifact@v7
         with:
-          name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ matrix.arch }}-${{ steps.build_ref.outputs.sha }}"
+          name: "emu-linux-${{ matrix.prj }}-${{ matrix.cfg }}-${{ steps.build_ref.outputs.sha }}"
           path: "build/linux"
           if-no-files-found: "error"
           compression-level: 9
