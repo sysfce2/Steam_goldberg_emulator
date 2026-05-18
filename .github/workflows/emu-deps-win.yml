@@ -127,9 +127,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/restore@v5
         with:
-          key: "emu-deps-win-all-${{ env.PREMAKE_ACTION }}-${{ github.run_id }}"
-          restore-keys: |
-            emu-deps-win-all-${{ env.PREMAKE_ACTION }}-
+          key: "emu-deps-win-all-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
 
       # determine if any dep needs (re)building
@@ -267,8 +265,8 @@ jobs:
           "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5-deps.lua --ext-sdl --build-sdl --64-build --32-build --j=${{ env.MAX_PARALLEL_JOBS }} --verbose --clean --os=windows vs2026
 
       - name: "Save combined deps cache"
-        if: always()
+        if: steps.needs-build.outputs.needed == 'true'
         uses: actions/cache/save@v5
         with:
-          key: "emu-deps-win-all-${{ env.PREMAKE_ACTION }}-${{ github.run_id }}"
+          key: "emu-deps-win-all-${{ env.PREMAKE_ACTION }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
