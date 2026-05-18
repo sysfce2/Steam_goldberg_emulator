@@ -50,6 +50,13 @@ on:
         description: 'Force rebuild sdl (ignore cache)'
         type: boolean
         default: false
+      vs_version:
+        description: 'Visual Studio version to build with'
+        type: choice
+        options:
+          - vs2026
+          - vs2022
+        default: 'vs2026'
 
 permissions:
   contents: "write"
@@ -59,9 +66,9 @@ env:
   THIRD_PARTY_BASE_DIR: "third-party"
 
 jobs:
-  emu-win-all:
-    name: "Emu win all"
-    if: ${{ !cancelled() }}
+  emu-win-all-vs2026:
+    name: "Emu win all (VS2026)"
+    if: ${{ !cancelled() && (inputs.vs_version == '' || inputs.vs_version == 'vs2026') }}
     uses: "./.github/workflows/emu-build-all-win.yml"
     with:
       branch: ${{ inputs.branch || 'dev' }}
@@ -76,8 +83,26 @@ jobs:
       rebuild_portaudio: ${{ inputs.rebuild_portaudio || false }}
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
+  emu-win-all-vs22:
+    name: "Emu win all (VS2022)"
+    if: ${{ !cancelled() && inputs.vs_version == 'vs2022' }}
+    uses: "./.github/workflows/emu-build-all-win-vs22.yml"
+    with:
+      branch: ${{ inputs.branch || 'dev' }}
+      commit: ${{ inputs.commit || '' }}
+      rebuild_ssq: ${{ inputs.rebuild_ssq || false }}
+      rebuild_zlib: ${{ inputs.rebuild_zlib || false }}
+      rebuild_mbedtls: ${{ inputs.rebuild_mbedtls || false }}
+      rebuild_curl: ${{ inputs.rebuild_curl || false }}
+      rebuild_protobuf: ${{ inputs.rebuild_protobuf || false }}
+      rebuild_ingame_overlay: ${{ inputs.rebuild_ingame_overlay || false }}
+      rebuild_opus: ${{ inputs.rebuild_opus || false }}
+      rebuild_portaudio: ${{ inputs.rebuild_portaudio || false }}
+      rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
+
   emu-win-prep:
-    needs: ["emu-win-all"]
+    needs: ["emu-win-all-vs2026", "emu-win-all-vs22"]
+    if: ${{ !cancelled() }}
     runs-on: "windows-2025-vs2026"
     steps:
       # we need branch because it has package scripts
@@ -106,6 +131,12 @@ jobs:
           ref: "third-party/deps/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
 
+      # determine VS version used for this run
+      - name: "Set VS version"
+        id: "vs_ver"
+        shell: "bash"
+        run: echo "ver=${{ inputs.vs_version || 'vs2026' }}" >> $GITHUB_OUTPUT
+
       # download artifacts
       - name: "Download emu build artifacts (Win)"
         uses: actions/download-artifact@v8
@@ -125,13 +156,13 @@ jobs:
       - name: "Package build (release)"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
-        run: package_win.bat vs2026\release
+        run: package_win.bat ${{ steps.vs_ver.outputs.ver }}\release
 
       # package (debug mode)
       - name: "Package build (debug)"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
-        run: package_win.bat vs2026\debug 1
+        run: package_win.bat ${{ steps.vs_ver.outputs.ver }}\debug 1
 
       # release (debug + release modes) if this is a tag push
       - name: "Release"
@@ -146,7 +177,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-release-${{ steps.build_ref.outputs.sha }}"
-          path: "build/package/win/vs2026/*release*"
+          path: "build/package/win/${{ steps.vs_ver.outputs.ver }}/*release*"
           if-no-files-found: "error"
           compression-level: 0
           retention-days: 7
@@ -157,7 +188,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-debug-${{ steps.build_ref.outputs.sha }}"
-          path: "build/package/win/vs2026/*debug*"
+          path: "build/package/win/${{ steps.vs_ver.outputs.ver }}/*debug*"
           if-no-files-found: "error"
           compression-level: 0
           retention-days: 7
