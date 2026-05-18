@@ -14,6 +14,14 @@ on:
         description: 'Commit SHA to build (leave empty for latest on branch)'
         type: string
         default: ''
+      build_configs:
+        description: 'Which build configurations to compile and package'
+        type: choice
+        default: 'release and debug'
+        options:
+          - 'release and debug'
+          - 'release only'
+          - 'debug only'
       rebuild_ssq:
         description: 'Force rebuild ssq (ignore cache)'
         type: boolean
@@ -66,6 +74,7 @@ jobs:
     with:
       branch: ${{ inputs.branch || 'dev' }}
       commit: ${{ inputs.commit || '' }}
+      build_configs: ${{ inputs.build_configs || 'release and debug' }}
       rebuild_ssq: ${{ inputs.rebuild_ssq || false }}
       rebuild_zlib: ${{ inputs.rebuild_zlib || false }}
       rebuild_mbedtls: ${{ inputs.rebuild_mbedtls || false }}
@@ -120,11 +129,13 @@ jobs:
           dir /s /b /a:-d build\win
 
       - name: "Package Windows build — Release configuration"
+        if: ${{ inputs.build_configs != 'debug only' }}
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: package_win.bat vs2026\release
 
       - name: "Package Windows build — Debug configuration"
+        if: ${{ inputs.build_configs != 'release only' }}
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: package_win.bat vs2026\debug 1
@@ -138,7 +149,7 @@ jobs:
 
       # On manual runs, upload as workflow artifacts instead of a release
       - name: "Upload Windows release package as workflow artifact (manual runs only)"
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.build_configs != 'debug only' }}
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-release-${{ steps.build_ref.outputs.sha }}"
@@ -149,7 +160,7 @@ jobs:
           overwrite: true
 
       - name: "Upload Windows debug package as workflow artifact (manual runs only)"
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.build_configs != 'release only' }}
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-win-debug-${{ steps.build_ref.outputs.sha }}"
@@ -171,6 +182,7 @@ jobs:
     with:
       branch: ${{ inputs.branch || 'dev' }}
       commit: ${{ inputs.commit || '' }}
+      build_configs: ${{ inputs.build_configs || 'release and debug' }}
       rebuild_ssq: ${{ inputs.rebuild_ssq || false }}
       rebuild_zlib: ${{ inputs.rebuild_zlib || false }}
       rebuild_mbedtls: ${{ inputs.rebuild_mbedtls || false }}
@@ -229,11 +241,13 @@ jobs:
           sudo apt install tar -y || exit 1
 
       - name: "Package Linux build — Release configuration"
+        if: ${{ inputs.build_configs != 'debug only' }}
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: ./package_linux.sh gmake/release
 
       - name: "Package Linux build — Debug configuration"
+        if: ${{ inputs.build_configs != 'release only' }}
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: ./package_linux.sh gmake/debug 1
@@ -247,7 +261,7 @@ jobs:
 
       # On manual runs, upload as workflow artifacts instead of a release
       - name: "Upload Linux release package as workflow artifact (manual runs only)"
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.build_configs != 'debug only' }}
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-linux-release-${{ steps.build_ref.outputs.sha }}"
@@ -258,7 +272,7 @@ jobs:
           overwrite: true
 
       - name: "Upload Linux debug package as workflow artifact (manual runs only)"
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.build_configs != 'release only' }}
         uses: actions/upload-artifact@v7
         with:
           name: "release-emu-linux-debug-${{ steps.build_ref.outputs.sha }}"
