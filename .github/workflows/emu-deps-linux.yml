@@ -115,6 +115,12 @@ jobs:
     if: ${{ !cancelled() }}
 
     steps:
+      # checkout first so that git clean does not wipe the restored cache
+      - name: "Checkout branch"
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+
       - name: "Restore combined deps cache"
         id: "cache-deps-restore"
         continue-on-error: true
@@ -151,12 +157,7 @@ jobs:
 
           echo "needed=$any" >> $GITHUB_OUTPUT
 
-      # checkout and clone sources only when at least one dep needs building
-      - name: "Checkout branch"
-        if: steps.needs-build.outputs.needed == 'true'
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.commit || inputs.branch || 'dev' }}
+      # clone sources only when at least one dep needs building
 
       - name: "Clone third-party deps (common/linux)"
         if: steps.needs-build.outputs.needed == 'true'
