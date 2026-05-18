@@ -11,10 +11,6 @@ on:
         description: 'Commit SHA to build (empty = latest on branch)'
         type: string
         default: ''
-      build_configs:
-        description: 'Which build configurations to compile'
-        type: string
-        default: 'release and debug'
       rebuild_ssq:
         description: 'Force rebuild ssq (ignore cache)'
         type: boolean
@@ -201,9 +197,6 @@ jobs:
             "test_gamepad_linux",
           ]
         cfg: ["debug", "release"]
-        exclude:
-          - cfg: ${{ (inputs.build_configs == 'release only') && 'debug' || '' }}
-          - cfg: ${{ (inputs.build_configs == 'debug only') && 'release' || '' }}
 
     steps:
       # clone branch
