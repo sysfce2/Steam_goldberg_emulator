@@ -117,7 +117,7 @@ jobs:
       - name: "Restore combined deps cache"
         id: "cache-deps-restore"
         continue-on-error: true
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: "emu-deps-linux-all-${{ env.PREMAKE_ACTION }}-${{ github.run_id }}"
           restore-keys: |
@@ -289,7 +289,7 @@ jobs:
 
       - name: "Save combined deps cache"
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           key: "emu-deps-linux-all-${{ env.PREMAKE_ACTION }}-${{ github.run_id }}"
           path: "${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}"
