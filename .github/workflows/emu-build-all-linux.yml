@@ -162,7 +162,7 @@ jobs:
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto_only --os=linux gmake
 
       - name: "Upload proto_gen artifact"
         uses: actions/upload-artifact@v7

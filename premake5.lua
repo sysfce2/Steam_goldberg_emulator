@@ -91,6 +91,11 @@ newoption {
     trigger = "genproto",
     description = "Generate .cc/.h files from .proto file",
 }
+newoption {
+    category = 'protobuf files',
+    trigger = "genproto_only",
+    description = "Generate .cc/.h files from .proto file and exit immediately (skips project file generation)",
+}
 
 newoption {
     category = 'build',
@@ -519,11 +524,14 @@ local x64_deps_overlay_libdir = {
 }
 
 -- generate proto
-if _OPTIONS["genproto"] then
+if _OPTIONS["genproto"] or _OPTIONS["genproto_only"] then
     if genproto() then
         print("Success!")
     else
         error("protoc error")
+    end
+    if _OPTIONS["genproto_only"] then
+        os.exit(0)
     end
 end
 -- End generate proto
