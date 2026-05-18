@@ -211,11 +211,6 @@ jobs:
         shell: "bash"
         run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-
-
-
-
-
       # deps
       - name: "Restore combined deps cache"
         uses: actions/cache/restore@v5
@@ -265,7 +260,17 @@ jobs:
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
-      - name: "Download proto_gen artifact"
+      - name: "Generate proto files (attempt)"
+        id: "gen_proto_attempt"
+        continue-on-error: true
+        shell: "bash"
+        working-directory: "${{ github.workspace }}"
+        run: |
+          sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake
+
+      - name: "Download proto_gen artifact (fallback)"
+        if: steps.gen_proto_attempt.outcome == 'failure'
         uses: actions/download-artifact@v8
         with:
           name: "proto-gen-linux-${{ env.PREMAKE_ACTION }}-${{ steps.build_ref.outputs.sha }}"
