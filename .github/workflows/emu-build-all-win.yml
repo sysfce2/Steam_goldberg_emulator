@@ -127,7 +127,7 @@ jobs:
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
   gen-proto:
-    name: "Generate proto files"
+    name: "Generate proto files - *.pb.cc, *.pb.h"
     needs: ["deps"]
     runs-on: "windows-2025-vs2026"
     if: ${{ !cancelled() }}
@@ -269,15 +269,15 @@ jobs:
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
-      - name: "Generate proto files (attempt)"
+      - name: "Generate proto files - *.pb.cc, *.pb.h"
         id: "gen_proto_attempt"
         continue-on-error: true
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto_only --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
 
-      - name: "Download proto_gen artifact (fallback)"
+      - name: "Download proto files artifact (fallback)"
         if: steps.gen_proto_attempt.outcome == 'failure'
         uses: actions/download-artifact@v8
         with:

@@ -128,7 +128,7 @@ jobs:
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
   gen-proto:
-    name: "Generate proto files"
+    name: "Generate proto files - *.pb.cc, *.pb.h"
     needs: ["deps"]
     runs-on: "ubuntu-24.04"
     if: ${{ !cancelled() }}
@@ -260,16 +260,16 @@ jobs:
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
 
-      - name: "Generate proto files (attempt)"
+      - name: "Generate proto files - *.pb.cc, *.pb.h"
         id: "gen_proto_attempt"
         continue-on-error: true
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
           sudo chmod 777 ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5
-          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto --os=linux gmake
+          ./${{env.THIRD_PARTY_BASE_DIR}}/common/linux/premake/premake5 --file=premake5.lua --genproto_only --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=linux gmake
 
-      - name: "Download proto_gen artifact (fallback)"
+      - name: "Download proto files artifact (fallback)"
         if: steps.gen_proto_attempt.outcome == 'failure'
         uses: actions/download-artifact@v8
         with:
