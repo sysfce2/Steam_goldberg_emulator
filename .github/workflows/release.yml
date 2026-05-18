@@ -163,12 +163,6 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      # delete intermediate build artifacts now that the release packages are ready
-      - name: "Delete intermediate Win build artifacts"
-        uses: actions/delete-artifact@v5
-        with:
-          pattern: "emu-win-*-${{ steps.build_ref.outputs.sha }}"
-
   emu-linux-all:
     name: "Emu linux all"
     if: ${{ !cancelled() }}
@@ -278,9 +272,3 @@ jobs:
           compression-level: 0
           retention-days: 7
           overwrite: true
-
-      # delete intermediate build artifacts now that the release packages are ready
-      - name: "Delete intermediate Linux build artifacts"
-        uses: actions/delete-artifact@v5
-        with:
-          pattern: "emu-linux-*-${{ steps.build_ref.outputs.sha }}"
