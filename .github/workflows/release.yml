@@ -60,7 +60,7 @@ env:
 
 jobs:
   emu-win-all:
-    name: "Emu win all"
+    name: "Build all Windows targets"
     if: ${{ !cancelled() }}
     uses: "./.github/workflows/emu-build-all-win.yml"
     with:
@@ -77,22 +77,22 @@ jobs:
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
   emu-win-prep:
+    name: "Package and publish Windows release"
     needs: ["emu-win-all"]
     runs-on: "windows-2025-vs2026"
     steps:
-      # we need branch because it has package scripts
-      - name: "Checkout branch"
+      - name: "Checkout repository (branch/commit with packaging scripts)"
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit || inputs.branch || 'dev' }}
 
-      - name: "Capture build commit SHA"
+      - name: "Resolve exact commit SHA being packaged"
         id: "build_ref"
         shell: "bash"
         run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      # on Windows Git will auto change line ending to CRLF, not preferable
-      - name: "Ensure LF line ending"
+      # Windows Git auto-converts line endings to CRLF — force LF to keep scripts consistent
+      - name: "Disable Git automatic CRLF line ending conversion"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
@@ -100,48 +100,44 @@ jobs:
           git config --system core.autocrlf false
           git config --global core.autocrlf false
 
-      - name: "Clone third-party deps (deps/win)"
+      - name: "Checkout Windows third-party dependencies"
         uses: actions/checkout@v6
         with:
           ref: "third-party/deps/win"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/win"
 
-      # download artifacts
-      - name: "Download emu build artifacts (Win)"
+      - name: "Download Windows build artifacts from previous jobs"
         uses: actions/download-artifact@v8
         with:
           path: "build/win"
           pattern: "emu-win-*-${{ steps.build_ref.outputs.sha }}"
           merge-multiple: true
 
-      # print files
-      - name: "Print files"
+      - name: "List downloaded build files"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
           dir /s /b /a:-d build\win
 
-      # package (release mode)
-      - name: "Package build (release)"
+      - name: "Package Windows build — Release configuration"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: package_win.bat vs2026\release
 
-      # package (debug mode)
-      - name: "Package build (debug)"
+      - name: "Package Windows build — Debug configuration"
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: package_win.bat vs2026\debug 1
 
-      # release (debug + release modes) if this is a tag push
-      - name: "Release"
+      # Publish directly to the GitHub Release when triggered by a tag push
+      - name: "Publish packages to GitHub Release (tag builds only)"
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
           files: "build/package/win/**/*"
 
-      # upload artifacts/packages if this is a manual run
-      - name: "Upload release package"
+      # On manual runs, upload as workflow artifacts instead of a release
+      - name: "Upload Windows release package as workflow artifact (manual runs only)"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
@@ -152,7 +148,7 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      - name: "Upload debug package"
+      - name: "Upload Windows debug package as workflow artifact (manual runs only)"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
@@ -163,14 +159,13 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      # delete intermediate build artifacts now that the release packages are ready
-      - name: "Delete intermediate Win build artifacts"
+      - name: "Clean up intermediate Windows build artifacts"
         uses: actions/delete-artifact@v5
         with:
           pattern: "emu-win-*-${{ steps.build_ref.outputs.sha }}"
 
   emu-linux-all:
-    name: "Emu linux all"
+    name: "Build all Linux targets"
     if: ${{ !cancelled() }}
     uses: "./.github/workflows/emu-build-all-linux.yml"
     with:
@@ -187,77 +182,71 @@ jobs:
       rebuild_sdl: ${{ inputs.rebuild_sdl || false }}
 
   emu-linux-prep:
+    name: "Package and publish Linux release"
     needs: ["emu-linux-all"]
     runs-on: "ubuntu-24.04"
     steps:
-      # we need branch because it has package scripts
-      - name: "Checkout branch"
+      - name: "Checkout repository (branch/commit with packaging scripts)"
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit || inputs.branch || 'dev' }}
 
-      - name: "Capture build commit SHA"
+      - name: "Resolve exact commit SHA being packaged"
         id: "build_ref"
         shell: "bash"
         run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      - name: "Clone third-party deps (deps/linux)"
+      - name: "Checkout Linux third-party dependencies"
         uses: actions/checkout@v6
         with:
           ref: "third-party/deps/linux"
           path: "${{env.THIRD_PARTY_BASE_DIR}}/deps/linux"
 
-      # download artifacts
-      - name: "Download emu build artifacts (linux)"
+      - name: "Download Linux build artifacts from previous jobs"
         uses: actions/download-artifact@v8
         with:
           path: "build/linux"
           pattern: "emu-linux-*-${{ steps.build_ref.outputs.sha }}"
           merge-multiple: true
 
-      # fix folder permissions! not sure why this fails
-      # nested subdirs "build/linux/release" cause permission problems
-      - name: "Give all permissions to repo folder"
+      # Nested subdirectories under build/linux can have permission issues — fix them upfront
+      - name: "Fix workspace and packaging script permissions"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: sudo chmod -R 777 "${{ github.workspace }}" && sudo chmod 777 package_linux.sh
 
-      # print files
-      - name: "Print files"
+      - name: "List downloaded build files"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
           ls -la build/linux/*/*
 
-      # downlaod ubuntu packages
-      - name: "Download required Ubuntu packages"
+      - name: "Install required system packages (tar)"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: |
           sudo apt update || exit 1
           sudo apt install tar -y || exit 1
 
-      # package (release mode)
-      - name: "Package build (release)"
+      - name: "Package Linux build — Release configuration"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: ./package_linux.sh gmake/release
 
-      # package (debug mode)
-      - name: "Package build (debug)"
+      - name: "Package Linux build — Debug configuration"
         shell: "bash"
         working-directory: "${{ github.workspace }}"
         run: ./package_linux.sh gmake/debug 1
 
-      # release (debug + release modes) if this is a tag push
-      - name: "Release"
+      # Publish directly to the GitHub Release when triggered by a tag push
+      - name: "Publish packages to GitHub Release (tag builds only)"
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
           files: "build/package/linux/**/*"
 
-      # upload artifacts/packages if this is a manual run
-      - name: "Upload release package"
+      # On manual runs, upload as workflow artifacts instead of a release
+      - name: "Upload Linux release package as workflow artifact (manual runs only)"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
@@ -268,7 +257,7 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      - name: "Upload debug package"
+      - name: "Upload Linux debug package as workflow artifact (manual runs only)"
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v7
         with:
@@ -279,8 +268,7 @@ jobs:
           retention-days: 7
           overwrite: true
 
-      # delete intermediate build artifacts now that the release packages are ready
-      - name: "Delete intermediate Linux build artifacts"
+      - name: "Clean up intermediate Linux build artifacts"
         uses: actions/delete-artifact@v5
         with:
           pattern: "emu-linux-*-${{ steps.build_ref.outputs.sha }}"
