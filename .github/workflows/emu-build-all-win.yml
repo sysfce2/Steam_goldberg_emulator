@@ -11,6 +11,10 @@ on:
         description: 'Commit SHA to build (empty = latest on branch)'
         type: string
         default: ''
+      build_configs:
+        description: 'Which build configurations to compile'
+        type: string
+        default: 'release and debug'
       rebuild_ssq:
         description: 'Force rebuild ssq (ignore cache)'
         type: boolean
@@ -57,6 +61,14 @@ on:
         description: 'Commit SHA to build (leave empty for latest on branch)'
         type: string
         default: ''
+      build_configs:
+        description: 'Which build configurations to compile'
+        type: choice
+        default: 'release and debug'
+        options:
+          - 'release and debug'
+          - 'release only'
+          - 'debug only'
       rebuild_ssq:
         description: 'Force rebuild ssq (ignore cache)'
         type: boolean
@@ -212,7 +224,10 @@ jobs:
             # reshade addon overlay
             "reshade_addon_overlay",
           ]
-        cfg: ["debug", "release"]
+        cfg: ["release", "debug"]
+        exclude:
+          - cfg: ${{ (inputs.build_configs == 'release only') && 'debug' || '' }}
+          - cfg: ${{ (inputs.build_configs == 'debug only') && 'release' || '' }}
 
     steps:
       # on Windows Git will auto change line ending to CRLF, not preferable
@@ -270,7 +285,7 @@ jobs:
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto_only --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --genproto_only --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --os=windows vs2026
 
       - name: "Download proto files artifact (fallback)"
         if: steps.gen_proto_attempt.outcome == 'failure'
@@ -283,7 +298,7 @@ jobs:
         shell: "cmd"
         working-directory: "${{ github.workspace }}"
         run: |
-          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winrsrc --winsign --os=windows vs2026
+          "${{env.THIRD_PARTY_BASE_DIR}}\common\win\premake\premake5.exe" --file=premake5.lua --emubuild=${{ steps.build_ref.outputs.sha }} --emubuilddate=${{ env.EMU_BUILD_DATE }} --dosstub --winsdk=latest --os=windows vs2026
 
       # build target
       - name: "Build x64"
