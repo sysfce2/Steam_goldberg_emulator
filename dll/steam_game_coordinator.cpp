@@ -187,7 +187,11 @@ std::string Steam_Game_Coordinator::build_protomsg_header(uint32 msg_type, JobID
     hdr.m_cubProtoBufExtHdr = static_cast<uint32>(protohdr.ByteSizeLong());
 
     ser_var<ProtoBufMsgHeader_t>(message, hdr);
-    protohdr.AppendToString(&message);
+    size_t msg_len_before = message.size();
+    if (!protohdr.AppendToString(&message)) {
+        PRINT_DEBUG("build_protomsg_header: AppendToString failed, returning empty message");
+        return {};
+    }
 
     return message;
 }
@@ -530,7 +534,12 @@ void Steam_Game_Coordinator::callback_client_welcome()
     CMsgClientWelcome protomsg;
     protomsg.set_version(0);
 
-    protomsg.AppendToString(&message);
+    size_t msg_len_before = message.size();
+    if (!protomsg.AppendToString(&message)) {
+        PRINT_DEBUG("callback_client_welcome: AppendToString failed, message rolled back");
+        message.resize(msg_len_before);
+        return;
+    }
     push_incoming(msg_type, message);
 }
 
@@ -546,7 +555,12 @@ void Steam_Game_Coordinator::callback_server_welcome()
     protomsg.set_min_allowed_version(0);
     protomsg.set_active_version(0);
 
-    protomsg.AppendToString(&message);
+    size_t msg_len_before = message.size();
+    if (!protomsg.AppendToString(&message)) {
+        PRINT_DEBUG("callback_server_welcome: AppendToString failed, message rolled back");
+        message.resize(msg_len_before);
+        return;
+    }
     push_incoming(msg_type, message);
 }
 
@@ -590,7 +604,12 @@ void Steam_Game_Coordinator::callback_items_received(CSteamID steam_id, const st
             objects->add_object_data(item_to_gcprotobuf(item, steam_id));
         }
 
-        protomsg.AppendToString(&message);
+        size_t msg_len_before = message.size();
+        if (!protomsg.AppendToString(&message)) {
+            PRINT_DEBUG("callback_items_received: AppendToString failed, message rolled back");
+            message.resize(msg_len_before);
+            return;
+        }
         push_incoming(msg_type, message);
     }
 }
@@ -613,7 +632,12 @@ void Steam_Game_Coordinator::callback_items_removed(CSteamID steam_id)
         CMsgSOCacheUnsubscribed protomsg;
         protomsg.set_owner(steam_id.ConvertToUint64());
 
-        protomsg.AppendToString(&message);
+        size_t msg_len_before = message.size();
+        if (!protomsg.AppendToString(&message)) {
+            PRINT_DEBUG("callback_items_removed: AppendToString failed, message rolled back");
+            message.resize(msg_len_before);
+            return;
+        }
         push_incoming(msg_type, message);
     }
 }
@@ -654,7 +678,12 @@ void Steam_Game_Coordinator::callback_item_updated(CSteamID steam_id, const Econ
         protomsg.set_type_id(1);
         protomsg.set_object_data(item_to_gcprotobuf(item, steam_id));
 
-        protomsg.AppendToString(&message);
+        size_t msg_len_before = message.size();
+        if (!protomsg.AppendToString(&message)) {
+            PRINT_DEBUG("callback_item_updated: AppendToString failed, message rolled back");
+            message.resize(msg_len_before);
+            return;
+        }
         push_incoming(msg_type, message);
     }
 }
@@ -688,7 +717,12 @@ void Steam_Game_Coordinator::callback_item_deleted(CSteamID steam_id, uint64 ite
         proto_item.set_id(item_id);
         protomsg.set_object_data(proto_item.SerializeAsString());
 
-        protomsg.AppendToString(&message);
+        size_t msg_len_before = message.size();
+        if (!protomsg.AppendToString(&message)) {
+            PRINT_DEBUG("callback_item_deleted: AppendToString failed, message rolled back");
+            message.resize(msg_len_before);
+            return;
+        }
         push_incoming(msg_type, message);
     }
 }

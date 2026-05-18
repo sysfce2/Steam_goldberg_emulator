@@ -450,7 +450,11 @@ static void send_buffer_tcp(struct TCP_Socket &socket, Common_Message *msg)
     uint32 size = static_cast<uint32>(msg->ByteSizeLong()), old_size = static_cast<uint32>(socket.send_buffer.size());
     socket.send_buffer.resize(old_size + sizeof(uint32) + size);
     memcpy(&(socket.send_buffer[old_size]), &size, sizeof(size));
-    msg->SerializeToArray(&(socket.send_buffer[old_size + sizeof(uint32)]), size);
+    if (!msg->SerializeToArray(&(socket.send_buffer[old_size + sizeof(uint32)]), size)) {
+        PRINT_DEBUG("send_buffer_tcp: SerializeToArray failed, dropping message");
+        socket.send_buffer.resize(old_size);
+        return;
+    }
 
     send_tcp_pending(socket);
 }
@@ -741,11 +745,14 @@ bool Networking::handle_announce(Common_Message *msg, IP_PORT ip_port)
 
             size_t size = msg_.ByteSizeLong();
             char *buffer = new char[size];
-            msg_.SerializeToArray(buffer, static_cast<int>(size));
-            IP_PORT ipp;
-            ipp.ip = msg->announce().peers(i).ip();
-            ipp.port = htons(msg->announce().peers(i).udp_port());
-            send_packet_to(udp_socket, ipp, buffer, static_cast<unsigned long>(size));
+            if (!msg_.SerializeToArray(buffer, static_cast<int>(size))) {
+                PRINT_DEBUG("handle_announce: SerializeToArray failed for peer discovery, skipping send");
+            } else {
+                IP_PORT ipp;
+                ipp.ip = msg->announce().peers(i).ip();
+                ipp.port = htons(msg->announce().peers(i).udp_port());
+                send_packet_to(udp_socket, ipp, buffer, static_cast<unsigned long>(size));
+            }
             delete[] buffer;
         }
     }
@@ -756,8 +763,11 @@ bool Networking::handle_announce(Common_Message *msg, IP_PORT ip_port)
         Common_Message msg = create_announce(false);
         size_t size = msg.ByteSizeLong(); 
         char *buffer = new char[size];
-        msg.SerializeToArray(buffer, static_cast<int>(size));
-        send_packet_to(udp_socket, ip_port, buffer, static_cast<unsigned long>(size));
+        if (!msg.SerializeToArray(buffer, static_cast<int>(size))) {
+            PRINT_DEBUG("handle_announce: SerializeToArray failed for PING reply, skipping send");
+        } else {
+            send_packet_to(udp_socket, ip_port, buffer, static_cast<unsigned long>(size));
+        }
         delete[] buffer;
 
         //send ping packet if not pinged
@@ -765,8 +775,11 @@ bool Networking::handle_announce(Common_Message *msg, IP_PORT ip_port)
             Common_Message msg = create_announce(true);
             size_t size = msg.ByteSizeLong(); 
             char *buffer = new char[size];
-            msg.SerializeToArray(buffer, static_cast<int>(size));
-            send_packet_to(udp_socket, ip_port, buffer, static_cast<unsigned long>(size));
+            if (!msg.SerializeToArray(buffer, static_cast<int>(size))) {
+                PRINT_DEBUG("handle_announce: SerializeToArray failed for re-ping, skipping send");
+            } else {
+                send_packet_to(udp_socket, ip_port, buffer, static_cast<unsigned long>(size));
+            }
             delete[] buffer;
         }
     } else if (msg->announce().type() == Announce::PONG) {
@@ -953,7 +966,10 @@ void Networking::send_announce_broadcasts()
 
     size_t size = msg.ByteSizeLong(); 
     std::vector<char> buffer(size);
-    msg.SerializeToArray(&buffer[0], static_cast<int>(size));
+    if (!msg.SerializeToArray(&buffer[0], static_cast<int>(size))) {
+        PRINT_DEBUG("send_announce_broadcasts: SerializeToArray failed, skipping broadcast");
+        return;
+    }
     for (uint16 i = DEFAULT_PORT; i < DEFAULT_PORT + NUM_QUERY_PORTS; i++) {
         send_broadcasts(udp_socket, htons(i), &buffer[0], static_cast<unsigned long>(size), &this->custom_broadcasts);
     }
@@ -1338,9 +1354,12 @@ bool Networking::sendTo(Common_Message *msg, bool reliable, Connection *conn, bo
             }
         } else {
             std::vector<char> buffer(size, 0);
-            msg->SerializeToArray(&buffer[0], static_cast<int>(size));
-            send_packet_to(udp_socket, conn->udp_ip_port, &buffer[0], static_cast<unsigned long>(size));
-            ret = true;
+            if (!msg->SerializeToArray(&buffer[0], static_cast<int>(size))) {
+                PRINT_DEBUG("sendTo: SerializeToArray failed, dropping UDP packet to %" PRIu64 "", (uint64)msg->dest_id());
+            } else {
+                send_packet_to(udp_socket, conn->udp_ip_port, &buffer[0], static_cast<unsigned long>(size));
+                ret = true;
+            }
         }
     }
 
