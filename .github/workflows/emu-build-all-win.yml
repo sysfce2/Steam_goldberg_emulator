@@ -263,7 +263,7 @@ jobs:
       - name: "Set build date"
         shell: "bash"
         run: echo "EMU_BUILD_DATE=$(date +%Y_%m_%d)" >> $GITHUB_ENV
-
+        
       - name: "Generate proto files - *.pb.cc, *.pb.h"
         id: "gen_proto_attempt"
         continue-on-error: true
