@@ -1923,7 +1923,10 @@ static void dump_process_tree()
         FILE* sf = fopen(stat_path, "r");
         if (sf) {
             char stat_buf[4096]{};
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
             (void)fread(stat_buf, 1, sizeof(stat_buf) - 1, sf);
+#pragma GCC diagnostic pop
             fclose(sf);
             // format: pid (comm) state ppid ... field22=starttime
             // find the last ')' to skip comm which may contain spaces/parens
@@ -2545,7 +2548,10 @@ void append_renderer_info()
             fseek(rf, 0, SEEK_SET);
             if (file_size > 0) {
                 std::string content(file_size, '\0');
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
                 (void)fread(&content[0], 1, file_size, rf);
+#pragma GCC diagnostic pop
                 fclose(rf);
 
                 const std::string placeholder = "  Renderers: (pending - detected after init)\n";
