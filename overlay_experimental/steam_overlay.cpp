@@ -5050,10 +5050,13 @@ void Steam_Overlay::render_main_window()
                     auto &a = adapters[ai];
                     // Collapsible header per adapter
                     char header[256];
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
                     if (a.subnet_str[0])
                         snprintf(header, sizeof(header), "%s (%s) - %s", a.name, a.ip_str, a.subnet_str);
                     else
                         snprintf(header, sizeof(header), "%s", a.name);
+#pragma GCC diagnostic pop
 
                     if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
                         if (a.range_str[0]) {
