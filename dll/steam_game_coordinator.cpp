@@ -849,12 +849,12 @@ const std::vector<Econ_Item> &Steam_Game_Coordinator::load_items_from_file()
             new_item.quality = static_cast<EItemQuality>(it->value("quality", 0));
             new_item.inv_pos = it->value("inventory_pos", 0u);
             new_item.quantity = it->value("quantity", 1u);
-            new_item.flags = it->value("flags", 0u);
-            new_item.origin = it->value("origin", 0u);
+            new_item.flags = static_cast<uint8>(it->value("flags", 0u));
+            new_item.origin = static_cast<uint8>(it->value("origin", 0u));
             new_item.custom_name = it->value("custom_name", std::string());
             new_item.custom_desc = it->value("custom_desc", std::string());
             new_item.original_id = it->value("original_id", 0ull);
-            new_item.style = it->value("style", 0u);
+            new_item.style = static_cast<uint8>(it->value("style", 0u));
             new_item.in_use = false;
 
             if (it->contains("equip_states")) {
