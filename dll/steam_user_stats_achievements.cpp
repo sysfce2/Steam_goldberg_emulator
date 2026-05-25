@@ -341,10 +341,13 @@ void Steam_User_Stats::write_ugs_bin()
     vdf.push_back(0x02); write_cstr("PendingChanges"); write_u32(0);
 
     for (const auto &[gid_int, gid_str] : sorted_groups) {
-        vdf.push_back(0x00); write_cstr(gid_str);       // TYPE_SUBKEY gid {
         if (ach_group_ids.count(gid_str)) {
+            // Compute bitmask first; skip the whole group if nothing is earned (matches Steam behaviour)
             uint32_t bitmask = 0;
             for (const auto &[bit, _ts] : ach_groups[gid_str]) bitmask |= (1u << bit);
+            if (bitmask == 0) continue;
+
+            vdf.push_back(0x00); write_cstr(gid_str);       // TYPE_SUBKEY gid {
             vdf.push_back(0x02); write_cstr("data"); write_u32(bitmask);
             vdf.push_back(0x00); write_cstr("AchievementTimes"); // TYPE_SUBKEY "AchievementTimes" {
             for (const auto &[bit, ts] : ach_groups[gid_str]) {
@@ -353,6 +356,9 @@ void Steam_User_Stats::write_ugs_bin()
             vdf.push_back(0x08); // } end AchievementTimes
         } else {
             const uint32_t raw = stat_groups.count(gid_str) ? stat_groups[gid_str] : 0u;
+            if (raw == 0) continue; // skip zero stat groups (matches Steam behaviour)
+
+            vdf.push_back(0x00); write_cstr(gid_str);       // TYPE_SUBKEY gid {
             vdf.push_back(0x02); write_cstr("data"); write_u32(raw);
         }
         vdf.push_back(0x08); // } end group
