@@ -1103,21 +1103,11 @@ static void try_gen_settings_from_schema_bin(class Settings *settings_client, cl
                 const auto &disp = (bval.contains("display") && bval["display"].is_object())
                                    ? bval["display"] : empty_obj;
 
-                // displayName / description: may be a plain string or a language map {"english": ...}
-                // Resolve to a plain string (prefer "english", fall back to first entry)
-                auto extract_localized = [](const nlohmann::json &v) -> std::string {
-                    if (v.is_string()) return v.get<std::string>();
-                    if (v.is_object()) {
-                        if (v.contains("english") && v["english"].is_string())
-                            return v["english"].get<std::string>();
-                        for (const auto &[_lang, text] : v.items()) {
-                            if (text.is_string()) return text.get<std::string>();
-                        }
-                    }
-                    return "";
-                };
-                const std::string display_name = extract_localized(disp.contains("name") ? disp["name"] : nlohmann::json(""));
-                const std::string description  = extract_localized(disp.contains("desc") ? disp["desc"] : nlohmann::json(""));
+                // displayName / description: preserve the full language map if present, or plain string
+                nlohmann::json display_name = disp.contains("name") ? disp["name"] : nlohmann::json(std::string{});
+                nlohmann::json description  = disp.contains("desc") ? disp["desc"] : nlohmann::json(std::string{});
+                if (!display_name.is_string() && !display_name.is_object()) display_name = std::string{};
+                if (!description.is_string()  && !description.is_object())  description  = std::string{};
 
                 int hidden = 0;
                 if (disp.contains("hidden")) {
@@ -1129,12 +1119,15 @@ static void try_gen_settings_from_schema_bin(class Settings *settings_client, cl
                 std::string icon      = disp.value("icon",      std::string{});
                 std::string icon_gray = disp.value("icon_gray", std::string{});
                 if (icon_gray.empty()) icon_gray = disp.value("icongray", std::string{});
+                // Prefix icon paths with "img/" to match expected format
+                if (!icon.empty()      && icon.rfind("img/", 0)      != 0) icon      = "img/" + icon;
+                if (!icon_gray.empty() && icon_gray.rfind("img/", 0) != 0) icon_gray = "img/" + icon_gray;
 
                 nlohmann::json ach_entry = {
                     {"name",        api_name},
                     {"displayName", display_name},
                     {"description", description},
-                    {"hidden",      std::to_string(hidden)},
+                    {"hidden",      hidden},
                     {"icon",        icon},
                     {"icon_gray",   icon_gray},
                     {"_group",      gid},
@@ -1169,10 +1162,16 @@ static void try_gen_settings_from_schema_bin(class Settings *settings_client, cl
                            [](unsigned char c){ return (unsigned char)std::tolower(c); });
             if (stat_type != "int" && stat_type != "float" && stat_type != "avgrate") continue;
 
-            const std::string default_val = gval.contains("default")
+            const std::string default_val_raw = gval.contains("default")
                                             ? json_val_to_str(gval["default"])
                                             : "0";
-            stats_arr.push_back({{"name", stat_name}, {"type", stat_type}, {"default", default_val}, {"_group", gid}});
+            // Ensure float/avgrate defaults use decimal notation ("0" -> "0.0", "5" -> "5.0")
+            std::string default_val = default_val_raw;
+            if ((stat_type == "float" || stat_type == "avgrate") && default_val.find('.') == std::string::npos) {
+                default_val += ".0";
+            }
+            const std::string global_val = default_val; // no real global data available; mirror default
+            stats_arr.push_back({{"name", stat_name}, {"type", stat_type}, {"default", default_val}, {"global", global_val}, {"_group", gid}});
         }
     }
 
