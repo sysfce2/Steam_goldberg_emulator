@@ -167,6 +167,58 @@ ugs_parse_ach_times(const uint8_t *d, size_t n)
 }
 
 
+// Per-group extra metadata extracted from a UserGameStats .bin: state and pendingbits.
+// Only populated for groups where a "state" field was actually present in the original bin.
+struct UgsGroupExtra {
+    uint32_t state{2};        // 2 = k_EUserGameStateSyncStatus_Synced
+    uint32_t pendingbits{0};  // bitmask of ach bits pending upload to Steam backend
+};
+// Extracts per-group UgsGroupExtra fields and the root PendingChanges value from a UGS .bin.
+// Returns { root_PendingChanges, { group_id_str -> UgsGroupExtra } }.
+// Only groups that actually contain a "state" field are included in the returned map.
+static std::pair<uint32_t, std::unordered_map<std::string, UgsGroupExtra>>
+ugs_parse_extra(const uint8_t *d, size_t n)
+{
+    uint32_t root_pending = 0;
+    std::unordered_map<std::string, UgsGroupExtra> out;
+    size_t p = 0;
+    std::string key;
+    if (p >= n || d[p++] != 0x00) return {root_pending, out};
+    if (!ugs_vdf_cstr(d, n, p, key) || key != "cache") return {root_pending, out};
+    while (p < n) {
+        uint8_t t = d[p++];
+        if (t == 0x08) break;
+        std::string gid;
+        if (!ugs_vdf_cstr(d, n, p, gid)) break;
+        if (t != 0x00) {
+            if (t == 0x02) {
+                if (p + 4 > n) return {root_pending, out};
+                uint32_t val; memcpy(&val, d + p, 4); p += 4;
+                if (gid == "PendingChanges") root_pending = val;
+            } else { ugs_vdf_skip(d, n, p, t); }
+            continue;
+        }
+        // group subkey — scan for "state" and "pendingbits"
+        UgsGroupExtra extra; bool has_state = false;
+        while (p < n) {
+            uint8_t t2 = d[p++];
+            if (t2 == 0x08) break;
+            std::string k;
+            if (!ugs_vdf_cstr(d, n, p, k)) return {root_pending, out};
+            if (t2 == 0x02 && k == "state") {
+                if (p + 4 > n) return {root_pending, out};
+                memcpy(&extra.state, d + p, 4); p += 4; has_state = true;
+            } else if (t2 == 0x02 && k == "pendingbits") {
+                if (p + 4 > n) return {root_pending, out};
+                memcpy(&extra.pendingbits, d + p, 4); p += 4;
+            } else if (!ugs_vdf_skip(d, n, p, t2)) return {root_pending, out};
+        }
+        if (has_state) out[gid] = extra;
+    }
+    return {root_pending, out};
+}
+
+
 void Steam_User_Stats::load_achievements_db()
 {
     std::string file_path = Local_Storage::get_game_settings_path() + achievements_user_file;
@@ -201,6 +253,10 @@ void Steam_User_Stats::load_achievements_db()
     // Load stat group data from the UGS bin (primary store for stats).
     // GetStat will probe this cache first, then fall back to individual stats/<name> files.
     ugs_stat_cache.clear();
+    ugs_group_state.clear();
+    ugs_group_pendingbits.clear();
+    ugs_root_pending_changes = 0;
+    ugs_orig_crc = 0;
     {
         const uint32_t appid = settings->get_local_game_id().AppID();
         const uint32_t sid3  = settings->get_local_steam_id().GetAccountID();
@@ -209,8 +265,16 @@ void Steam_User_Stats::load_achievements_db()
         if (ugs_sz > 0) {
             std::vector<uint8_t> buf(ugs_sz);
             if (local_storage->get_data("", ugs_file, reinterpret_cast<char*>(buf.data()), ugs_sz) == (int)ugs_sz) {
-                ugs_stat_cache     = ugs_parse_groups(buf.data(), buf.size());
+                ugs_stat_cache      = ugs_parse_groups(buf.data(), buf.size());
                 ugs_ach_times_cache = ugs_parse_ach_times(buf.data(), buf.size());
+                // CRC is stored at a fixed offset: \x00cache\x00 \x02crc\x00 [4 bytes] = offset 12
+                if (buf.size() >= 16) memcpy(&ugs_orig_crc, buf.data() + 12, 4);
+                auto [pending, extras] = ugs_parse_extra(buf.data(), buf.size());
+                ugs_root_pending_changes = pending;
+                for (const auto &[gid, ex] : extras) {
+                    ugs_group_state[gid]       = ex.state;
+                    ugs_group_pendingbits[gid] = ex.pendingbits;
+                }
                 PRINT_DEBUG("load_achievements_db: loaded %zu groups from UGS bin", ugs_stat_cache.size());
             }
         }
@@ -316,9 +380,14 @@ void Steam_User_Stats::save_achievements()
         for (const auto *ach_def : sorted_defs) {
             const std::string name = ach_def->value("name", std::string{});
             if (name.empty()) continue;
-            complete[name] = user_achievements.contains(name)
+            nlohmann::json entry = user_achievements.contains(name)
                 ? user_achievements[name]
                 : nlohmann::json{{"earned", false}, {"earned_time", 0}};
+            const std::string grp = ach_def->value("_group", std::string{});
+            const std::string bit = ach_def->value("_bit",   std::string{});
+            if (!grp.empty()) entry["_group"] = grp;
+            if (!bit.empty()) entry["_bit"]   = bit;
+            complete[name] = std::move(entry);
         }
         local_storage->write_json_file("", achievements_user_file, complete);
     }
@@ -348,6 +417,9 @@ void Steam_User_Stats::write_user_stats_json()
         if (cfg_it == stats_config.end()) continue;
         const auto &cfg = cfg_it->second;
 
+        std::string gid_str;
+        { auto git = stat_name_to_gid.find(stat_name); if (git != stat_name_to_gid.end()) gid_str = git->second; }
+
         if (cfg.type == StatInfo::STAT_TYPE_INT) {
             auto ci = stats_cache_int.find(stat_name);
             int32 val = (ci != stats_cache_int.end()) ? ci->second : cfg.default_value_int;
@@ -370,6 +442,7 @@ void Steam_User_Stats::write_user_stats_json()
             arr.push_back({{"name", stat_name}, {"type", "avgrate"}, {"value", val},
                            {"count", count}, {"sessionlength", seslen}});
         }
+        if (!gid_str.empty() && !arr.empty()) arr.back()["_group"] = gid_str;
     }
 
     local_storage->write_json_file("", "stats.json", arr);
@@ -439,7 +512,20 @@ void Steam_User_Stats::write_ugs_bin()
     for (const auto &[g, _] : ach_groups)  { try { sorted_groups[std::stoi(g)] = g; } catch (...) {} }
     for (const auto &[g, _] : stat_groups) { try { sorted_groups[std::stoi(g)] = g; } catch (...) {} }
 
-    // --- 4. Serialise to binary VDF ---
+    // --- 4. Pre-compute PendingChanges (count of all groups with any data to sync) ---
+    uint32_t pending_changes = 0;
+    for (const auto &[gid_int, gid_str] : sorted_groups) {
+        if (ach_group_ids.count(gid_str)) {
+            uint32_t bitmask = 0;
+            for (const auto &[bit, _ts] : ach_groups.at(gid_str)) bitmask |= (1u << bit);
+            if (bitmask != 0) ++pending_changes;
+        } else {
+            const uint32_t raw = stat_groups.count(gid_str) ? stat_groups.at(gid_str) : 0u;
+            if (raw != 0) ++pending_changes;
+        }
+    }
+
+    // --- 5. Serialise to binary VDF ---
     // Format mirrors Python _write_vdf_root("cache", cache_dict):
     //   0x00 "cache\0" [entries...] 0x08  [outer 0x08]
     std::vector<uint8_t> vdf;
@@ -457,8 +543,10 @@ void Steam_User_Stats::write_ugs_bin()
     };
 
     vdf.push_back(0x00); write_cstr("cache");           // TYPE_SUBKEY "cache" {
-    vdf.push_back(0x02); write_cstr("crc");            write_u32(0);
-    vdf.push_back(0x02); write_cstr("PendingChanges"); write_u32(0);
+    // Carry forward the original CRC (if any). Steam uses it for cloud-sync change detection:
+    // valid CRC -> no re-upload needed; stale/zero CRC -> Steam re-uploads the data.
+    vdf.push_back(0x02); write_cstr("crc");            write_u32(ugs_orig_crc);
+    vdf.push_back(0x02); write_cstr("PendingChanges"); write_u32(pending_changes);
 
     for (const auto &[gid_int, gid_str] : sorted_groups) {
         if (ach_group_ids.count(gid_str)) {
@@ -467,8 +555,12 @@ void Steam_User_Stats::write_ugs_bin()
             for (const auto &[bit, _ts] : ach_groups[gid_str]) bitmask |= (1u << bit);
             if (bitmask == 0) continue;
 
+            // pendingbits = all unlocked bits so Steam always re-uploads all achievements with
+            // their timestamps, regardless of what was previously in the bin.
+            // state intentionally omitted: absent state = "not yet synced" -> Steam will upload.
             vdf.push_back(0x00); write_cstr(gid_str);       // TYPE_SUBKEY gid {
             vdf.push_back(0x02); write_cstr("data"); write_u32(bitmask);
+            vdf.push_back(0x02); write_cstr("pendingbits"); write_u32(bitmask);
             vdf.push_back(0x00); write_cstr("AchievementTimes"); // TYPE_SUBKEY "AchievementTimes" {
             for (const auto &[bit, ts] : ach_groups[gid_str]) {
                 vdf.push_back(0x02); write_cstr(std::to_string(bit)); write_u32(ts);
@@ -478,6 +570,7 @@ void Steam_User_Stats::write_ugs_bin()
             const uint32_t raw = stat_groups.count(gid_str) ? stat_groups[gid_str] : 0u;
             if (raw == 0) continue; // skip zero stat groups (matches Steam behaviour)
 
+            // state intentionally omitted: absent state = "not yet synced" -> Steam will re-upload.
             vdf.push_back(0x00); write_cstr(gid_str);       // TYPE_SUBKEY gid {
             vdf.push_back(0x02); write_cstr("data"); write_u32(raw);
         }
@@ -487,7 +580,7 @@ void Steam_User_Stats::write_ugs_bin()
     vdf.push_back(0x08); // } end "cache" dict
     vdf.push_back(0x08); // outer TYPE_END
 
-    // --- 5. Write to <save_dir>/<appid>/UserGameStats_<sid3>_<appid>.bin ---
+    // --- 6. Write to <save_dir>/<appid>/UserGameStats_<sid3>_<appid>.bin ---
     const uint32_t appid = settings->get_local_game_id().AppID();
     const uint32_t sid3  = settings->get_local_steam_id().GetAccountID();
     const std::string filename = "UserGameStats_" + std::to_string(sid3) + "_" + std::to_string(appid) + ".bin";
