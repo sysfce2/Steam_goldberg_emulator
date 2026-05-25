@@ -1175,6 +1175,22 @@ static void try_gen_settings_from_schema_bin(class Settings *settings_client, cl
         }
     }
 
+    // Sort stats by integer group ID (schema binary gives string-lexicographic order: 1,10,100…)
+    std::sort(stats_arr.begin(), stats_arr.end(), [](const nlohmann::json &a, const nlohmann::json &b) {
+        try { return std::stoi(a.value("_group", "0")) < std::stoi(b.value("_group", "0")); }
+        catch (...) { return false; }
+    });
+
+    // Sort achievements by integer group ID then bit position
+    std::sort(achievements_arr.begin(), achievements_arr.end(), [](const nlohmann::json &a, const nlohmann::json &b) {
+        int ga = 0, gb = 0, ba = 0, bb = 0;
+        try { ga = std::stoi(a.value("_group", "0")); } catch (...) {}
+        try { gb = std::stoi(b.value("_group", "0")); } catch (...) {}
+        try { ba = std::stoi(a.value("_bit",   "0")); } catch (...) {}
+        try { bb = std::stoi(b.value("_bit",   "0")); } catch (...) {}
+        return ga != gb ? ga < gb : ba < bb;
+    });
+
     // Always populate the in-memory cache so load_achievements_db() and parse_stats()
     // can use it as a fallback when the JSON files are absent or intentionally not written.
     settings_client->schema_achievements_json_str = achievements_arr.dump();
@@ -2132,6 +2148,8 @@ static void parse_stats_features(class Settings *settings_client, class Settings
 
     settings_client->no_write_user_achievements_json = ini.GetBoolValue("main::stats", "no_write_user_achievements_json", settings_client->no_write_user_achievements_json);
     settings_server->no_write_user_achievements_json = ini.GetBoolValue("main::stats", "no_write_user_achievements_json", settings_server->no_write_user_achievements_json);
+    settings_client->no_write_user_stats_json = ini.GetBoolValue("main::stats", "no_write_user_stats_json", settings_client->no_write_user_stats_json);
+    settings_server->no_write_user_stats_json = ini.GetBoolValue("main::stats", "no_write_user_stats_json", settings_server->no_write_user_stats_json);
 
     settings_client->no_write_user_stats_files = ini.GetBoolValue("main::stats", "no_write_user_stats_files", settings_client->no_write_user_stats_files);
     settings_server->no_write_user_stats_files = ini.GetBoolValue("main::stats", "no_write_user_stats_files", settings_server->no_write_user_stats_files);

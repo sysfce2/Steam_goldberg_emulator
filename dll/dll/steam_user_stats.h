@@ -110,6 +110,9 @@ private:
 
     std::map<std::string, int32> stats_cache_int{};
     std::map<std::string, float> stats_cache_float{};
+    // avgrate accumulator: persisted in stats.json alongside the average value
+    std::unordered_map<std::string, float>  avgrate_count_cache{};          // running flCountThisSession sum
+    std::unordered_map<std::string, double> avgrate_sessionlength_cache{};  // running dSessionLength sum
 
     std::map<std::string, std::vector<achievement_trigger>> achievement_stat_trigger{};
     
@@ -124,8 +127,10 @@ private:
 
     void load_achievements_db();
     void load_achievements();
+    void load_user_stats_json();
     void save_achievements();
     void write_ugs_bin();
+    void write_user_stats_json();
 
     int load_ach_icon(nlohmann::json &defined_ach, bool achieved);
 

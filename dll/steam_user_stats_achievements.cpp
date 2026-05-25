@@ -246,14 +246,134 @@ void Steam_User_Stats::load_achievements()
             PRINT_DEBUG("load_achievements: reconstructed %zu earned achievements from UGS bin", user_achievements.size());
         }
     }
+
+    // Populate stats cache from user_stats.json for stats not already covered by the UGS bin.
+    // This allows individual stats/<name> files to be omitted (int/float types no longer write them).
+    load_user_stats_json();
+}
+
+void Steam_User_Stats::load_user_stats_json()
+{
+    // Load stats.json into stats_cache as a fallback for stats not present in the UGS bin.
+    // All stat types (int, float, avgrate) are persisted here; no individual stats/<name> files are written.
+    nlohmann::json arr;
+    if (!local_storage->load_json_file("", "stats.json", arr) || !arr.is_array()) return;
+
+    size_t loaded = 0;
+    for (const auto &entry : arr) {
+        if (!entry.is_object()) continue;
+        const std::string name = entry.value("name", std::string{});
+        const std::string type = entry.value("type", std::string{});
+        if (name.empty() || !entry.contains("value")) continue;
+
+        // UGS bin takes priority: skip if this stat is already covered by ugs_stat_cache
+        auto gid_it = stat_name_to_gid.find(name);
+        if (gid_it != stat_name_to_gid.end() && ugs_stat_cache.count(gid_it->second)) continue;
+
+        try {
+            if (type == "int") {
+                if (!stats_cache_int.count(name)) {
+                    stats_cache_int[name] = entry["value"].get<int32_t>();
+                    ++loaded;
+                }
+            } else if (type == "float") {
+                if (!stats_cache_float.count(name)) {
+                    stats_cache_float[name] = entry["value"].get<float>();
+                    ++loaded;
+                }
+            } else if (type == "avgrate") {
+                if (!stats_cache_float.count(name)) {
+                    stats_cache_float[name] = entry["value"].get<float>();
+                    ++loaded;
+                }
+                // Always restore the accumulator so UpdateAvgRateStat can continue correctly
+                avgrate_count_cache[name]         = entry.value("count",         0.0f);
+                avgrate_sessionlength_cache[name] = entry.value("sessionlength", 0.0);
+            }
+        } catch (...) {}
+    }
+    if (loaded) PRINT_DEBUG("load_user_stats_json: loaded %zu stat values into cache", loaded);
 }
 
 void Steam_User_Stats::save_achievements()
 {
     if (!settings->no_write_user_achievements_json) {
-        local_storage->write_json_file("", achievements_user_file, user_achievements);
+        // Build a complete manifest sorted by (_group int, _bit int) — matches binary VDF order.
+        // Unstarted achievements get {"earned": false, "earned_time": 0}.
+        std::vector<const nlohmann::json *> sorted_defs;
+        sorted_defs.reserve(defined_achievements.size());
+        for (const auto &ach : defined_achievements)
+            if (ach.is_object()) sorted_defs.push_back(&ach);
+        std::sort(sorted_defs.begin(), sorted_defs.end(), [](const nlohmann::json *a, const nlohmann::json *b) {
+            int ga = 0, gb = 0, ba = 0, bb = 0;
+            try { ga = std::stoi(a->value("_group", "0")); } catch (...) {}
+            try { gb = std::stoi(b->value("_group", "0")); } catch (...) {}
+            try { ba = std::stoi(a->value("_bit",   "0")); } catch (...) {}
+            try { bb = std::stoi(b->value("_bit",   "0")); } catch (...) {}
+            return ga != gb ? ga < gb : ba < bb;
+        });
+        nlohmann::json complete = nlohmann::json::object();
+        for (const auto *ach_def : sorted_defs) {
+            const std::string name = ach_def->value("name", std::string{});
+            if (name.empty()) continue;
+            complete[name] = user_achievements.contains(name)
+                ? user_achievements[name]
+                : nlohmann::json{{"earned", false}, {"earned_time", 0}};
+        }
+        local_storage->write_json_file("", achievements_user_file, complete);
     }
     write_ugs_bin();
+    write_user_stats_json();
+}
+
+void Steam_User_Stats::write_user_stats_json()
+{
+    if (settings->no_write_user_stats_json) return;
+
+    const auto &stats_config = settings->getStats();
+    if (stats_config.empty()) return;
+
+    // Build a group-id -> stat-name map so we can output in ascending group order
+    std::map<int, std::string> by_group; // int group -> stat API name (lower)
+    for (const auto &[name, _] : stats_config) {
+        auto git = stat_name_to_gid.find(name);
+        int gid = 0;
+        if (git != stat_name_to_gid.end()) { try { gid = std::stoi(git->second); } catch (...) {} }
+        by_group.emplace(gid, name); // stoi collision: two stats same group unlikely
+    }
+
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto &[gid, stat_name] : by_group) {
+        auto cfg_it = stats_config.find(stat_name);
+        if (cfg_it == stats_config.end()) continue;
+        const auto &cfg = cfg_it->second;
+
+        if (cfg.type == StatInfo::STAT_TYPE_INT) {
+            auto ci = stats_cache_int.find(stat_name);
+            int32 val = (ci != stats_cache_int.end()) ? ci->second : cfg.default_value_int;
+            arr.push_back({{"name", stat_name}, {"type", "int"}, {"value", val}});
+
+        } else if (cfg.type == StatInfo::STAT_TYPE_FLOAT) {
+            auto cf = stats_cache_float.find(stat_name);
+            float val = (cf != stats_cache_float.end()) ? cf->second : cfg.default_value_float;
+            arr.push_back({{"name", stat_name}, {"type", "float"}, {"value", val}});
+
+        } else if (cfg.type == StatInfo::STAT_TYPE_AVGRATE) {
+            auto cf  = stats_cache_float.find(stat_name);
+            float val = (cf != stats_cache_float.end()) ? cf->second : cfg.default_value_float;
+            float  count  = 0.0f;
+            double seslen = 0.0;
+            auto it_c = avgrate_count_cache.find(stat_name);
+            if (it_c != avgrate_count_cache.end()) count = it_c->second;
+            auto it_s = avgrate_sessionlength_cache.find(stat_name);
+            if (it_s != avgrate_sessionlength_cache.end()) seslen = it_s->second;
+            arr.push_back({{"name", stat_name}, {"type", "avgrate"}, {"value", val},
+                           {"count", count}, {"sessionlength", seslen}});
+        }
+    }
+
+    local_storage->write_json_file("", "stats.json", arr);
+    PRINT_DEBUG("write_user_stats_json: wrote %zu entries", arr.size());
 }
 
 void Steam_User_Stats::write_ugs_bin()

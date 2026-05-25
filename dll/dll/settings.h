@@ -358,7 +358,8 @@ public:
     bool no_write_schema_stats_json = false;        // don't write steam_settings/stats.json
     // write control: skip writing user save-state files (UGS bin is used as primary store)
     bool no_write_user_achievements_json = false;   // don't write save/achievements.json
-    bool no_write_user_stats_files = false;         // don't write save/stats/<name> files
+    bool no_write_user_stats_json = false;          // don't write save/user_stats.json
+    bool no_write_user_stats_files = false;         // legacy: no longer writes any individual files; kept for compatibility
 
     // schema data cache: populated when schema bin is parsed; used as fallback when JSON files are absent
     std::string schema_achievements_json_str{}; // raw JSON string of parsed achievements schema
