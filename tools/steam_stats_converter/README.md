@@ -34,46 +34,61 @@ Stat groups store the raw int32/float32 value in `data`.
 
 ---
 
-## Usage
+## Quick start
 
-### 1 — Inspect a schema file
-
-```
-python steam_stats_converter.py dump-schema --appid 1234
-# or
-python steam_stats_converter.py dump-schema --schema UserGameStatsSchema_1234.bin
+**Windows** — double-click or call from a terminal:
+```bat
+run.bat --appid 1234 --st2gse
+run.bat --appid 1234 --gse2st
 ```
 
-Lists every achievement API name and stat name with their group/bit positions.
+**Linux / macOS**:
+```bash
+./run.sh --appid 1234 --st2gse
+./run.sh --appid 1234 --gse2st
+```
+
+Both scripts are thin wrappers that forward all arguments to
+`steam_stats_converter.py`. Run with `--help` for the full option list.
 
 ---
 
-### 2 — Steam → GSE  (`steam2gse`)
+## Usage
+
+### 1 — Inspect your progress
+
+```
+python steam_stats_converter.py --appid 1234 --info
+```
+
+Lists every achievement (earned/total) and every stat value for appid 1234,
+read directly from your Steam installation.
+
+---
+
+### 2 — Steam → GSE  (`--st2gse`)
 
 Reads the Steam Schema + UserGameStats files and writes GSE-compatible save files.
 
 ```bash
 # Fully automatic (auto-detects your Steam installation and SteamID):
-python steam_stats_converter.py steam2gse --appid 1234 --out-dir ./gse_save
+python steam_stats_converter.py --appid 1234 --st2gse --out-dir ./gse_save
 
-# With explicit paths:
-python steam_stats_converter.py steam2gse \
-    --schema  "C:\Steam\appcache\stats\UserGameStatsSchema_1234.bin" \
-    --ugs     "C:\Steam\appcache\stats\UserGameStats_76561198012345678_1234.bin" \
-    --out-dir ./gse_save
+# Explicit SteamID:
+python steam_stats_converter.py --appid 1234 --st2gse --steamid 76561198012345678
+
+# Custom output directory:
+python steam_stats_converter.py --appid 1234 --st2gse --out-dir "D:\saves\1234"
 ```
 
 **Output:**
 ```
-gse_save/
-  achievements.json     <- GSE user achievements (earned + timestamps)
-  stats/
-    stat_name_1         <- 4-byte little-endian int32 or float32
-    stat_name_2
-    ...
+gse_save/1234/
+  achievements.json     <- GSE user achievements (earned + timestamps + _group/_bit)
+  stats.json            <- GSE user stats (values + _group metadata)
 ```
 
-Place `achievements.json` and `stats/` into:
+Place these files into:
 ```
 <GSE save folder>/<appid>/
 ```
@@ -84,34 +99,33 @@ The default GSE save folder on Windows is:
 
 ---
 
-### 3 — GSE → Steam  (`gse2steam`)
+### 3 — GSE → Steam  (`--gse2st`)
 
-Reads GSE save files and writes a Steam `UserGameStats_<steamid>_<appid>.bin`.
+Reads GSE save files and writes a Steam `UserGameStats_<steamid3>_<appid>.bin`.
 
 ```bash
-# Automatic SteamID detection:
-python steam_stats_converter.py gse2steam \
-    --appid     1234 \
-    --ach-json  ./gse_save/achievements.json \
-    --stats-dir ./gse_save/stats
+# Automatic SteamID + auto-detect GSE save dir:
+python steam_stats_converter.py --appid 1234 --gse2st
 
-# Explicit SteamID:
-python steam_stats_converter.py gse2steam \
-    --appid     1234 \
-    --steamid   76561198012345678 \
-    --ach-json  ./gse_save/achievements.json \
-    --stats-dir ./gse_save/stats \
-    --out       UserGameStats_76561198012345678_1234.bin
+# Explicit GSE save directory:
+python steam_stats_converter.py --appid 1234 --gse2st --gse-dir "D:\saves\1234"
+
+# Explicit SteamID and output path:
+python steam_stats_converter.py --appid 1234 --gse2st \
+    --steamid 76561198012345678 \
+    --out UserGameStats_12345678_1234.bin
 ```
 
 **Output:** A `.bin` file ready to be placed in:
 ```
-<Steam root>/appcache/stats/UserGameStats_<steamid>_<appid>.bin
+<Steam root>/appcache/stats/UserGameStats_<steamid3>_<appid>.bin
 ```
 
-> **Note:** The CRC field in the output is set to 0. Steam recomputes and
-> overwrites it on the next sync. All achievement and stat data is fully
-> preserved.
+> **Note:** The output carries forward the original CRC from the Steam bin if
+> one is present; otherwise CRC is set to 0.  Steam recomputes and overwrites
+> it on the next sync regardless.  All achievement and stat data is fully
+> preserved, and all groups are marked as pending upload so Steam re-syncs
+> everything on the next launch.
 
 ---
 
@@ -119,10 +133,16 @@ python steam_stats_converter.py gse2steam \
 
 | Flag | Description |
 |------|-------------|
-| `--schema` | Explicit path to `UserGameStatsSchema_<appid>.bin` |
-| `--appid` | App ID — used for auto-detection of schema/UGS files |
+| `--appid` | Steam App ID (required) |
+| `--st2gse` | Convert Steam binary → GSE save files |
+| `--gse2st` | Convert GSE save files → Steam binary |
+| `--info` | Show schema + your current progress/stats |
 | `--steamid` | 64-bit SteamID or `auto` (default) |
-| `--verbose` | Print every achievement/stat as it is converted |
+| `--out-dir` | Output directory for `--st2gse` (default: `gse_save/<appid>`) |
+| `--gse-dir` | GSE save directory for `--gse2st` (default: auto-detect) |
+| `--out` | Output `.bin` path for `--gse2st` |
+| `--lang` | Language for achievement names in `--info` (default: `english`) |
+| `-v` / `--verbose` | Print every achievement/stat as it is processed |
 
 ---
 
@@ -150,6 +170,8 @@ User data:   <Steam root>\appcache\stats\UserGameStats_<steamid3>_<appid>.bin
 
 ## Round-trip accuracy
 
-Tested on multiple games — the output binary is **byte-for-byte identical** to
-the original Steam file, except for the 4-byte CRC field (offsets 12–15 in the
-`cache` root), which Steam recomputes on next sync.
+Tested on multiple games — every achievement and stat value in the converted
+output matches the original Steam file exactly.  Fields that intentionally
+differ (`crc`, `PendingChanges`, `pendingbits`, `state`) are sync-control
+metadata that Steam overwrites on the next launch, so they do not affect data
+integrity.
