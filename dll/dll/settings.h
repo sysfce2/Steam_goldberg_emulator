@@ -353,6 +353,17 @@ public:
     // cache TTL for Steam global achievement percentages and SteamHunters data (seconds, default 1 day)
     uint32 achievements_cache_ttl = 86400;
 
+    // write control: skip generating steam_settings JSON files from schema bin
+    bool no_write_schema_achievements_json = false; // don't write steam_settings/achievements.json
+    bool no_write_schema_stats_json = false;        // don't write steam_settings/stats.json
+    // write control: skip writing user save-state files (UGS bin is used as primary store)
+    bool no_write_user_achievements_json = false;   // don't write save/achievements.json
+    bool no_write_user_stats_files = false;         // don't write save/stats/<name> files
+
+    // schema data cache: populated when schema bin is parsed; used as fallback when JSON files are absent
+    std::string schema_achievements_json_str{}; // raw JSON string of parsed achievements schema
+    std::string schema_stats_json_str{};        // raw JSON string of parsed stats schema
+
     // whether to record playtime
     bool record_playtime = false;
 

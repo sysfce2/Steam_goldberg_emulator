@@ -135,6 +135,14 @@ Steam_User_Stats::InternalSetResult<int32> Steam_User_Stats::set_stat_internal( 
         }
     }
 
+    if (settings->no_write_user_stats_files) {
+        // UGS bin is the primary store; skip writing individual stats files
+        stats_cache_int[stat_name] = nData;
+        result.success = true;
+        result.notify_server = !settings->disable_sharing_stats_with_gameserver;
+        return result;
+    }
+
     if (local_storage->store_data(Local_Storage::stats_storage_folder, stat_name, (char* )&nData, sizeof(nData)) == sizeof(nData)) {
         stats_cache_int[stat_name] = nData;
         result.success = true;
@@ -207,6 +215,14 @@ Steam_User_Stats::InternalSetResult<std::pair<StatInfo::Stat_Type, float>> Steam
                 }
             }
         }
+    }
+
+    if (settings->no_write_user_stats_files) {
+        // UGS bin is the primary store; skip writing individual stats files
+        stats_cache_float[stat_name] = fData;
+        result.success = true;
+        result.notify_server = !settings->disable_sharing_stats_with_gameserver;
+        return result;
     }
 
     if (local_storage->store_data(Local_Storage::stats_storage_folder, stat_name, (char* )&fData, sizeof(fData)) == sizeof(fData)) {
@@ -345,6 +361,21 @@ bool Steam_User_Stats::GetStat( const char *pchName, int32 *pData )
         return true;
     }
 
+    // Try UGS bin (primary store) — loaded at startup from UserGameStats_*.bin
+    {
+        auto gid_it = stat_name_to_gid.find(stat_name);
+        if (gid_it != stat_name_to_gid.end()) {
+            auto ugs_it = ugs_stat_cache.find(gid_it->second);
+            if (ugs_it != ugs_stat_cache.end()) {
+                const int32 val = static_cast<int32>(ugs_it->second);
+                stats_cache_int[stat_name] = val;
+                if (pData) *pData = val;
+                return true;
+            }
+        }
+    }
+
+    // Fallback: individual stats/<stat_name> file (compatibility with older tools)
     int32 output = 0;
     int read_data = local_storage->get_data(Local_Storage::stats_storage_folder, stat_name, (char* )&output, sizeof(output));
     if (read_data == sizeof(int32)) {
@@ -384,6 +415,23 @@ bool Steam_User_Stats::GetStat( const char *pchName, float *pData )
         return true;
     }
 
+    // Try UGS bin (primary store) — loaded at startup from UserGameStats_*.bin
+    {
+        auto gid_it = stat_name_to_gid.find(stat_name);
+        if (gid_it != stat_name_to_gid.end()) {
+            auto ugs_it = ugs_stat_cache.find(gid_it->second);
+            if (ugs_it != ugs_stat_cache.end()) {
+                float val;
+                const uint32_t raw = ugs_it->second;
+                memcpy(&val, &raw, sizeof(val));
+                stats_cache_float[stat_name] = val;
+                if (pData) *pData = val;
+                return true;
+            }
+        }
+    }
+
+    // Fallback: individual stats/<stat_name> file (compatibility with older tools)
     float output = 0.0;
     int read_data = local_storage->get_data(Local_Storage::stats_storage_folder, stat_name, (char* )&output, sizeof(output));
     if (read_data == sizeof(float)) {
@@ -474,6 +522,7 @@ bool Steam_User_Stats::StoreStats()
     }
     store_stats_trigger.clear();
 
+    write_ugs_bin();
     return true;
 }
 

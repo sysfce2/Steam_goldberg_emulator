@@ -102,6 +102,9 @@ private:
 
     nlohmann::json defined_achievements{};
     nlohmann::json user_achievements{};
+    std::unordered_map<std::string, std::string> stat_name_to_gid{}; // stat API name -> VDF group ID (for write_ugs_bin)
+    std::unordered_map<std::string, uint32_t>     ugs_stat_cache{};   // VDF group ID -> raw u32 data (loaded from UGS bin at startup)
+    std::unordered_map<std::string, std::unordered_map<int, uint32_t>> ugs_ach_times_cache{}; // VDF group ID -> (bit -> earned timestamp)
     std::vector<std::string> sorted_achievement_names{};
     size_t last_loaded_ach_icon{};
 
@@ -122,6 +125,7 @@ private:
     void load_achievements_db();
     void load_achievements();
     void save_achievements();
+    void write_ugs_bin();
 
     int load_ach_icon(nlohmann::json &defined_ach, bool achieved);
 

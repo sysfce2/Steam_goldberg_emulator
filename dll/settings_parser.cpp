@@ -932,6 +932,288 @@ static void parse_app_paths(class Settings *settings_client, Settings *settings_
     }
 }
 
+// ---- Binary VDF parser + auto-generator for UserGameStatsSchema_<appid>.bin ----
+
+static bool schema_vdf_read_cstr(const uint8_t *data, size_t len, size_t &pos, std::string &out)
+{
+    const size_t start = pos;
+    while (pos < len && data[pos] != 0) ++pos;
+    if (pos >= len) return false;
+    out.assign(reinterpret_cast<const char*>(data + start), pos - start);
+    ++pos; // consume null terminator
+    return true;
+}
+
+static bool schema_vdf_parse_node(const uint8_t *data, size_t len, size_t &pos, nlohmann::json &out)
+{
+    out = nlohmann::json::object();
+    while (pos < len) {
+        const uint8_t type = data[pos++];
+        if (type == 0x08) return true; // TYPE_END
+        std::string key;
+        if (!schema_vdf_read_cstr(data, len, pos, key)) return false;
+
+        if (type == 0x00) { // TYPE_SUBKEY
+            nlohmann::json child;
+            if (!schema_vdf_parse_node(data, len, pos, child)) return false;
+            out[key] = std::move(child);
+        } else if (type == 0x01) { // TYPE_STRING
+            std::string val;
+            if (!schema_vdf_read_cstr(data, len, pos, val)) return false;
+            out[key] = val;
+        } else if (type == 0x02) { // TYPE_INT32
+            if (pos + 4 > len) return false;
+            int32_t v; memcpy(&v, data + pos, 4); pos += 4;
+            out[key] = v;
+        } else if (type == 0x03) { // TYPE_FLOAT32
+            if (pos + 4 > len) return false;
+            float v; memcpy(&v, data + pos, 4); pos += 4;
+            out[key] = v;
+        } else if (type == 0x07) { // TYPE_UINT64
+            if (pos + 8 > len) return false;
+            uint64_t v; memcpy(&v, data + pos, 8); pos += 8;
+            out[key] = v;
+        } else {
+            return false; // unknown type
+        }
+    }
+    return true; // EOF is valid at root level
+}
+
+// FNV-1a 64-bit content hash (for detecting .bin file replacements)
+static uint64_t schema_fnv1a_64(const uint8_t *data, size_t len)
+{
+    uint64_t hash = 14695981039346656037ULL;
+    for (size_t i = 0; i < len; ++i) {
+        hash ^= static_cast<uint64_t>(data[i]);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+// Try to auto-generate steam_settings/achievements.json and steam_settings/stats.json
+// from a UserGameStatsSchema_<appid>.bin placed in the steam_settings folder.
+// - If neither JSON exists:           generate both.
+// - If only one is missing:           generate only the missing one.
+// - If the .bin changed (hash diff):  force-regenerate both and update the stored hash.
+// Hash is stored in UserGameStatsSchema_<appid>.bin.hash alongside the bin.
+static void try_gen_settings_from_schema_bin(class Settings *settings_client, class Settings *settings_server)
+{
+    const std::string settings_path = Local_Storage::get_game_settings_path();
+    const uint32 appid = settings_client->get_local_game_id().AppID();
+    const std::string appid_str = std::to_string(appid);
+
+    const std::string schema_path = settings_path + "UserGameStatsSchema_" + appid_str + ".bin";
+    if (!std::filesystem::exists(std::filesystem::u8path(schema_path))) return;
+
+    // Read the binary schema file first (raw bytes needed for hash computation)
+    std::ifstream ifs(std::filesystem::u8path(schema_path), std::ios::binary | std::ios::ate);
+    if (!ifs) {
+        PRINT_DEBUG("schema_gen: failed to open schema file");
+        return;
+    }
+    const auto fsz = ifs.tellg();
+    ifs.seekg(0);
+    if (fsz <= 0 || static_cast<size_t>(fsz) > 16 * 1024 * 1024) {
+        PRINT_DEBUG("schema_gen: schema file size invalid");
+        return;
+    }
+    std::vector<uint8_t> raw(static_cast<size_t>(fsz));
+    ifs.read(reinterpret_cast<char*>(raw.data()), fsz);
+    ifs.close();
+
+    // Compare current hash against stored value to detect bin replacements
+    const uint64_t cur_hash = schema_fnv1a_64(raw.data(), raw.size());
+    const std::string hash_path = settings_path + "UserGameStatsSchema_" + appid_str + ".bin.hash";
+
+    uint64_t stored_hash = ~cur_hash; // intentionally different until proven equal
+    {
+        std::ifstream hf(std::filesystem::u8path(hash_path));
+        if (hf) {
+            std::string hex;
+            hf >> hex;
+            try { stored_hash = std::stoull(hex, nullptr, 16); } catch (...) {}
+        }
+    }
+
+    const bool bin_changed      = (cur_hash != stored_hash);
+    const bool ach_json_exists   = std::filesystem::exists(std::filesystem::u8path(settings_path + "achievements.json"));
+    const bool stats_json_exists = std::filesystem::exists(std::filesystem::u8path(settings_path + "stats.json"));
+    // Decide whether to write JSON files (skip if the user opted out)
+    const bool need_ach   = !settings_client->no_write_schema_achievements_json && (bin_changed || !ach_json_exists);
+    const bool need_stats = !settings_client->no_write_schema_stats_json         && (bin_changed || !stats_json_exists);
+    // Always parse if any no-write flag is set (need cache for fallback) or if files must be written
+    const bool need_parse = need_ach || need_stats
+                         || settings_client->no_write_schema_achievements_json
+                         || settings_client->no_write_schema_stats_json;
+    if (!need_parse) return;
+
+    PRINT_DEBUG("schema_gen: %s — generating config files", bin_changed ? "bin changed" : "first run");
+
+    // Parse binary VDF
+    nlohmann::json vdf;
+    size_t pos = 0;
+    if (!schema_vdf_parse_node(raw.data(), raw.size(), pos, vdf)) {
+        PRINT_DEBUG("schema_gen: failed to parse VDF in '%s'", schema_path.c_str());
+        return;
+    }
+
+    // Navigate: root[appid_str]["stats"]
+    if (!vdf.contains(appid_str) || !vdf[appid_str].is_object()) {
+        PRINT_DEBUG("schema_gen: appid '%s' not found in VDF", appid_str.c_str());
+        return;
+    }
+    const auto &app_node = vdf[appid_str];
+    if (!app_node.contains("stats") || !app_node["stats"].is_object()) {
+        PRINT_DEBUG("schema_gen: no 'stats' node in schema for appid '%s'", appid_str.c_str());
+        return;
+    }
+    const auto &stats_node = app_node["stats"];
+
+    // Convert any JSON numeric/string value to a plain string
+    auto json_val_to_str = [](const nlohmann::json &v) -> std::string {
+        if (v.is_string())          return v.get<std::string>();
+        if (v.is_number_integer())  return std::to_string(v.get<int64_t>());
+        if (v.is_number_unsigned()) return std::to_string(v.get<uint64_t>());
+        if (v.is_number_float())    return std::to_string(v.get<double>());
+        return "0";
+    };
+
+    nlohmann::json achievements_arr = nlohmann::json::array();
+    nlohmann::json stats_arr        = nlohmann::json::array();
+    static const nlohmann::json empty_obj = nlohmann::json::object();
+
+    for (const auto &[gid, gval] : stats_node.items()) {
+        if (!gval.is_object()) continue;
+
+        std::string gtype = gval.value("type", std::string{});
+        std::string gtype_upper = gtype;
+        std::transform(gtype_upper.begin(), gtype_upper.end(), gtype_upper.begin(),
+                       [](unsigned char c){ return (unsigned char)std::toupper(c); });
+
+        if (gtype_upper == "ACHIEVEMENTS") {
+            if (!gval.contains("bits") || !gval["bits"].is_object()) continue;
+            const auto &bits = gval["bits"];
+
+            for (const auto &[bit, bval] : bits.items()) {
+                if (!bval.is_object()) continue;
+                const std::string api_name = bval.value("name", std::string{});
+                if (api_name.empty()) continue;
+
+                const auto &disp = (bval.contains("display") && bval["display"].is_object())
+                                   ? bval["display"] : empty_obj;
+
+                // displayName / description: may be a plain string or a language map {"english": ...}
+                // Resolve to a plain string (prefer "english", fall back to first entry)
+                auto extract_localized = [](const nlohmann::json &v) -> std::string {
+                    if (v.is_string()) return v.get<std::string>();
+                    if (v.is_object()) {
+                        if (v.contains("english") && v["english"].is_string())
+                            return v["english"].get<std::string>();
+                        for (const auto &[_lang, text] : v.items()) {
+                            if (text.is_string()) return text.get<std::string>();
+                        }
+                    }
+                    return "";
+                };
+                const std::string display_name = extract_localized(disp.contains("name") ? disp["name"] : nlohmann::json(""));
+                const std::string description  = extract_localized(disp.contains("desc") ? disp["desc"] : nlohmann::json(""));
+
+                int hidden = 0;
+                if (disp.contains("hidden")) {
+                    const auto &h = disp["hidden"];
+                    if (h.is_number())      hidden = h.get<int>();
+                    else if (h.is_string()) { try { hidden = std::stoi(h.get<std::string>()); } catch (...) {} }
+                }
+
+                std::string icon      = disp.value("icon",      std::string{});
+                std::string icon_gray = disp.value("icon_gray", std::string{});
+                if (icon_gray.empty()) icon_gray = disp.value("icongray", std::string{});
+
+                nlohmann::json ach_entry = {
+                    {"name",        api_name},
+                    {"displayName", display_name},
+                    {"description", description},
+                    {"hidden",      std::to_string(hidden)},
+                    {"icon",        icon},
+                    {"icon_gray",   icon_gray},
+                    {"_group",      gid},
+                    {"_bit",        bit},
+                };
+
+                // Progress tracking (optional)
+                if (bval.contains("progress") && bval["progress"].is_object()) {
+                    const auto &prog = bval["progress"];
+                    const auto &val_node = (prog.contains("value") && prog["value"].is_object())
+                                           ? prog["value"] : empty_obj;
+                    const std::string op1 = val_node.value("operand1", std::string{});
+                    if (!op1.empty()) {
+                        const std::string op = val_node.value("operation", std::string("statvalue"));
+                        ach_entry["progress"] = {
+                            {"value",   {{"operation", op}, {"operand1", op1}}},
+                            {"min_val", json_val_to_str(prog.contains("min_val") ? prog["min_val"] : nlohmann::json(0))},
+                            {"max_val", json_val_to_str(prog.contains("max_val") ? prog["max_val"] : nlohmann::json(0))},
+                        };
+                    }
+                }
+
+                achievements_arr.push_back(std::move(ach_entry));
+            }
+        } else {
+            // Regular stat: INT, FLOAT, AVGRATE
+            const std::string stat_name = gval.value("name", std::string{});
+            if (stat_name.empty()) continue;
+
+            std::string stat_type = gtype;
+            std::transform(stat_type.begin(), stat_type.end(), stat_type.begin(),
+                           [](unsigned char c){ return (unsigned char)std::tolower(c); });
+            if (stat_type != "int" && stat_type != "float" && stat_type != "avgrate") continue;
+
+            const std::string default_val = gval.contains("default")
+                                            ? json_val_to_str(gval["default"])
+                                            : "0";
+            stats_arr.push_back({{"name", stat_name}, {"type", stat_type}, {"default", default_val}, {"_group", gid}});
+        }
+    }
+
+    // Always populate the in-memory cache so load_achievements_db() and parse_stats()
+    // can use it as a fallback when the JSON files are absent or intentionally not written.
+    settings_client->schema_achievements_json_str = achievements_arr.dump();
+    settings_server->schema_achievements_json_str = achievements_arr.dump();
+    settings_client->schema_stats_json_str = stats_arr.dump();
+    settings_server->schema_stats_json_str = stats_arr.dump();
+
+    if (need_ach) {
+        const std::string out_path = settings_path + "achievements.json";
+        std::ofstream ofs(std::filesystem::u8path(out_path));
+        if (ofs) {
+            ofs << achievements_arr.dump(2) << '\n';
+            PRINT_DEBUG("schema_gen: wrote achievements.json (%zu entries)", achievements_arr.size());
+        } else {
+            PRINT_DEBUG("schema_gen: failed to write achievements.json");
+        }
+    }
+
+    if (need_stats) {
+        const std::string out_path = settings_path + "stats.json";
+        std::ofstream ofs(std::filesystem::u8path(out_path));
+        if (ofs) {
+            ofs << stats_arr.dump(2) << '\n';
+            PRINT_DEBUG("schema_gen: wrote stats.json (%zu entries)", stats_arr.size());
+        } else {
+            PRINT_DEBUG("schema_gen: failed to write stats.json");
+        }
+    }
+
+    // Persist the hash so the next launch can detect if the bin is replaced
+    {
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0') << std::setw(16) << cur_hash;
+        std::ofstream hf(std::filesystem::u8path(hash_path));
+        if (hf) hf << oss.str() << '\n';
+    }
+}
+
 // leaderboards.txt
 static void parse_leaderboards(class Settings *settings_client, class Settings *settings_server)
 {
@@ -980,7 +1262,15 @@ static void parse_stats(class Settings *settings_client, class Settings *setting
 {
     nlohmann::json stats_items;
     std::string stats_json_path = Local_Storage::get_game_settings_path() + "stats.json";
-    if (local_storage->load_json(stats_json_path, stats_items)) {
+    if (!local_storage->load_json(stats_json_path, stats_items) || !stats_items.is_array() || stats_items.empty()) {
+        // Fallback: schema cache populated by try_gen_settings_from_schema_bin() (when no_write_schema_stats_json is set)
+        if (!settings_client->schema_stats_json_str.empty()) {
+            try { stats_items = nlohmann::json::parse(settings_client->schema_stats_json_str); }
+            catch (...) { stats_items = nlohmann::json::array(); }
+            PRINT_DEBUG("parse_stats: using schema cache (%zu entries)", stats_items.size());
+        }
+    }
+    if (stats_items.is_array()) {
         for (const auto &stats : stats_items) {
             std::string stat_name;
             std::string stat_type;
@@ -1833,6 +2123,19 @@ static void parse_stats_features(class Settings *settings_client, class Settings
         long ttl_server = ini.GetLongValue("main::stats", "achievements_cache_ttl", (long)settings_server->achievements_cache_ttl);
         if (ttl_server > 0) settings_server->achievements_cache_ttl = static_cast<uint32>(ttl_server);
     }
+
+    // write-control flags for JSON/file output
+    settings_client->no_write_schema_achievements_json = ini.GetBoolValue("main::stats", "no_write_schema_achievements_json", settings_client->no_write_schema_achievements_json);
+    settings_server->no_write_schema_achievements_json = ini.GetBoolValue("main::stats", "no_write_schema_achievements_json", settings_server->no_write_schema_achievements_json);
+
+    settings_client->no_write_schema_stats_json = ini.GetBoolValue("main::stats", "no_write_schema_stats_json", settings_client->no_write_schema_stats_json);
+    settings_server->no_write_schema_stats_json = ini.GetBoolValue("main::stats", "no_write_schema_stats_json", settings_server->no_write_schema_stats_json);
+
+    settings_client->no_write_user_achievements_json = ini.GetBoolValue("main::stats", "no_write_user_achievements_json", settings_client->no_write_user_achievements_json);
+    settings_server->no_write_user_achievements_json = ini.GetBoolValue("main::stats", "no_write_user_achievements_json", settings_server->no_write_user_achievements_json);
+
+    settings_client->no_write_user_stats_files = ini.GetBoolValue("main::stats", "no_write_user_stats_files", settings_client->no_write_user_stats_files);
+    settings_server->no_write_user_stats_files = ini.GetBoolValue("main::stats", "no_write_user_stats_files", settings_server->no_write_user_stats_files);
 }
 
 
@@ -2108,6 +2411,7 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     parse_app_paths(settings_client, settings_server, program_path);
     parse_purchased_keys(settings_client, settings_server);
 
+    try_gen_settings_from_schema_bin(settings_client, settings_server);
     parse_leaderboards(settings_client, settings_server);
     parse_stats(settings_client, settings_server, local_storage);
     parse_depots(settings_client, settings_server);

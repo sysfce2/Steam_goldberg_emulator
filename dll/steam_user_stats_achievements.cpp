@@ -61,22 +61,312 @@ bool achievement_trigger::should_indicate_progress(int32 stat) const
 }
 // --- achievement_trigger ---
 
+// ---------------------------------------------------------------------------
+// Minimal binary VDF helpers — used to parse UserGameStats_*.bin at startup
+// ---------------------------------------------------------------------------
+static bool ugs_vdf_cstr(const uint8_t *d, size_t n, size_t &p, std::string &s)
+{
+    const size_t b = p;
+    while (p < n && d[p]) ++p;
+    if (p >= n) return false;
+    s.assign(reinterpret_cast<const char*>(d + b), p - b);
+    ++p;
+    return true;
+}
+
+static bool ugs_vdf_skip(const uint8_t *d, size_t n, size_t &p, uint8_t type)
+{
+    std::string dummy;
+    if (type == 0x01) return ugs_vdf_cstr(d, n, p, dummy);
+    if (type == 0x02 || type == 0x03) { if (p+4 > n) return false; p += 4; return true; }
+    if (type == 0x07) { if (p+8 > n) return false; p += 8; return true; }
+    if (type == 0x00) {
+        while (p < n) {
+            uint8_t t = d[p++];
+            if (t == 0x08) return true;
+            if (!ugs_vdf_cstr(d, n, p, dummy) || !ugs_vdf_skip(d, n, p, t)) return false;
+        }
+    }
+    return false;
+}
+
+// Parse a UserGameStats .bin and return { group_id_str -> raw_data_uint32 }.
+// Works for both achievement groups (bitmask in "data") and stat groups.
+static std::unordered_map<std::string, uint32_t> ugs_parse_groups(const uint8_t *d, size_t n)
+{
+    std::unordered_map<std::string, uint32_t> out;
+    size_t p = 0;
+    std::string key;
+    if (p >= n || d[p++] != 0x00) return out;          // root TYPE_SUBKEY
+    if (!ugs_vdf_cstr(d, n, p, key) || key != "cache") return out;
+    while (p < n) {
+        uint8_t t = d[p++];
+        if (t == 0x08) break;                           // end of cache dict
+        std::string gid;
+        if (!ugs_vdf_cstr(d, n, p, gid)) break;
+        if (t != 0x00) { ugs_vdf_skip(d, n, p, t); continue; } // crc / PendingChanges
+        // group subkey — scan for the first "data" INT32
+        uint32_t dval = 0; bool found = false;
+        while (p < n) {
+            uint8_t t2 = d[p++];
+            if (t2 == 0x08) break;
+            std::string k;
+            if (!ugs_vdf_cstr(d, n, p, k)) return out;
+            if (t2 == 0x02 && k == "data") {
+                if (p+4 > n) return out;
+                memcpy(&dval, d+p, 4); p += 4;
+                found = true;
+            } else if (!ugs_vdf_skip(d, n, p, t2)) return out;
+        }
+        if (found) out[gid] = dval;
+    }
+    return out;
+}
+
+// Parse AchievementTimes from a UserGameStats .bin.
+// Returns: { group_id_str -> { bit_int -> earned_unix_timestamp } }
+static std::unordered_map<std::string, std::unordered_map<int, uint32_t>>
+ugs_parse_ach_times(const uint8_t *d, size_t n)
+{
+    std::unordered_map<std::string, std::unordered_map<int, uint32_t>> out;
+    size_t p = 0;
+    std::string key;
+    if (p >= n || d[p++] != 0x00) return out;
+    if (!ugs_vdf_cstr(d, n, p, key) || key != "cache") return out;
+    while (p < n) {
+        uint8_t t = d[p++];
+        if (t == 0x08) break;
+        std::string gid;
+        if (!ugs_vdf_cstr(d, n, p, gid)) break;
+        if (t != 0x00) { ugs_vdf_skip(d, n, p, t); continue; }
+        // group subkey: look for "AchievementTimes" subkey
+        while (p < n) {
+            uint8_t t2 = d[p++];
+            if (t2 == 0x08) break;
+            std::string k;
+            if (!ugs_vdf_cstr(d, n, p, k)) return out;
+            if (t2 == 0x00 && k == "AchievementTimes") {
+                std::unordered_map<int, uint32_t> times;
+                while (p < n) {
+                    uint8_t t3 = d[p++];
+                    if (t3 == 0x08) break;
+                    std::string bit_s;
+                    if (!ugs_vdf_cstr(d, n, p, bit_s)) return out;
+                    if (t3 == 0x02) {
+                        if (p+4 > n) return out;
+                        uint32_t ts = 0;
+                        memcpy(&ts, d+p, 4); p += 4;
+                        try { times[std::stoi(bit_s)] = ts; } catch (...) {}
+                    } else if (!ugs_vdf_skip(d, n, p, t3)) return out;
+                }
+                out[gid] = std::move(times);
+            } else if (!ugs_vdf_skip(d, n, p, t2)) return out;
+        }
+    }
+    return out;
+}
 
 
 void Steam_User_Stats::load_achievements_db()
 {
     std::string file_path = Local_Storage::get_game_settings_path() + achievements_user_file;
     local_storage->load_json(file_path, defined_achievements);
+    // Fallback: use schema cache populated by try_gen_settings_from_schema_bin()
+    if ((!defined_achievements.is_array() || defined_achievements.empty()) && !settings->schema_achievements_json_str.empty()) {
+        try { defined_achievements = nlohmann::json::parse(settings->schema_achievements_json_str); } catch (...) {}
+        PRINT_DEBUG("load_achievements_db: using schema cache for defined_achievements");
+    }
+
+    // Cache stat name -> group ID so write_ugs_bin() doesn't re-read stats.json on every save
+    stat_name_to_gid.clear();
+    {
+        nlohmann::json stats_items;
+        const std::string stats_path = Local_Storage::get_game_settings_path() + "stats.json";
+        bool loaded = local_storage->load_json(stats_path, stats_items) && stats_items.is_array() && !stats_items.empty();
+        if (!loaded && !settings->schema_stats_json_str.empty()) {
+            try { stats_items = nlohmann::json::parse(settings->schema_stats_json_str); loaded = stats_items.is_array(); } catch (...) {}
+            if (loaded) PRINT_DEBUG("load_achievements_db: using schema cache for stat_name_to_gid");
+        }
+        if (loaded) {
+            for (const auto &s : stats_items) {
+                if (!s.is_object()) continue;
+                std::string name  = s.value("name",   std::string{});
+                std::string group = s.value("_group", std::string{});
+                if (!name.empty() && !group.empty())
+                    stat_name_to_gid[common_helpers::to_lower(name)] = group; // lowercase to match SetStat/GetStat key convention
+            }
+        }
+    }
+
+    // Load stat group data from the UGS bin (primary store for stats).
+    // GetStat will probe this cache first, then fall back to individual stats/<name> files.
+    ugs_stat_cache.clear();
+    {
+        const uint32_t appid = settings->get_local_game_id().AppID();
+        const uint32_t sid3  = settings->get_local_steam_id().GetAccountID();
+        const std::string ugs_file = "UserGameStats_" + std::to_string(sid3) + "_" + std::to_string(appid) + ".bin";
+        const unsigned int ugs_sz = local_storage->file_size("", ugs_file);
+        if (ugs_sz > 0) {
+            std::vector<uint8_t> buf(ugs_sz);
+            if (local_storage->get_data("", ugs_file, reinterpret_cast<char*>(buf.data()), ugs_sz) == (int)ugs_sz) {
+                ugs_stat_cache     = ugs_parse_groups(buf.data(), buf.size());
+                ugs_ach_times_cache = ugs_parse_ach_times(buf.data(), buf.size());
+                PRINT_DEBUG("load_achievements_db: loaded %zu groups from UGS bin", ugs_stat_cache.size());
+            }
+        }
+    }
 }
 
 void Steam_User_Stats::load_achievements()
 {
-    local_storage->load_json_file("", achievements_user_file, user_achievements);
+    if (!local_storage->load_json_file("", achievements_user_file, user_achievements) || user_achievements.empty()) {
+        // Fallback: reconstruct earned achievements from UGS bin bitmask + AchievementTimes.
+        // This path is used when no_write_user_achievements_json = true (save file never written).
+        if (!ugs_stat_cache.empty() && !defined_achievements.empty()) {
+            user_achievements = nlohmann::json::object();
+            for (const auto &ach_def : defined_achievements) {
+                if (!ach_def.is_object()) continue;
+                const std::string group    = ach_def.value("_group", std::string{});
+                const std::string bit_s    = ach_def.value("_bit",   std::string{});
+                const std::string api_name = ach_def.value("name",   std::string{});
+                if (group.empty() || bit_s.empty() || api_name.empty()) continue;
+                int bit_int = 0;
+                try { bit_int = std::stoi(bit_s); } catch (...) { continue; }
+                auto data_it = ugs_stat_cache.find(group);
+                if (data_it == ugs_stat_cache.end()) continue;
+                if (!((data_it->second >> bit_int) & 1u)) continue; // not earned
+                uint32_t ts = 0;
+                auto times_it = ugs_ach_times_cache.find(group);
+                if (times_it != ugs_ach_times_cache.end()) {
+                    auto t_it = times_it->second.find(bit_int);
+                    if (t_it != times_it->second.end()) ts = t_it->second;
+                }
+                user_achievements[api_name] = {{"earned", true}, {"earned_time", ts}};
+            }
+            PRINT_DEBUG("load_achievements: reconstructed %zu earned achievements from UGS bin", user_achievements.size());
+        }
+    }
 }
 
 void Steam_User_Stats::save_achievements()
 {
-    local_storage->write_json_file("", achievements_user_file, user_achievements);
+    if (!settings->no_write_user_achievements_json) {
+        local_storage->write_json_file("", achievements_user_file, user_achievements);
+    }
+    write_ugs_bin();
+}
+
+void Steam_User_Stats::write_ugs_bin()
+{
+    // Builds a UserGameStats_<sid3>_<appid>.bin (binary VDF) next to achievements.json in the
+    // GSE save folder.  Requires _group/_bit metadata in defined_achievements, which is present
+    // when steam_settings/achievements.json was generated from a UserGameStatsSchema_<appid>.bin.
+    // Stat group support additionally requires _group in steam_settings/stats.json.
+
+    // --- 1. Achievement groups: group_id -> { bit_int -> earned_timestamp } ---
+    std::map<std::string, std::map<int, uint32_t>> ach_groups;
+    std::set<std::string> ach_group_ids;
+
+    for (const auto &ach_def : defined_achievements) {
+        if (!ach_def.is_object()) continue;
+        const std::string group    = ach_def.value("_group", std::string{});
+        const std::string bit_s    = ach_def.value("_bit",   std::string{});
+        const std::string api_name = ach_def.value("name",   std::string{});
+        if (group.empty() || bit_s.empty() || api_name.empty()) continue;
+
+        ach_group_ids.insert(group);
+        ach_groups.try_emplace(group); // ensure entry exists even if nothing is earned
+
+        if (!user_achievements.contains(api_name)) continue;
+        const auto &ud = user_achievements[api_name];
+        if (!ud.is_object() || !ud.value("earned", false)) continue;
+
+        int bit_int = 0;
+        try { bit_int = std::stoi(bit_s); } catch (...) { continue; }
+        ach_groups[group][bit_int] = static_cast<uint32_t>(ud.value("earned_time", int64_t(0)));
+    }
+
+    // --- 2. Stat groups: group_id -> raw uint32 value ---
+    std::map<std::string, uint32_t> stat_groups;
+    for (const auto &[stat_name, group] : stat_name_to_gid) {
+        if (ach_group_ids.count(group)) continue; // achievement groups handled separately
+        uint32_t raw = 0; bool found = false;
+        char buf[4] = {};
+        if (local_storage->get_data(Local_Storage::stats_storage_folder, stat_name, buf, 4) == 4) {
+            memcpy(&raw, buf, 4);
+            found = true;
+        } else {
+            // File absent (e.g. no_write_user_stats_files): fall back to in-memory cache
+            auto ci = stats_cache_int.find(stat_name);
+            if (ci != stats_cache_int.end()) {
+                memcpy(&raw, &ci->second, sizeof(raw));
+                found = true;
+            } else {
+                auto cf = stats_cache_float.find(stat_name);
+                if (cf != stats_cache_float.end()) {
+                    memcpy(&raw, &cf->second, sizeof(raw));
+                    found = true;
+                }
+            }
+        }
+        if (found) stat_groups[group] = raw;
+    }
+
+    if (ach_groups.empty() && stat_groups.empty()) return;
+
+    // --- 3. Sorted group list (integer order, matching Steam's convention) ---
+    std::map<int, std::string> sorted_groups;
+    for (const auto &[g, _] : ach_groups)  { try { sorted_groups[std::stoi(g)] = g; } catch (...) {} }
+    for (const auto &[g, _] : stat_groups) { try { sorted_groups[std::stoi(g)] = g; } catch (...) {} }
+
+    // --- 4. Serialise to binary VDF ---
+    // Format mirrors Python _write_vdf_root("cache", cache_dict):
+    //   0x00 "cache\0" [entries...] 0x08  [outer 0x08]
+    std::vector<uint8_t> vdf;
+    vdf.reserve(4096);
+
+    const auto write_cstr = [&](const std::string &s) {
+        vdf.insert(vdf.end(), s.begin(), s.end());
+        vdf.push_back(0);
+    };
+    const auto write_u32 = [&](uint32_t v) {
+        vdf.push_back( v        & 0xFF);
+        vdf.push_back((v >>  8) & 0xFF);
+        vdf.push_back((v >> 16) & 0xFF);
+        vdf.push_back((v >> 24) & 0xFF);
+    };
+
+    vdf.push_back(0x00); write_cstr("cache");           // TYPE_SUBKEY "cache" {
+    vdf.push_back(0x02); write_cstr("crc");            write_u32(0);
+    vdf.push_back(0x02); write_cstr("PendingChanges"); write_u32(0);
+
+    for (const auto &[gid_int, gid_str] : sorted_groups) {
+        vdf.push_back(0x00); write_cstr(gid_str);       // TYPE_SUBKEY gid {
+        if (ach_group_ids.count(gid_str)) {
+            uint32_t bitmask = 0;
+            for (const auto &[bit, _ts] : ach_groups[gid_str]) bitmask |= (1u << bit);
+            vdf.push_back(0x02); write_cstr("data"); write_u32(bitmask);
+            vdf.push_back(0x00); write_cstr("AchievementTimes"); // TYPE_SUBKEY "AchievementTimes" {
+            for (const auto &[bit, ts] : ach_groups[gid_str]) {
+                vdf.push_back(0x02); write_cstr(std::to_string(bit)); write_u32(ts);
+            }
+            vdf.push_back(0x08); // } end AchievementTimes
+        } else {
+            const uint32_t raw = stat_groups.count(gid_str) ? stat_groups[gid_str] : 0u;
+            vdf.push_back(0x02); write_cstr("data"); write_u32(raw);
+        }
+        vdf.push_back(0x08); // } end group
+    }
+
+    vdf.push_back(0x08); // } end "cache" dict
+    vdf.push_back(0x08); // outer TYPE_END
+
+    // --- 5. Write to <save_dir>/<appid>/UserGameStats_<sid3>_<appid>.bin ---
+    const uint32_t appid = settings->get_local_game_id().AppID();
+    const uint32_t sid3  = settings->get_local_steam_id().GetAccountID();
+    const std::string filename = "UserGameStats_" + std::to_string(sid3) + "_" + std::to_string(appid) + ".bin";
+    local_storage->store_data("", filename, reinterpret_cast<char*>(vdf.data()), static_cast<unsigned int>(vdf.size()));
+    PRINT_DEBUG("write_ugs_bin: wrote %zu bytes -> %s", vdf.size(), filename.c_str());
 }
 
 int Steam_User_Stats::load_ach_icon(nlohmann::json &defined_ach, bool achieved)
