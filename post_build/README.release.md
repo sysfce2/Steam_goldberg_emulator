@@ -1,9 +1,29 @@
 
-====Goldberg Steam Emulator====
----
+# Goldberg Steam Emulator — Usage Guide
 
 An emulator that supports LAN multiplayer without Steam  
-https://gitlab.com/Mr_Goldberg/goldberg_emulator
+Original project: https://gitlab.com/Mr_Goldberg/goldberg_emulator
+
+---
+
+## Table of Contents
+
+- [Quick setup](#how-to-use)
+- [Saves and settings location](#savessettings-location)
+- [Portable saves](#portable-saves)
+- [Overlay](#overlay)
+- [Controller](#controller)
+- [Achievements / Inventory](#achievements-items-or-inventory)
+- [Stats](#stats)
+- [Leaderboards](#leaderboards)
+- [Mods (UGC)](#mods)
+- [Languages](#languages)
+- [Custom broadcast IPs](#custom-broadcast-ips)
+- [SteamHTTP](#steamhttp)
+- [Avatar](#avatar)
+- [Auth token / EncryptedAppTicket](#auth-token-app-ticket)
+- [CPY cracks (Windows)](#support-for-cpy-steam_api64dll-cracks-windows-only)
+- [Valid Steam language codes](#list-of-valid-steam-languages)
 
 ---
 
@@ -13,7 +33,7 @@ https://gitlab.com/Mr_Goldberg/goldberg_emulator
 3. Use the command line tool `generate_interfaces` to generate the file `steam_interfaces.txt`,  
    then move it inside the folder `.\steam_settings`
 4. Move the entire folder `.\steam_settings` beside the emu `.dll/.so`
-5. Copy the the example files `.\steam_settings.EXAMPLE\configs.xxx.EXAMPLE.ini` and paste them inside your own `steam_settings` folder, then remove `.EXAMPLE`  from their name 
+5. Copy the example files `.\steam_settings.EXAMPLE\configs.xxx.EXAMPLE.ini` and paste them inside your own `steam_settings` folder, then remove `.EXAMPLE`  from their name 
 
 
 Mr_Goldberg's note:
@@ -195,13 +215,16 @@ By default this emulator assumes all stats do not exist unless the option `allow
 
 To properly define the stats of a game, put a `stats.json` file in the `.\steam_settings` folder
 
-The format is:  
-`{
+The format is:
+
+```json
+{
   "name": "stat_name",
   "type": "stat_type",
   "default": "default_value",
   "global": "global_value"
-}`  
+}
+```
 
 The type can be
 * int
@@ -429,10 +452,10 @@ Check the example file in the `.\steam_settings` folder
 
 By default, match making servers (which handles browsing for matches) will always return LAN servers list whenever the game inquires about the available servers with a specific type (Internet, Friends, LAN, etc...) 
 
-You can make the emu return the proper/actual servers list for the given type, by modifying `configs.main.ini` and setting `matchmaking_server_list_actual_type-1`  
+You can make the emu return the proper/actual servers list for the given type, by modifying `configs.main.ini` and setting `matchmaking_server_list_actual_type=1`  
 **This is currently broken**  
 
-Also, match making servers will return the info of the server from the incoming local packets, you can make the emu retrieve the actual server info by performing a source server query, this is enabled by setting `matchmaking_server_details_via_source_query-1` inside `configs.main.ini`.  
+Also, match making servers will return the info of the server from the incoming local packets, you can make the emu retrieve the actual server info by performing a source server query, this is enabled by setting `matchmaking_server_details_via_source_query=1` inside `configs.main.ini`.  
 **This is currently broken**  
 
 ---

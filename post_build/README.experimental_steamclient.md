@@ -24,33 +24,25 @@ You do not need to create a `steam_interfaces.txt` file for the `steamclient` ve
    * `GameOverlayRenderer.dll`: for 32-bit apps
    * `GameOverlayRenderer64.dll`: for 64-bit apps
 
-3. Edit `ColdClientLoader.ini` and specify:  
-   * `AppId`: the app ID
-   * `Exe`: the path to the game's executable/launcher, either full path or relative to this loader  
-   * `ExeRunDir` *(optional)*: generally this must be set to the folder containing the game's exe, if left empty then it will be automatically set to the folder containing the game's exe.  
-   * `ExeCommandLine` *(optional)*: additional args to pass to the exe, example: `-dx11 -windowed`  
-     Optionally you can specify a different location for `steamclient(64).dll`:  
-   * `SteamClientDll`: path to `steamclient.dll`, either full path or relative to this loader  
-   * `SteamClient64Dll`: path to `steamclient64.dll`, either full path or relative to this loader  
-   * `ForceInjectSteamClient`: force inject `steamclient(64).dll` instead of letting the app load it automatically  
-   * `ForceInjectGameOverlayRenderer`: force inject `GameOverlayRenderer(64).dll` instead of letting the app load it automatically.  
-     These dlls are expected to be in the same folder of `steamclient(64).dll`
-   * `ResumeByDebugger`: setting this to `1` or `y` or `true` will prevent the loader from calling `ResumeThread()` on the main thread after spawning the .exe, and it will display a mesage with the process ID (PID) so you attach your debugger on it.  
-     Note that you have to resume the main thread from the debugger after attaching, also the entry breakpoint may not be set automatically, but you can do that manually.  
-   * `DllsToInjectFolder` *(optional)*: path to a folder containing dlls to force inject into the app upon start,  
-     the loader will attempt to detect the dll architecture (32 or 64 bit), if it didn't match the architecture of the exe then it will be ignored.  
-     Path is either full or relative to this loader  
-   * `IgnoreInjectionError`: setting this to `1` or `y` or `true` will prevent the loader from displaying an error message when a dll injection fails  
-   * `IgnoreLoaderArchDifference`: don't display an error message if the architecture of the loader is different from the app.  
-   This will result in a silent failure if a dll injection didn't succeed.  
-   Both the loader and the app must have the same architecture for the injection to work  
-   * `Mode` (in `[Persistence]` section):
-     - 0 = turned off
-     - 1 = loader will spawn the exe and keep hanging in the background until you press "OK"
-     - 2 = loader will NOT spawn exe, it will just setup the required environment and keep hanging in the background  
-       you have to run the Exe manually, and finally press "OK" when you've finished playing  
-       you have to rename the loader to "steam.exe"  
-       it is advised to run the loader as admin in this mode  
+3. Edit `ColdClientLoader.ini` — at minimum set `AppId` and `Exe`, then configure any optional settings:  
+
+   | Setting | Section | Description |
+   |---------|---------|-------------|
+   | `AppId` | `[default]` | **Required.** Steam App ID for the game |
+   | `Exe` | `[default]` | **Required.** Path to the game executable (full or relative to the loader) |
+   | `ExeRunDir` | `[default]` | Working directory; defaults to the folder containing `Exe` |
+   | `ExeCommandLine` | `[default]` | Extra arguments for the game, e.g. `-dx11 -windowed` |
+   | `SteamClientDll` | `[default]` | Path to `steamclient.dll` (full or relative to loader) |
+   | `SteamClient64Dll` | `[default]` | Path to `steamclient64.dll` (full or relative to loader) |
+   | `ForceInjectSteamClient` | `[default]` | Force-inject `steamclient(64).dll` instead of letting the game load it automatically |
+   | `ForceInjectGameOverlayRenderer` | `[default]` | Force-inject `GameOverlayRenderer(64).dll` (expected beside `steamclient(64).dll`) |
+   | `ResumeByDebugger` | `[default]` | `1`/`y`/`true` — pause main thread on spawn for debugger attachment; resume and set the entry breakpoint manually from the debugger |
+   | `DllsToInjectFolder` | `[default]` | Folder of DLLs to inject at startup; architecture is auto-detected (mismatches skipped); path is full or relative to loader |
+   | `IgnoreInjectionError` | `[default]` | `1`/`y`/`true` — suppress error dialogs on injection failure |
+   | `IgnoreLoaderArchDifference` | `[default]` | Suppress the arch-mismatch warning (injection silently fails when loader and app architectures differ) |
+   | `Mode` | `[Persistence]` | `0` = disabled · `1` = loader stays running until you press OK · `2` = setup-only, launch game manually then press OK (rename loader to `steam.exe`, run as admin) |
+
+
 
 **Note** that any arguments passed to `steamclient_loader.exe` via command line will be passed to the target `.exe`.  
 Example: `steamclient_loader.exe` `-dx11`  

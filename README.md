@@ -47,6 +47,14 @@ Before using them, it's always a good idea to first make sure they are updated a
 
 You can also find instructions here in [README.release.md](./post_build/README.release.md)  
 
+### Included tools
+
+Tools bundled in this repository:
+
+* **[generate_interfaces](./tools/generate_interfaces/)** — scans the game’s `steam_api(64).dll` / `libsteam_api.so` and writes the required `steam_interfaces.txt`
+* **[lobby_connect](./tools/lobby_connect/)** — discovers LAN peers and launches your game with the right join parameters
+* **[steam_stats_converter](./tools/steam_stats_converter/)** — converts between Steam’s local achievements/stats binary cache and GSE save files; see its [README](./tools/steam_stats_converter/README.md)
+
 ---
 # **Compiling**
 ## One time setup
@@ -132,7 +140,7 @@ You can also find instructions here in [README.release.md](./post_build/README.r
 
 These are third party libraries needed to build the emu later, they are linked with the emu during its build process.  
 You don't need to build these dependencies every time, they rarely get updated.  
-The only times you'll need to rebuild them is either when their separete build folder was accedentally deleted, or when the dependencies were updated.  
+The only times you'll need to rebuild them is either when their separate build folder was accidentally deleted, or when the dependencies were updated.  
 
 <br/>
 
