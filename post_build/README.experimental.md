@@ -1,4 +1,4 @@
-## What is this ?
+## What is this?
 This experimental build of the emulator:
 * Blocks all outgoing connections from the game to non-LAN IPs
 
@@ -13,12 +13,12 @@ Mr_Goldberg's note:
 
 > Since this blocks all non LAN connections doing things like hosting a cracked server for people on the internet will not work or connecting to a cracked server that's hosted on an internet IP will not work  
 
-## Why ?
+## Why?
 Mr_Goldberg's note:
 > Lots of games seem to connect to analytics services and other crap  
 > Blocking the game from communicating with online IPs without affecting the LAN functionality of this emu is a pain if you try to use a firewall
 
-## Which IPs are allowed ?
+## Which IPs are allowed?
 With `disable_lan_only=0` inside `.\steam_settings\configs.main.ini`, only **LAN-only IPs** are allowed:
 * 10.0.0.0 - 10.255.255.255
 * 127.0.0.0 - 127.255.255.255

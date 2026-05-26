@@ -1,4 +1,4 @@
-## What is this ?
+## What is this?
 This is a build of the `experimental` version of the emu in `steamclient` mode, with an included loader which was originally [written by Rat431](https://github.com/Rat431/ColdAPI_Steam/tree/master/src/ColdClientLoader) and later modified to suit the needs of this emu.  
 
 The backend `.dll/.so` of Steam is a library called `steamclient`, this build will act as a `steamclient` allowing you to retain the original `steam_api(64).dll`. See both the regular and experimental readmes for how to configure it.
@@ -11,7 +11,7 @@ You do not need to create a `steam_interfaces.txt` file for the `steamclient` ve
 
 ---
 
-## How to use it ?
+## How to use it?
 1. Copy the following files to any folder:  
    * `steamclient.dll`
    * `steamclient64.dll`
@@ -42,8 +42,8 @@ You do not need to create a `steam_interfaces.txt` file for the `steamclient` ve
      Path is either full or relative to this loader  
    * `IgnoreInjectionError`: setting this to `1` or `y` or `true` will prevent the loader from displaying an error message when a dll injection fails  
    * `IgnoreLoaderArchDifference`: don't display an error message if the architecture of the loader is different from the app.  
-   this will result in a silent failure if a dll injection didn't succeed.  
-   both the loader and the app must have the same arch for the injection to work  
+   This will result in a silent failure if a dll injection didn't succeed.  
+   Both the loader and the app must have the same architecture for the injection to work  
    * `Mode` (in `[Persistence]` section):
      - 0 = turned off
      - 1 = loader will spawn the exe and keep hanging in the background until you press "OK"

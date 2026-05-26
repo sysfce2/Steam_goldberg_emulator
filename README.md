@@ -58,7 +58,7 @@ You can also find instructions here in [README.release.md](./post_build/README.r
  ```
  The switch `-j8` is optional, it allows Git to fetch up to 8 submodules
 
- It is adviseable to always checkout submodules every now and then, to make sure they're up to date
+ It is advisable to always checkout submodules every now and then, to make sure they're up to date
  ```shell
  git submodule update --init --recursive --remote
  ```
@@ -67,7 +67,7 @@ You can also find instructions here in [README.release.md](./post_build/README.r
 * You need Windows 10 or 8.1 + WDK
 * Using Visual Studio, install `Visual Studio 2022 Community`: https://visualstudio.microsoft.com/vs/community/
    * Select the Workload `Desktop development with C++`
-   * In the `Individual componenets` scroll to the buttom and select the **latest** version of `Windows XX SDK (XX.X...)`  
+   * In the `Individual components` scroll to the bottom and select the **latest** version of `Windows XX SDK (XX.X...)`  
       For example `Windows 11 SDK (10.0.22621.0)`
 * Using `MSYS2` **this is currently experimental and will not work due to ABI differences**: https://www.msys2.org/  
   <details>

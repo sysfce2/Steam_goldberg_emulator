@@ -1,7 +1,7 @@
-## What is this ?
+## What is this?
 This tool will generate the file `steam_interfaces.txt` which is **always** recommended to be created.
 
-## How to use it ?
+## How to use it?
 1. * On Windows
      * Drag `steam_api.dll` or `steam_api64.dll` on this exe.
      * Or run the command line (example):
