@@ -16,8 +16,8 @@ private:
     class Settings* settings{};
     
     // Frame timing - high precision
-    std::chrono::steady_clock::time_point last_frame_timepoint =
-        std::chrono::steady_clock::now();
+    std::chrono::high_resolution_clock::time_point last_frame_timepoint =
+        std::chrono::high_resolution_clock::now();
     
     // Ring buffer for frametime history (in ms, float precision)
     float frametime_history[FRAMETIME_HISTORY_SIZE]{};
@@ -34,8 +34,8 @@ private:
     float avg_frametime_ms = 0.0f;
 
     // Display values (snapshotted every 500ms for stable text)
-    std::chrono::steady_clock::time_point last_display_update =
-        std::chrono::steady_clock::now();
+    std::chrono::high_resolution_clock::time_point last_display_update =
+        std::chrono::high_resolution_clock::now();
     float display_fps = 0.0f;
     float display_frametime_ms = 0.0f;
     float display_min_ft = 0.0f;
@@ -53,8 +53,8 @@ private:
     unsigned active_playtime_min = 0;
     unsigned active_playtime_sec = 0;
 
-    void update_frametime(const std::chrono::steady_clock::time_point &now);
-    void update_playtime(const std::chrono::steady_clock::time_point &now);
+    void update_frametime(const std::chrono::high_resolution_clock::time_point &now);
+    void update_playtime(const std::chrono::high_resolution_clock::time_point &now);
 
     // Returns how many ring buffer entries fit within graph_timeframe_sec
     int get_visible_frame_count() const;
