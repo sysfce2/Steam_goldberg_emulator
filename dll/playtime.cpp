@@ -19,10 +19,15 @@
 
 #include <limits>
 
-PlaytimeCounter::PlaytimeCounter(Local_Storage* local_storage)
-   : local_storage(local_storage), last_tick(std::chrono::steady_clock::now())
+PlaytimeCounter::PlaytimeCounter(Local_Storage* local_storage, bool record_playtime)
+   : local_storage(local_storage),
+     record_playtime(record_playtime),
+     last_tick(std::chrono::steady_clock::now())
 {
     load();
+    if (record_playtime) {
+        save();
+    }
 }
 
 PlaytimeCounter::~PlaytimeCounter()
@@ -46,23 +51,37 @@ void PlaytimeCounter::tick()
     {
         std::lock_guard<std::mutex> lock(mutex);
 
-        auto delta = std::chrono::duration_cast<std::chrono::seconds>(now - last_tick).count();
-        if (delta <= 0) return;
+        auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count();
+        if (delta_ms <= 0) return;
 
-        uint64_t inc = static_cast<uint64_t>(delta);
-        const uint64_t maxv = std::numeric_limits<uint64_t>::max();
-        if (playtime_seconds > maxv - inc) {
-            playtime_seconds = maxv;
-        } else {
-            playtime_seconds += inc;
-        }
-        
         last_tick = now;
 
-        since_save += delta;
-        if (since_save >= 60) {
-            since_save = 0;
-            need_save = true;
+        // Accumulate milliseconds, convert whole seconds
+        playtime_accumulator_ms += static_cast<uint64_t>(delta_ms);
+        uint64_t accrued_sec = playtime_accumulator_ms / 1000;
+        playtime_accumulator_ms %= 1000;
+
+        if (accrued_sec > 0) {
+            // Accumulate total playtime (unless paused)
+            if (!pause_total) {
+                const uint64_t maxv = std::numeric_limits<uint64_t>::max();
+                if (playtime_seconds > maxv - accrued_sec) {
+                    playtime_seconds = maxv;
+                } else {
+                    playtime_seconds += accrued_sec;
+                }
+
+                since_save += accrued_sec;
+                if (since_save >= 15) {
+                    since_save = 0;
+                    need_save = true;
+                }
+            }
+
+            // Accumulate session playtime (unless paused)
+            if (!pause_session) {
+                session_seconds_accumulated += accrued_sec;
+            }
         }
     }
 
@@ -76,6 +95,8 @@ void PlaytimeCounter::load()
     std::lock_guard<std::mutex> lock(mutex);
 
     playtime_seconds = 0;
+    playtime_accumulator_ms = 0;
+    session_seconds_accumulated = 0;
 
     std::string data(32, '\0');
     if (local_storage->get_data("", playtime_filename, data.data(), static_cast<unsigned int>(data.size()), 0) > 0) {
@@ -89,6 +110,7 @@ void PlaytimeCounter::load()
 
 void PlaytimeCounter::save()
 {
+    if (!record_playtime) return;
     std::lock_guard<std::mutex> lock(mutex);
 
     std::string data = std::to_string(playtime_seconds);
@@ -99,4 +121,22 @@ uint64_t PlaytimeCounter::seconds() const
 {
     std::lock_guard<std::mutex> lock(mutex);
     return playtime_seconds;
+}
+
+uint64_t PlaytimeCounter::session_seconds() const
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    return session_seconds_accumulated;
+}
+
+void PlaytimeCounter::set_pause_total(bool pause)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    pause_total = pause;
+}
+
+void PlaytimeCounter::set_pause_session(bool pause)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    pause_session = pause;
 }

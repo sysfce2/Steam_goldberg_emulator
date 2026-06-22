@@ -2,7 +2,7 @@
 
 https://github.com/microsoft/Detours
 
-VERSION: https://github.com/microsoft/Detours/tree/9764cebcb1a75940e68fa83d6730ffaf0f669401
+VERSION: https://github.com/microsoft/Detours/tree/d644ce94e8c7f7f5a31591577c78134ea3ac1fae
 
 #### LICENSE
 

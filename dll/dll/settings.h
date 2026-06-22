@@ -128,7 +128,13 @@ struct Overlay_Appearance {
     constexpr const static NotificationPosition default_pos = NotificationPosition::top_right;
 
     std::string font_override{}; // path to a custom user-provided TTF font
+    std::string font_override_ach_title{}; // path to custom font for achievement title
+    std::string font_override_ach_desc{}; // path to custom font for achievement description
     float font_size = 16.0f;
+    float font_size_fps = 0.0f;
+    float font_size_ach_title = 0.0f;
+    float font_size_ach_desc = 0.0f;
+    bool font_ach_title_bold = false;
     
     float icon_size = 64.0f;
 
@@ -151,6 +157,7 @@ struct Overlay_Appearance {
     uint32 notification_duration_chat = 4000; // sliding animation duration duration (millisec)
 
     std::string ach_unlock_datetime_format = "%Y/%m/%d - %H:%M:%S";
+    bool show_playtime_in_user_info = false;
     
     float background_r = 0.12f;
     float background_g = 0.11f;
@@ -336,7 +343,7 @@ public:
     // allow stats not defined by the user?
     bool allow_unknown_stats = false;
 
-    // whether to enable the functionality which reports an achievement progress for stats that are tied to achievements
+    //whether to enable the functionality which reports an achievement progress for stats that are tied to achievements
     // only used internally for a stat that's tied to an achievement, the normal achievement progress requests made by the game are not impacted
     bool stat_achievement_progress_functionality = true;
     // when a stat that's tied to an achievement gets a new value, should the emu save that progress only if it's higher?
@@ -367,6 +374,10 @@ public:
 
     // whether to record playtime
     bool record_playtime = false;
+
+    // pause total / session playtime when the game window loses focus (ALT+TAB)
+    bool pause_total_when_unfocused = false;
+    bool pause_session_when_unfocused = false;
 
     // bypass to make SetAchievement() always return true, prevent some games from breaking
     bool achievement_bypass = false;
@@ -456,6 +467,8 @@ public:
     int  overlay_graph_timeframe_sec = 5;  // 1-30 seconds
     // keys used to toggle the overlay, default = Shift + Tab
     std::vector<std::string> overlay_toggle_keys{};
+    // minimum time interval between achievement notifications (in milliseconds)
+    int achievement_notification_delay_ms = 0;
 
     // free weekend
     bool free_weekend = false;

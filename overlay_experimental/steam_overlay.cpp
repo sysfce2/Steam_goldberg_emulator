@@ -445,13 +445,14 @@ void Steam_Overlay::parse_key_combo()
     }
 }
 
-Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking* network) :
+Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking* network, PlaytimeCounter* playtime_counter) :
     settings(settings),
     local_storage(local_storage),
     callback_results(callback_results),
     callbacks(callbacks),
     run_every_runcb(run_every_runcb),
     network(network),
+    playtime_counter(playtime_counter),
     stats(Steam_Overlay_Stats(settings))
 {
     // don't even bother initializing the overlay
@@ -465,7 +466,7 @@ Steam_Overlay::Steam_Overlay(Settings* settings, Local_Storage *local_storage, S
         std::chrono::milliseconds(renderer_detector_polling_ms),
         [this] { return !setup_overlay_called; }
     );
-    
+
     renderer_detector_delay_thread = common_helpers::KillableWorker(
         [this](void *){
             request_renderer_detector();
@@ -562,12 +563,12 @@ bool Steam_Overlay::renderer_hook_proc()
         return true;
     }
     PRINT_DEBUG("got renderer hook %p for '%s'", _renderer, _renderer->GetLibraryName());
-    
+
     // note: make sure to load all relevant strings before creating the font(s), otherwise some glyphs ranges will be missing
     load_achievements_data();
     load_audio();
     create_fonts();
-    
+
     // setup renderer callbacks
     auto overlay_toggle_callback = [this]() { open_overlay_hook(true); };
     _renderer->OverlayProc = [this]() { overlay_render_proc(); };
@@ -628,7 +629,7 @@ bool Steam_Overlay::renderer_hook_proc()
 
     bool started = _renderer->StartHook(overlay_toggle_callback, toggle_keys.data(), (int)toggle_keys.size(), &fonts_atlas);
     PRINT_DEBUG("started renderer hook (result=%i)", (int)started);
-    
+
     return true;
 }
 
@@ -642,6 +643,15 @@ void Steam_Overlay::create_fonts()
     fonts_atlas.Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
 
     float font_size = settings->overlay_appearance.font_size;
+    float font_size_fps = settings->overlay_appearance.font_size_fps > 0.0f
+        ? settings->overlay_appearance.font_size_fps
+        : font_size;
+    float font_size_ach_title = settings->overlay_appearance.font_size_ach_title > 0.0f
+        ? settings->overlay_appearance.font_size_ach_title
+        : font_size;
+    float font_size_ach_desc = settings->overlay_appearance.font_size_ach_desc > 0.0f
+        ? settings->overlay_appearance.font_size_ach_desc
+        : font_size;
 
     font_cfg.FontDataOwnedByAtlas = false; // https://github.com/ocornut/imgui/blob/master/docs/FONTS.md#loading-font-data-from-memory
     font_cfg.PixelSnapH = true;
@@ -673,12 +683,20 @@ void Steam_Overlay::create_fonts()
         font_builder.AddText(translationRenderer[i]);
         font_builder.AddText(translationShowAchievements[i]);
         font_builder.AddText(translationSettings[i]);
+        font_builder.AddText(translationHistory[i]);
         font_builder.AddText(translationFriends[i]);
+        font_builder.AddText(translationNoNotification[i]);
+        font_builder.AddText(translationClearAll[i]);
         font_builder.AddText(translationAchievementWindow[i]);
         font_builder.AddText(translationListOfAchievements[i]);
         font_builder.AddText(translationAchievements[i]);
         font_builder.AddText(translationHiddenAchievement[i]);
+        font_builder.AddText(translationShow[i]);
         font_builder.AddText(translationAchievedOn[i]);
+        font_builder.AddText(translationUnlocked[i]);
+        font_builder.AddText(translationNoUnlockedAchievements[i]);
+        font_builder.AddText(translationLocked[i]);
+        font_builder.AddText(translationAllAchievementsUnlocked[i]);
         font_builder.AddText(translationNotAchieved[i]);
         font_builder.AddText(translationGlobalAchievementPercent[i]);
         font_builder.AddText(translationGlobalSettingsWindow[i]);
@@ -711,10 +729,29 @@ void Steam_Overlay::create_fonts()
     font_builder.BuildRanges(&ranges);
     font_cfg.GlyphRanges = ranges.Data;
 
-    if (settings->overlay_appearance.font_override.size()) {
-        fonts_atlas.AddFontFromFileTTF(settings->overlay_appearance.font_override.c_str(), font_size, &font_cfg);
-        font_cfg.MergeMode = true; // merge next fonts into the first one, as if they were all just 1 font file
-    }
+    auto add_overlay_font = [this](float size, const std::string &custom_font = "") {
+        font_cfg.SizePixels = size;
+        font_cfg.MergeMode = false;
+
+        const std::string &font_path = custom_font.empty() ? settings->overlay_appearance.font_override : custom_font;
+        ImFont *font = nullptr;
+        if (font_path.size()) {
+            font = fonts_atlas.AddFontFromFileTTF(font_path.c_str(), size, &font_cfg);
+            if (font) {
+                font_cfg.MergeMode = true; // merge next font into the custom font
+            }
+        }
+
+        // note: base85 compressed arrays caused a compiler heap allocation error, regular compression is more guaranteed
+        ImFont *fallback_font = fonts_atlas.AddFontFromMemoryCompressedTTF(unifont_compressed_data, unifont_compressed_size, size, &font_cfg);
+        return font ? font : fallback_font;
+    };
+
+    font_notif = font_default = add_overlay_font(font_size);
+    font_fps = add_overlay_font(font_size_fps);
+    font_ach_title = add_overlay_font(font_size_ach_title, settings->overlay_appearance.font_override_ach_title);
+    font_ach_desc = add_overlay_font(font_size_ach_desc, settings->overlay_appearance.font_override_ach_desc);
+    stats.font = font_fps;
 
     // note: base85 compressed arrays caused a compiler heap allocation error, regular compression is more guaranteed
     ImFont *font = fonts_atlas.AddFontFromMemoryCompressedTTF(unifont_compressed_data, unifont_compressed_size, font_size, &font_cfg);
@@ -723,7 +760,8 @@ void Steam_Overlay::create_fonts()
     
     // With ImGui 1.92+ and ImGuiBackendFlags_RendererHasTextures, the backend
     // builds the font atlas automatically — no need to call Build() manually.
-    PRINT_DEBUG("fonts atlas built automatically...");
+    bool res = fonts_atlas.IsBuilt();
+    PRINT_DEBUG("isbuilt fonts atlas (result=%i)", (int)res);
 
     reset_LastError();
 }
@@ -799,7 +837,7 @@ void Steam_Overlay::load_achievements_data()
         ach.name = steamUserStats->GetAchievementName(i);
         ach.title = steamUserStats->GetAchievementDisplayAttribute(ach.name.c_str(), "name");
         ach.description = steamUserStats->GetAchievementDisplayAttribute(ach.name.c_str(), "desc");
-        
+
         const char *hidden = steamUserStats->GetAchievementDisplayAttribute(ach.name.c_str(), "hidden");
         ach.hidden = hidden && hidden[0] == '1';
 
@@ -829,7 +867,7 @@ void Steam_Overlay::load_achievements_data()
         }
 
         achievements.emplace_back(ach);
-        
+
         if (!setup_overlay_called) return;
     }
 
@@ -919,7 +957,7 @@ void Steam_Overlay::NotifySceAssetsReady(uint32_t downloaded, uint32_t skipped, 
 void Steam_Overlay::overlay_state_hook(bool ready)
 {
     PRINT_DEBUG("%i", (int)ready);
-    
+
     // NOTE usage of local objects here cause an exception when this is called with false state
     // the reason is that by the time this hook is called, the object may have been already destructed
     // this is why we use global mutex
@@ -1013,7 +1051,7 @@ void Steam_Overlay::obscure_game_input(bool state) {
                 io.WantCaptureMouse = state;
                 // not necessary, just to be sure
                 io.WantCaptureKeyboard = state;
-                
+
                 // restore the old cursor
                 _renderer->HideAppInputs(false);
                 PRINT_DEBUG("restored app input (count=%u)", new_val);
@@ -1136,7 +1174,7 @@ int find_free_friend_id(const std::map<Friend, friend_window_state, Friend_Less>
     {
         ids.emplace_back(i.second.id);
     });
-    
+
     return find_free_id(ids, base_friend_window_id);
 }
 
@@ -1149,7 +1187,7 @@ int find_free_notification_id(std::vector<Notification> const& notifications)
     {
         ids.emplace_back(i.id);
     });
-    
+
 
     return find_free_id(ids, base_friend_window_id);
 }
@@ -1163,7 +1201,7 @@ bool Steam_Overlay::submit_notification(
     PRINT_DEBUG("%i", (int)type);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     if (!Ready()) return false;
-    
+
     int id = find_free_notification_id(notifications);
     if (id == 0) {
         PRINT_DEBUG("error no free id to create a notification window");
@@ -1179,7 +1217,7 @@ bool Steam_Overlay::submit_notification(
     notif.frd = frd;
     if (frd) notif.source_friend_id = frd->first.id();
     if (ach) notif.ach = *ach;
-    
+
     notifications.emplace_back(notif);
     allow_renderer_frame_processing(true);
     // uncomment this block to obscure cursor input and steal focus for these specific notifications
@@ -1342,10 +1380,9 @@ void Steam_Overlay::show_test_achievement()
         ach.progress = progress;
         ach.achieved = false;
     }
-    
+
     post_achievement_notification(ach, for_progress);
-    // here we always play the sound for testing
-    notify_sound_user_achievement();
+    // sound is now played when notification is actually shown (delayed with queue)
 }
 
 void Steam_Overlay::build_friend_context_menu(Friend const& frd, friend_window_state& state)
@@ -1609,16 +1646,16 @@ std::chrono::milliseconds Steam_Overlay::get_notification_duration(notification_
     {
     case notification_type::message:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_chat);
-    
+
     case notification_type::invite:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
-    
+
     case notification_type::achievement:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_achievement);
-    
+
     case notification_type::achievement_progress:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_progress);
-    
+
     case notification_type::auto_accept_invite:
         return std::chrono::milliseconds(settings->overlay_appearance.notification_duration_invitation);
     
@@ -1837,7 +1874,7 @@ float Steam_Overlay::animate_factor(std::chrono::milliseconds elapsed, std::chro
             // PRINT_DEBUG("HIDE FACTOR %f", factor);
         }
     }
-    
+
     return factor;
 }
 
@@ -1864,7 +1901,7 @@ ImVec4 Steam_Overlay::get_notification_bg_rgba_safe()
             settings->overlay_appearance.notification_a
         );
     }
-    
+
     // fallback to dark-gray background
     return ImVec4(
         0.12f,
@@ -1980,7 +2017,7 @@ void Steam_Overlay::build_notifications(float width, float height)
         float settings_noti_alpha = settings->overlay_appearance.notification_a >= 0.0f && settings->overlay_appearance.notification_a <= 1.0f
             ? settings->overlay_appearance.notification_a
             : 1.0f;
-        
+
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, settings_noti_alpha));
         ImGui::PushStyleColor(ImGuiCol_WindowBg, get_notification_bg_rgba_safe());
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, settings_noti_alpha));
@@ -2221,9 +2258,29 @@ void Steam_Overlay::build_notifications(float width, float height)
                 break;
             }
 
+            // Archive to notification history (lightweight copy, no pointers/GPU resources)
+            {
+                NotificationHistoryEntry entry{};
+                // Use actual achievement unlock time when available,
+                // otherwise fall back to the notification display time.
+                if (item.ach.has_value() && item.ach->unlock_time > 0) {
+                    entry.timestamp = std::chrono::milliseconds(
+                        static_cast<long long>(item.ach->unlock_time) * 1000);
+                } else {
+                    entry.timestamp = item.start_time;
+                }
+                entry.type = item.type;
+                entry.message = item.message;
+                if (notification_history.size() >= MAX_NOTIFICATION_HISTORY) {
+                    notification_history.pop_front();
+                }
+                notification_history.push_back(std::move(entry));
+                notification_history_cache_dirty = true;
+            }
+
             return true;
         }
-        
+
         return false;
     }), notifications.end());
 
@@ -2240,10 +2297,10 @@ void Steam_Overlay::add_auto_accept_invite_notification()
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     if (!Ready()) return;
-    
+
     char tmp[TRANSLATION_BUFFER_SIZE]{};
     snprintf(tmp, sizeof(tmp), "%s", translationAutoAcceptFriendInvite[current_language]);
-    
+
     submit_notification(notification_type::auto_accept_invite, tmp);
     notify_sound_auto_accept_friend_invite();
 }
@@ -2251,16 +2308,16 @@ void Steam_Overlay::add_auto_accept_invite_notification()
 void Steam_Overlay::add_invite_notification(std::pair<const Friend, friend_window_state>& wnd_state)
 {
     if (settings->disable_overlay_friend_notification) return;
-    
+
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     if (!Ready()) return;
-    
+
     char tmp[TRANSLATION_BUFFER_SIZE]{};
     auto &first_friend = wnd_state.first;
     auto &name = first_friend.name();
-    snprintf(tmp, sizeof(tmp), translationInvitedYouToJoinTheGame[current_language], name.c_str(), (uint64)first_friend.appid()); 
-    
+    snprintf(tmp, sizeof(tmp), translationInvitedYouToJoinTheGame[current_language], name.c_str(), (uint64)first_friend.appid());
+
     submit_notification(notification_type::invite, tmp, &wnd_state);
 }
 
@@ -2271,16 +2328,86 @@ void Steam_Overlay::post_achievement_notification(Overlay_Achievement &ach, bool
     PRINT_DEBUG_ENTRY();
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     if (!Ready()) return;
-    
-    bool achieved = !for_progress; // for progress notifications we want to load the gray icon
-    // force upload to GPU if the pagination is request-based
-    try_load_ach_icon(ach, achieved, settings->paginated_achievements_icons == 0);
-    submit_notification(
-        for_progress ? notification_type::achievement_progress : notification_type::achievement,
-        ach.title + "\n" + ach.description,
-        {},
-        &ach
-    );
+// Get current time
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+
+    // Calculate scheduled show time based on rate limiting
+    std::chrono::milliseconds scheduled_show_time;
+    int delay_ms = settings->achievement_notification_delay_ms;
+
+    PRINT_DEBUG("Achievement delay: %d ms", delay_ms);
+
+    if (delay_ms <= 0) {
+        // No delay - show immediately
+        scheduled_show_time = now;
+    } else {
+        // Apply rate limiting: earliest show time is last_scheduled_show_time + delay
+        scheduled_show_time = std::max(now, last_scheduled_show_time + std::chrono::milliseconds(delay_ms));
+    }
+
+    // Create scheduled achievement entry
+    ScheduledAchievement scheduled_ach;
+    scheduled_ach.ach = ach;
+    scheduled_ach.for_progress = for_progress;
+    scheduled_ach.trigger_time = now;
+    scheduled_ach.scheduled_show_time = scheduled_show_time;
+
+    // Add to queue
+    achievement_queue.push_back(scheduled_ach);
+
+    // Update last scheduled show time for next item
+    last_scheduled_show_time = scheduled_show_time;
+
+    PRINT_DEBUG("Achievement queued: '%s', scheduled for %lld ms, delay=%d ms", 
+                ach.name.c_str(), (long long)scheduled_show_time.count(), delay_ms);
+}
+
+void Steam_Overlay::process_achievement_queue()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!Ready()) return;
+    if (achievement_queue.empty()) return;
+
+    // Get current time
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+
+    // Process all ready achievements
+    while (!achievement_queue.empty()) {
+        auto& scheduled_ach = achievement_queue.front();
+
+        // Check if it's time to show this notification
+        PRINT_DEBUG("Queue check: scheduled=%lld, now=%lld, diff=%lld",
+                    (long long)scheduled_ach.scheduled_show_time.count(),
+                    (long long)now.count(),
+                    (long long)(now - scheduled_ach.scheduled_show_time).count());
+        if (scheduled_ach.scheduled_show_time <= now) {
+            // Show the notification
+            bool achieved = !scheduled_ach.for_progress;
+            // force upload to GPU if the pagination is request-based
+            try_load_ach_icon(scheduled_ach.ach, achieved, settings->paginated_achievements_icons == 0);
+
+            submit_notification(
+                scheduled_ach.for_progress ? notification_type::achievement_progress : notification_type::achievement,
+                scheduled_ach.ach.title + "\n" + scheduled_ach.ach.description,
+                {},
+                &scheduled_ach.ach
+            );
+
+            // Play sound when notification is actually shown (delayed with queue)
+            notify_sound_user_achievement();
+
+            PRINT_DEBUG("Achievement shown: '%s' at %lld ms", 
+                        scheduled_ach.ach.name.c_str(), (long long)now.count());
+
+            // Remove from queue
+            achievement_queue.pop_front();
+        } else {
+            // This achievement is not ready yet, and queue is ordered by scheduled time,
+            // so no more achievements will be ready either
+            break;
+        }
+    }
+
 }
 
 // Per-display HDR + colour-space info queried from the OS for the overlay info panel.
@@ -3030,6 +3157,9 @@ void Steam_Overlay::overlay_render_proc()
     // sRGB→swapchain conversion for ImGui rendering internally.  Only textures
     // need our explicit FP16 HDR transform (via transform_pixels_to_fp16).
 
+    // Process achievement queue to show scheduled notifications
+    process_achievement_queue();
+
     if (show_overlay) {
         render_main_window();
     }
@@ -3253,11 +3383,28 @@ void Steam_Overlay::render_main_window()
                         ImGui::TextColored(TC(ImVec4(0.6f, 0.8f, 1.0f, 1.0f)), "%s", server_line.c_str());
                     }
                 }
+
+            if (settings->record_playtime && playtime_counter && settings->overlay_appearance.show_playtime_in_user_info) {
+                uint64_t session_sec = playtime_counter->session_seconds();
+                unsigned ss = static_cast<unsigned>(session_sec % 60);
+                unsigned mm = static_cast<unsigned>((session_sec / 60) % 60);
+                unsigned hh = static_cast<unsigned>(session_sec / 3600);
+
+                uint64_t total_sec = playtime_counter->seconds();
+                unsigned total_h = static_cast<unsigned>(total_sec / 3600);
+                unsigned total_m = static_cast<unsigned>((total_sec % 3600) / 60);
+
+                char total_buf[32]{};
+                char session_buf[32]{};
+                snprintf(total_buf, sizeof(total_buf), "%uh %um", total_h, total_m);
+                snprintf(session_buf, sizeof(session_buf), "%02u:%02u:%02u", hh, mm, ss);
+
+                ImGui::LabelText("##playtime", "Total: %s  Session: %s", total_buf, session_buf);
             }
         }
 
         ImGui::Spacing();
-        
+
         ImGui::SameLine();
         // user clicked on "toggle user info"
         if (ImGui::Button(translationToggleUserInfo[current_language])) {
@@ -3303,6 +3450,15 @@ void Steam_Overlay::render_main_window()
         }
 
         ImGui::SameLine();
+        // user clicked on "notification history"
+        if (ImGui::Button(translationHistory[current_language])) {
+            show_notification_history = !show_notification_history;
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        // user clicked on "FPS"
+        ImGui::SameLine();
         // user clicked on "networks"
         if (ImGui::Button("Networks")) {
             show_networks = !show_networks;
@@ -3315,6 +3471,83 @@ void Steam_Overlay::render_main_window()
                 show_lobby_chat = !show_lobby_chat;
             }
         }
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        // --- Notification history panel ---
+        if (show_notification_history) {
+            if (ImGui::Button(translationClearAll[current_language])) {
+                notification_history.clear();
+                notification_history_cache.clear();
+                notification_history_cache_dirty = false;
+            }
+            ImGui::Separator();
+            if (notification_history.empty()) {
+                ImGui::TextDisabled(translationNoNotification[current_language]);
+            } else {
+                ImGui::BeginChild("##history_scroll", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 10), true);
+
+                // Rebuild cache only when history actually changes
+                if (notification_history_cache_dirty) {
+                    notification_history_cache.clear();
+                    notification_history_cache.reserve(notification_history.size());
+
+                    for (auto it = notification_history.rbegin(); it != notification_history.rend(); ++it) {
+                        // Format timestamp HH:MM:SS in local timezone
+                        const time_t total_sec = std::chrono::duration_cast<std::chrono::seconds>(it->timestamp).count();
+                        struct tm local_tm_buf{};
+#ifdef _MSC_VER
+                        localtime_s(&local_tm_buf, &total_sec);
+#else
+                        localtime_r(&total_sec, &local_tm_buf);
+#endif
+                        const auto hr = local_tm_buf.tm_hour;
+                        const auto min = local_tm_buf.tm_min;
+                        const auto sec = local_tm_buf.tm_sec;
+
+                        // Type label
+                        const char *type_label = "?";
+                        switch ((notification_type)it->type) {
+                            case notification_type::message: type_label = "Chat"; break;
+                            case notification_type::invite: type_label = "Invite"; break;
+                            case notification_type::achievement: type_label = "Achievement"; break;
+                            case notification_type::achievement_progress: type_label = "Progress"; break;
+                            case notification_type::auto_accept_invite: type_label = "Auto-Invite"; break;
+                        }
+
+                        // For achievements the message contains "title\ndescription"
+                        // Replace newline with inline separator for compact display
+                        std::string display_msg = it->message;
+                        if (it->type == static_cast<uint8>(notification_type::achievement) ||
+                            it->type == static_cast<uint8>(notification_type::achievement_progress)) {
+                            size_t pos = display_msg.find('\n');
+                            if (pos != std::string::npos) {
+                                display_msg.replace(pos, 1, " — ");
+                            }
+                        }
+
+                        std::string line = (std::ostringstream{}
+                            << "[" << std::setw(2) << std::setfill('0') << hr << ":"
+                            << std::setw(2) << std::setfill('0') << min << ":"
+                            << std::setw(2) << std::setfill('0') << sec << "] "
+                            << type_label << "  "
+                            << display_msg).str();
+
+                        notification_history_cache.push_back(std::move(line));
+                    }
+                    notification_history_cache_dirty = false;
+                }
+
+                // Render from cache
+                for (const auto &line : notification_history_cache) {
+                    ImGui::TextWrapped("%s", line.c_str());
+                    ImGui::Separator();
+                }
+                ImGui::EndChild();
+            }
+        }
+
+        ImGui::LabelText("##label", "%s", translationFriends[current_language]);
 
         // SCE buttons — only shown when SCE catalog data is present
         {
@@ -4506,7 +4739,7 @@ void Steam_Overlay::render_main_window()
 
                 ImGui::EndChild();
             }
-            
+
             ImGui::End();
         }
 
@@ -5204,7 +5437,7 @@ void Steam_Overlay::render_main_window()
                 ImGui::PushItemWidth(ImGui::CalcTextSize(url.c_str()).x + 20);
                 ImGui::InputText("##url_copy", (char *)url.data(), url.size(), ImGuiInputTextFlags_ReadOnly);
                 ImGui::PopItemWidth();
-                
+
                 ImGui::Spacing();
                 if (ImGui::Button(translationClose[current_language]) || !show)
                     show_url = "";
@@ -5282,7 +5515,7 @@ void Steam_Overlay::load_next_ach_icon()
     auto &icon_rsrc = achieved ? ach.icon : ach.icon_gray;
     // always force upload to GPU in background-loading mode (pagination > 0)
     bool loaded = try_load_ach_icon(ach, achieved, true);
-    
+
 #ifndef EMU_RELEASE_BUILD
     if (loaded) {
         auto now2 = std::chrono::high_resolution_clock::now();
@@ -5340,10 +5573,10 @@ void Steam_Overlay::UnSetupOverlay()
             // this hacky solution just sets it to an empty function
             _renderer->OverlayHookReady = [](InGameOverlay::OverlayHookState){};
             _renderer->OverlayProc = [](){};
-            
+
             allow_renderer_frame_processing(false, true);
             obscure_game_input(false);
-            
+
             PRINT_DEBUG("releasing any images resources");
             for (auto &ach : achievements) {
                 if (ach.icon->GetResourceId() != 0) {
@@ -5363,7 +5596,7 @@ void Steam_Overlay::UnSetupOverlay()
 
         cleanup_renderer_hook();
     }
-    
+
     PRINT_DEBUG("done *********");
 }
 
@@ -5416,7 +5649,7 @@ void Steam_Overlay::OpenOverlay(const char* pchDialog)
     PRINT_DEBUG("TODO '%s'", pchDialog);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     if (!Ready()) return;
-    
+
     // TODO: Show pages depending on pchDialog
     if ((strncmp(pchDialog, "Friends", sizeof("Friends") - 1) == 0) && (settings->overlayAutoAcceptInvitesCount() > 0)) {
         PRINT_DEBUG("won't open overlay's friends list because some friends are defined in the auto accept list");
@@ -5431,7 +5664,7 @@ void Steam_Overlay::OpenOverlayWebpage(const char* pchURL)
     PRINT_DEBUG("TODO '%s'", pchURL);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
     if (!Ready()) return;
-    
+
     show_url = pchURL;
     ShowOverlay(true);
 }
@@ -5482,7 +5715,7 @@ void Steam_Overlay::ShowOverlay(bool state)
     }
 
     PRINT_DEBUG("%i", (int)state);
-    
+
     Steam_Overlay::allow_renderer_frame_processing(state);
     Steam_Overlay::obscure_game_input(state);
 
@@ -5552,7 +5785,7 @@ void Steam_Overlay::FriendConnect(Friend _friend)
     // players connections might happen earlier before the overlay is ready
     // we don't want to miss them
     //if (!Ready()) return;
-    
+
     int id = find_free_friend_id(friends);
     if (id != 0) {
         auto& item = friends[_friend];
@@ -5572,11 +5805,11 @@ void Steam_Overlay::FriendDisconnect(Friend _friend)
 
     PRINT_DEBUG("%" PRIu64 "", _friend.id());
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
-    
+
     // players connections might happen earlier before the overlay is ready
     // we don't want to miss them
     //if (!Ready()) return;
-    
+
     auto it = friends.find(_friend);
     if (it != friends.end())
         friends.erase(it);
@@ -5660,11 +5893,10 @@ void Steam_Overlay::AddAchievementNotification(const std::string &ach_name, nloh
 
     PRINT_DEBUG("'%s' %i", ach_name.c_str(), (int)for_progress);
     std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
-    if (!Ready()) return;
 
-    // don't return early when disable_overlay_achievement_notification is true
-    // otherwise when you open the achievements list/menu you won't see the new unlock status
-
+    // Phase 1: Update achievement data regardless of Ready() state.
+    // This keeps the achievement list accurate even if the overlay isn't
+    // fully initialized yet (e.g., during the startup window before late_init_imgui).
     for (auto &a : achievements) {
         if (a.name == ach_name) {
             try {
@@ -5677,9 +5909,12 @@ void Steam_Overlay::AddAchievementNotification(const std::string &ach_name, nloh
                 a.max_progress = ach.value("max_progress", static_cast<uint32>(0));
             } catch(...) {}
 
+            // Phase 2: Only show notification if overlay is ready
+            if (!Ready()) return;
+
             if (a.achieved && !for_progress) { // here we don't show the progress indications
                 post_achievement_notification(a, for_progress);
-                notify_sound_user_achievement();
+                // sound is now played when notification is actually shown (delayed with queue)
             } else if (for_progress && !settings->disable_overlay_achievement_progress) { // progress indication is shown for locked achievements only
                 // post notification if this isn't a progress, or a progress and the user didn't disable these notifications
                 post_achievement_notification(a, for_progress);
@@ -5910,7 +6145,7 @@ void Steam_Overlay::steam_run_callback_friends_actions()
                         }
                     }
                 }
-                
+
                 friend_info->second.window_state &= ~window_state_join;
             }
         }
@@ -6002,7 +6237,7 @@ void Steam_Overlay::networking_msg_received(Common_Message *msg)
 {
     if (msg->has_steam_messages()) {
         std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
-    
+
         Friend frd;
         frd.set_id(msg->source_id());
         auto friend_info = friends.find(frd);

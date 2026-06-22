@@ -5,6 +5,25 @@
 #include <algorithm>
 #include <cmath>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
+// Returns true if the game window is the currently focused foreground window.
+// On non-Windows platforms, always returns true (no focus-based pausing).
+static bool is_game_focused()
+{
+#if defined(_WIN32)
+    HWND fg = GetForegroundWindow();
+    if (!fg) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    return pid == GetCurrentProcessId();
+#else
+    return true;
+#endif
+}
+
 // EMA smoothing factor (0..1). Lower = smoother but slower to react.
 static constexpr float EMA_ALPHA = 0.1f;
 
@@ -102,10 +121,25 @@ void Steam_Overlay_Stats::update_playtime(const std::chrono::steady_clock::time_
     ).count();
     if (update_duration_sec < 1) return;
 
+    // Pause accumulation when the game window loses focus (ALT+TAB)
+    if (!is_game_focused() && settings->pause_session_when_unfocused) {
+        if (!playtime_pause_start.has_value()) {
+            playtime_pause_start = now;
+        }
+        return; // freeze the display values
+    }
+
+    // Accumulate paused duration when focus returns
+    if (playtime_pause_start.has_value()) {
+        total_playtime_paused += now - *playtime_pause_start;
+        playtime_pause_start.reset();
+    }
+
     last_playtime = now;
 
+    const auto effective_elapsed = (now - initial_time) - total_playtime_paused;
     const auto time_duration_sec = (unsigned long long)std::chrono::duration_cast<std::chrono::seconds>(
-        now - initial_time
+        effective_elapsed
     ).count();
     active_playtime_sec = static_cast<unsigned>(time_duration_sec % 60);
 

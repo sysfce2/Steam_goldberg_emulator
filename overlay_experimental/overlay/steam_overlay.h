@@ -4,6 +4,7 @@
 #include "dll/base.h"
 #include <map>
 #include <queue>
+#include <deque>
 
 #ifdef EMU_OVERLAY
 
@@ -11,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include "dll/playtime.h"
 #include "InGameOverlay/RendererHook.h"
 #include "InGameOverlay/ImGui/imgui.h"
 #include "overlay/steam_overlay_stats.h"
@@ -114,6 +116,14 @@ struct Notification
     mutable float last_height{};
 };
 
+// Lightweight archive entry -- no pointers, no GPU resources, safe to store long-term
+struct NotificationHistoryEntry
+{
+    std::chrono::milliseconds timestamp{};
+    uint8 type{};
+    std::string message{};
+};
+
 // notification coordinates { x, y }
 struct NotificationsCoords
 {
@@ -132,6 +142,7 @@ class Steam_Overlay
     class SteamCallBacks* callbacks;
     class RunEveryRunCB* run_every_runcb;
     class Networking* network;
+    class PlaytimeCounter* playtime_counter;
     class Steam_Overlay_Stats stats;
 
     // friend id, show client window (to chat and accept invite maybe)
@@ -225,6 +236,12 @@ class Steam_Overlay
     // Callback infos
     std::queue<Friend> has_friend_action{};
     std::vector<Notification> notifications{};
+    static constexpr size_t MAX_NOTIFICATION_HISTORY = 50;
+    std::deque<NotificationHistoryEntry> notification_history{};
+    bool show_notification_history = false;
+    // Cache for pre-formatted history lines — avoids rebuilding every frame
+    std::vector<std::string> notification_history_cache{};
+    bool notification_history_cache_dirty = false;
     // used when the button "Invite all" is clicked
     std::atomic<bool> invite_all_friends_clicked = false;
     // track lobby join requests we've already shown a notification for
@@ -232,6 +249,16 @@ class Steam_Overlay
 
     // track which friend lobbies we've already notified about (friend_id -> lobby_id)
     std::unordered_map<uint64, uint64> notified_friend_lobbies{};
+
+    // Rate-limiting queue for achievement notifications
+    struct ScheduledAchievement {
+        Overlay_Achievement ach;
+        bool for_progress;
+        std::chrono::milliseconds trigger_time; // when the achievement was triggered
+        std::chrono::milliseconds scheduled_show_time; // when the notification should be shown
+    };
+    std::deque<ScheduledAchievement> achievement_queue{};
+    std::chrono::milliseconds last_scheduled_show_time{}; // tracks the last scheduled show time for spacing
 
     bool overlay_state_changed = false;
 
@@ -263,10 +290,13 @@ class Steam_Overlay
 
     std::vector<InGameOverlay::ToggleKey> toggle_keys{};
 
-    // font stuff
+    // font stuff - now supporting independent font sizes
     ImFontAtlas fonts_atlas{};
     ImFont *font_default{};
     ImFont *font_notif{};
+    ImFont *font_fps{}; // separate font for FPS display
+    ImFont *font_ach_title{}; // separate font for achievement title
+    ImFont *font_ach_desc{}; // separate font for achievement description
     ImFontConfig font_cfg{};
     ImFontGlyphRangesBuilder font_builder{};
     ImVector<ImWchar> ranges{};
@@ -374,7 +404,7 @@ class Steam_Overlay
     static void overlay_networking_callback(void* object, Common_Message* msg);
     
 public:
-    Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking *network);
+    Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking *network, PlaytimeCounter* playtime_counter);
 
     ~Steam_Overlay();
 
@@ -499,14 +529,18 @@ public:
 
     // Network topology for overlay
     int  Bridge_GetNetworkInfo(struct GSE_NetAdapter *out, int max_adapters) const;
+    // Rate-limiting queue functions
+    void process_achievement_queue();
 };
 
 #else // EMU_OVERLAY
 
+class PlaytimeCounter;
+
 class Steam_Overlay
 {
 public:
-    Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking* network) {}
+    Steam_Overlay(Settings* settings, Local_Storage *local_storage, SteamCallResults* callback_results, SteamCallBacks* callbacks, RunEveryRunCB* run_every_runcb, Networking* network, PlaytimeCounter* playtime_counter) {}
     ~Steam_Overlay() {}
 
     bool Ready() const { return false; }
@@ -541,6 +575,8 @@ public:
     void add_lobby_join_request_response_notification(uint64 lobby_id, const std::string &owner_name, bool accepted, uint64 source_id = 0) {}
 
     void add_lobby_kicked_notification(uint64 lobby_id, const std::string &kicker_name, uint64 source_id = 0) {}
+    
+    void process_achievement_queue() {}
 };
 
 #endif // EMU_OVERLAY

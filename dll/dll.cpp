@@ -1357,6 +1357,7 @@ STEAMAPI_API steam_bool S_CALLTYPE SteamAPI_ManualDispatch_GetNextCallback( HSte
 {
     PRINT_DEBUG("%i %p", hSteamPipe, pCallbackMsg);
     Steam_Client *steam_client = get_steam_client();
+    steam_client->RunCallbacks(true, true);
     if (!steam_client->IsServerInit()) {
         while(!server_cb.empty()) server_cb.pop();
     }
@@ -1570,8 +1571,6 @@ SteamMasterServerUpdater
 bool steamclient_get_callback(HSteamPipe hSteamPipe, CallbackMsg_t *pCallbackMsg)
 {
     SteamAPI_ManualDispatch_Init();
-    Steam_Client *steam_client = get_steam_client();
-    steam_client->RunCallbacks(true, true);
     return SteamAPI_ManualDispatch_GetNextCallback(hSteamPipe, pCallbackMsg);
 }
 

@@ -256,10 +256,64 @@ static void load_overlay_appearance(class Settings *settings_client, class Setti
                 } else {
                     PRINT_DEBUG("  ERROR font file '%s' doesn't exist and will be ignored", value.c_str());
                 }
+            } else if (name.compare("Font_Override_Achievement_Title") == 0) {
+                value = common_helpers::string_strip(value);
+                std::string nfont_override(common_helpers::to_absolute(value, Local_Storage::get_game_settings_path() + "fonts"));
+                if (!common_helpers::file_exist(nfont_override)) {
+                    nfont_override.clear();
+                }
+                if (nfont_override.empty()) {
+                    nfont_override = common_helpers::to_absolute(value, local_storage->get_global_settings_path() + "fonts");
+                    if (!common_helpers::file_exist(nfont_override)) {
+                        nfont_override.clear();
+                    }
+                }
+                if (nfont_override.size()) {
+                    settings_client->overlay_appearance.font_override_ach_title = nfont_override;
+                    settings_server->overlay_appearance.font_override_ach_title = nfont_override;
+                    PRINT_DEBUG("  loaded font '%s'", nfont_override.c_str());
+                } else {
+                    PRINT_DEBUG("  ERROR font file '%s' doesn't exist and will be ignored", value.c_str());
+                }
+            } else if (name.compare("Font_Override_Achievement_Description") == 0) {
+                value = common_helpers::string_strip(value);
+                std::string nfont_override(common_helpers::to_absolute(value, Local_Storage::get_game_settings_path() + "fonts"));
+                if (!common_helpers::file_exist(nfont_override)) {
+                    nfont_override.clear();
+                }
+                if (nfont_override.empty()) {
+                    nfont_override = common_helpers::to_absolute(value, local_storage->get_global_settings_path() + "fonts");
+                    if (!common_helpers::file_exist(nfont_override)) {
+                        nfont_override.clear();
+                    }
+                }
+                if (nfont_override.size()) {
+                    settings_client->overlay_appearance.font_override_ach_desc = nfont_override;
+                    settings_server->overlay_appearance.font_override_ach_desc = nfont_override;
+                    PRINT_DEBUG("  loaded font '%s'", nfont_override.c_str());
+                } else {
+                    PRINT_DEBUG("  ERROR font file '%s' doesn't exist and will be ignored", value.c_str());
+                }
             } else if (name.compare("Font_Size") == 0) {
                 float nfont_size = std::stof(value, NULL);
                 settings_client->overlay_appearance.font_size = nfont_size;
                 settings_server->overlay_appearance.font_size = nfont_size;
+            } else if (name.compare("Font_Size_FPS") == 0) {
+                float nfont_size = std::stof(value, NULL);
+                settings_client->overlay_appearance.font_size_fps = nfont_size;
+                settings_server->overlay_appearance.font_size_fps = nfont_size;
+            } else if (name.compare("Font_Size_Achievement_Title") == 0) {
+                float nfont_size = std::stof(value, NULL);
+                settings_client->overlay_appearance.font_size_ach_title = nfont_size;
+                settings_server->overlay_appearance.font_size_ach_title = nfont_size;
+            } else if (name.compare("Font_Size_Achievement_Description") == 0) {
+                float nfont_size = std::stof(value, NULL);
+                settings_client->overlay_appearance.font_size_ach_desc = nfont_size;
+                settings_server->overlay_appearance.font_size_ach_desc = nfont_size;
+            } else if (name.compare("Font_Achievement_Title_Bold") == 0) {
+                bool bold = (std::stol(value, NULL) != 0);
+                settings_client->overlay_appearance.font_ach_title_bold = bold;
+                settings_server->overlay_appearance.font_ach_title_bold = bold;
             } else if (name.compare("Icon_Size") == 0) {
                 float nicon_size = std::stof(value, NULL);
                 settings_client->overlay_appearance.icon_size = nicon_size;
@@ -323,6 +377,14 @@ static void load_overlay_appearance(class Settings *settings_client, class Setti
             } else if (name.compare("Achievement_Unlock_Datetime_Format") == 0) {
                 settings_client->overlay_appearance.ach_unlock_datetime_format = value;
                 settings_server->overlay_appearance.ach_unlock_datetime_format = value;
+            } else if (name.compare("Show_Playtime_In_User_Info") == 0) {
+                bool show = (std::stol(value, NULL) != 0);
+                settings_client->overlay_appearance.show_playtime_in_user_info = show;
+                settings_server->overlay_appearance.show_playtime_in_user_info = show;
+            } else if (name.compare("Achievement_Notification_Delay") == 0) {
+                float delay_sec = std::stof(value, NULL);
+                settings_client->achievement_notification_delay_ms = static_cast<int>(delay_sec * 1000.0f);
+                settings_server->achievement_notification_delay_ms = static_cast<int>(delay_sec * 1000.0f);
             } else if (name.compare("Background_R") == 0) {
                 float nbackground_r = std::stof(value, NULL);
                 settings_client->overlay_appearance.background_r = nbackground_r;
@@ -1986,7 +2048,7 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
             settings_server->overlay_fps_avg_window = val;        
         }
     }
-    
+
 }
 
 // main::misc::steam_game_stats_reports_dir
@@ -2153,6 +2215,11 @@ static void parse_stats_features(class Settings *settings_client, class Settings
 
     settings_client->no_write_user_stats_files = ini.GetBoolValue("main::stats", "no_write_user_stats_files", settings_client->no_write_user_stats_files);
     settings_server->no_write_user_stats_files = ini.GetBoolValue("main::stats", "no_write_user_stats_files", settings_server->no_write_user_stats_files);
+    
+    settings_client->pause_total_when_unfocused = ini.GetBoolValue("main::stats", "pause_total_when_unfocused", settings_client->pause_total_when_unfocused);
+    settings_server->pause_total_when_unfocused = ini.GetBoolValue("main::stats", "pause_total_when_unfocused", settings_server->pause_total_when_unfocused);
+    settings_client->pause_session_when_unfocused = ini.GetBoolValue("main::stats", "pause_session_when_unfocused", settings_client->pause_session_when_unfocused);
+    settings_server->pause_session_when_unfocused = ini.GetBoolValue("main::stats", "pause_session_when_unfocused", settings_server->pause_session_when_unfocused);
 }
 
 
