@@ -5493,6 +5493,8 @@ void Steam_Overlay::render_main_window()
 
 }
 
+}
+
 void Steam_Overlay::load_next_ach_icon()
 {
     // this function only works when icons pagination is active, request-based loading is not supported too (pagination=0)
