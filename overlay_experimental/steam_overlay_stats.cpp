@@ -47,7 +47,7 @@ bool Steam_Overlay_Stats::show_any_stats() const
     return show_fps || show_frametime || show_playtime;
 }
 
-void Steam_Overlay_Stats::update_frametime(const std::chrono::steady_clock::time_point &now)
+void Steam_Overlay_Stats::update_frametime(const std::chrono::high_resolution_clock::time_point &now)
 {
     float dt_ms = std::chrono::duration<float, std::milli>(now - last_frame_timepoint).count();
     last_frame_timepoint = now;
@@ -114,7 +114,7 @@ int Steam_Overlay_Stats::get_visible_frame_count() const
     return n;
 }
 
-void Steam_Overlay_Stats::update_playtime(const std::chrono::steady_clock::time_point &now)
+void Steam_Overlay_Stats::update_playtime(const std::chrono::high_resolution_clock::time_point &now)
 {
     const auto update_duration_sec = std::chrono::duration_cast<std::chrono::seconds>(
         now - last_playtime
@@ -152,7 +152,7 @@ void Steam_Overlay_Stats::update_playtime(const std::chrono::steady_clock::time_
 
 void Steam_Overlay_Stats::render_stats(int current_language)
 {
-    auto now = std::chrono::steady_clock::now();
+    auto now = std::chrono::high_resolution_clock::now();
     if (show_fps || show_frametime) {
         update_frametime(now);
     }
