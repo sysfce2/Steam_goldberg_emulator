@@ -226,6 +226,9 @@ static WCHAR OrgSteamPath_hkcu_2[8192] = { 0 };
 static DWORD Size2_hkcu_2 = sizeof(OrgSteamPath_hkcu_2);
 static WCHAR OrgSteamExe_2[8192] = { 0 };
 static DWORD Size3_hkcu_2 = sizeof(OrgSteamExe_2);
+static DWORD OrgRunningAppID_hkcu_2 = 0;
+static bool orig_steam_running_appid = false;
+static bool orig_steam_mod_dir = false;
 static bool patch_registry_hkcu_2()
 {
     HKEY Registrykey = { 0 };
@@ -233,9 +236,14 @@ static bool patch_registry_hkcu_2()
         orig_steam_hkcu_2 = true;
         // Get original values to restore later.
         DWORD keyType = REG_SZ;
-        RegQueryValueExW(Registrykey, L"SourceModInstallPath", 0, &keyType, (LPBYTE)OrgSteamModDir_hkcu_2, &Size1_hkcu_2);
+        orig_steam_mod_dir = (RegQueryValueExW(Registrykey, L"SourceModInstallPath", 0, &keyType, (LPBYTE)OrgSteamModDir_hkcu_2, &Size1_hkcu_2) == ERROR_SUCCESS);
         RegQueryValueExW(Registrykey, L"SteamPath", 0, &keyType, (LPBYTE)OrgSteamPath_hkcu_2, &Size2_hkcu_2);
         RegQueryValueExW(Registrykey, L"SteamExe", 0, &keyType, (LPBYTE)OrgSteamExe_2, &Size3_hkcu_2);
+        DWORD size_running = sizeof(DWORD);
+        DWORD keyTypeRunning = REG_DWORD;
+        if (RegQueryValueExW(Registrykey, L"RunningAppID", 0, &keyTypeRunning, (LPBYTE)&OrgRunningAppID_hkcu_2, &size_running) == ERROR_SUCCESS) {
+            orig_steam_running_appid = true;
+        }
         logger.write("Found previous registry entry (HKCU #2) for Steam");
     } else if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", 0, 0, REG_OPTION_NON_VOLATILE,
             KEY_ALL_ACCESS, NULL, &Registrykey, NULL) == ERROR_SUCCESS) {
@@ -267,9 +275,18 @@ static void cleanup_registry_hkcu_2()
     HKEY Registrykey = { 0 };
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", 0, KEY_ALL_ACCESS, &Registrykey) == ERROR_SUCCESS) {
         // Restore the values.
-        RegSetValueExW(Registrykey, L"SourceModInstallPath", NULL, REG_SZ, (LPBYTE)OrgSteamModDir_hkcu_2, Size1_hkcu_2);
+        if (orig_steam_mod_dir) {
+            RegSetValueExW(Registrykey, L"SourceModInstallPath", NULL, REG_SZ, (LPBYTE)OrgSteamModDir_hkcu_2, Size1_hkcu_2);
+        } else {
+            RegDeleteValueW(Registrykey, L"SourceModInstallPath");
+        }
         RegSetValueExW(Registrykey, L"SteamPath", NULL, REG_SZ, (LPBYTE)OrgSteamPath_hkcu_2, Size2_hkcu_2);
         RegSetValueExW(Registrykey, L"SteamExe", NULL, REG_SZ, (LPBYTE)OrgSteamExe_2, Size3_hkcu_2);
+        if (orig_steam_running_appid) {
+            RegSetValueExW(Registrykey, L"RunningAppID", NULL, REG_DWORD, (const BYTE *)&OrgRunningAppID_hkcu_2, sizeof(DWORD));
+        } else {
+            RegDeleteValueW(Registrykey, L"RunningAppID");
+        }
 
         // Close the HKEY Handle.
         RegCloseKey(Registrykey);
@@ -320,6 +337,7 @@ static void cleanup_registry_hklm()
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, hklm_path.c_str(), 0, KEY_ALL_ACCESS, &Registrykey) == ERROR_SUCCESS) {
         RegSetValueExW(Registrykey, L"InstallPath", NULL, REG_SZ, (const BYTE *)OrgInstallPath_hklm, Size1_hklm);
         RegSetValueExW(Registrykey, L"Universe", NULL, REG_SZ, (const BYTE *)OrgUniverse_hklm, Size2_hklm);
+        RegDeleteValueW(Registrykey, L"SteamPID");
         RegCloseKey(Registrykey);
     } else {
         logger.write("Unable to restore the original registry entry (HKLM), error = " + std::to_string(GetLastError()));
@@ -401,7 +419,7 @@ static void cleanup_registry_hkcs()
     } else {
         logger.write("removing registry entries (HKCS) #2 (added by loader)");
         HKEY Registrykey = { 0 };
-        RegDeleteKeyW(HKEY_CLASSES_ROOT, L"steam");
+        RegDeleteTreeW(HKEY_CLASSES_ROOT, L"steam");
     }
 }
 

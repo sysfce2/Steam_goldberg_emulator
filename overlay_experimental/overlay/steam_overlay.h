@@ -73,6 +73,7 @@ enum class notification_type
     lobby_kicked,
     friend_lobby_available,
     lobby_status,
+    screenshot,
 };
 
 struct Overlay_Achievement
@@ -85,6 +86,7 @@ struct Overlay_Achievement
     bool hidden{};
     bool achieved{};
     uint32 unlock_time{};
+    float unlock_percentage = -1.0f; // from achievements.json, -1 = unknown
     InGameOverlay::RendererResource_t* icon{};
     InGameOverlay::RendererResource_t* icon_gray{};
     int icon_handle = Settings::UNLOADED_IMAGE_HANDLE;
@@ -289,6 +291,86 @@ class Steam_Overlay
     int renderer_hook_timeout_ctr{};
 
     std::vector<InGameOverlay::ToggleKey> toggle_keys{};
+    std::vector<InGameOverlay::ToggleKey> screenshot_keys{};
+
+    struct ScreenshotItem {
+        std::string filename;
+        std::string full_path;
+        InGameOverlay::RendererResource_t* texture = nullptr;
+        // Keep pixel data alive until the GPU has consumed it (AttachResource does NOT own the data)
+        std::vector<uint8_t> thumbnail_pixels{};
+        bool selected = false;
+        bool failed_to_load = false;
+        time_t mtime = 0;  // file modification time, 0 = unknown
+    };
+
+    struct CapturedScreenshot {
+        uint32_t width;
+        uint32_t height;
+        std::vector<uint8_t> pixels_rgb;
+    };
+
+    std::vector<ScreenshotItem> screenshot_items{};
+    bool screenshots_loaded = false;
+    bool show_screenshots_window = false;
+    std::string preview_screenshot_path{};
+    InGameOverlay::RendererResource_t* preview_texture = nullptr;
+    // Persistent storage for preview/pin pixel data (AttachResource does NOT own the data)
+    std::vector<uint8_t> preview_pixels{};
+    uint32_t preview_pixels_w = 0;
+    uint32_t preview_pixels_h = 0;
+    int preview_index = -1;
+    bool preview_open_active = false;       // true between OpenPopup and explicit close
+    bool preview_delete_pending = false;    // true while inline delete confirmation is shown in preview
+    bool preview_crop_mode = false;         // true while the crop editor is open inside the preview
+    ImVec4 preview_crop_rect = { 0, 0, 0, 0 };        // current selection in source pixels (0,0,0,0 = full image)
+    ImVec4 preview_crop_rect_prev = { 0, 0, 0, 0 };   // saved on entering crop mode (for Cancel)
+    bool delete_confirm_open_active = false;
+
+    bool show_delete_confirmation = false;
+    bool delete_all_selected = false;
+    std::string single_delete_path;
+
+    // Drag state for the crop-rectangle editor. Used by both the pin and the
+    // preview crop flows. `handle` follows the same convention as in the
+    // editor implementation: 0..3 = corners (TL, TR, BR, BL), 4..7 = edge
+    // midpoints (T, R, B, L), 8 = body move, -1 = none.
+    struct CropDragState {
+        bool dragging = false;
+        ImVec2 start = { 0, 0 };
+        int handle = -1;
+        ImVec2 anchor = { 0, 0 };        // opposite corner / body offset
+        int handle_hover = -1;            // -1 = none
+    };
+
+    struct PinnedScreenshot {
+        uint64_t id;                              // unique per-pin ID for ImGui window identity
+        std::string path;
+        InGameOverlay::RendererResource_t* texture = nullptr;
+        std::vector<uint8_t> pixels;
+        uint32_t pixels_w = 0, pixels_h = 0;
+        float opacity = 1.0f;
+        bool pos_set = false;
+        ImVec2 pos = { 100, 100 };
+        ImVec2 size = { 320, 180 };
+        ImVec2 image_disp = { 0, 0 };             // actual image display size (capped by aspect ratio)
+        ImVec2 last_outer = { 0, 0 };             // actual window outer size from last frame (drift guard)
+        bool focus_requested = false;              // true to bring window to front on next frame
+        bool open = true;                          // tracks window close-button (X) state
+        ImVec4 crop_rect = { 0, 0, 0, 0 };         // crop region (x0,y0,x1,y1) in source pixels; (0,0,0,0) = no crop (show full image)
+        ImVec4 crop_rect_prev = { 0, 0, 0, 0 };    // saved crop_rect when entering crop mode (for Cancel)
+        bool crop_mode = false;                    // true while the crop editor is open for this pin
+        CropDragState crop_drag{};                 // per-pin drag state for the crop editor
+    };
+
+    std::vector<PinnedScreenshot> pinned_screenshots{};
+    uint64_t next_pin_id = 1;
+
+    // Maximum dimension (px) for a context-menu-initiated pin. Generous — modern monitors are large.
+    static constexpr float kContextPinMaxDim = 800.0f;
+
+    std::vector<CapturedScreenshot> captured_screenshots_queue{};
+    std::mutex captured_screenshots_mutex{};
 
     // font stuff - now supporting independent font sizes
     ImFontAtlas fonts_atlas{};
@@ -327,6 +409,7 @@ class Steam_Overlay
     Steam_Overlay& operator=(Steam_Overlay&&) = delete;
 
     void parse_key_combo();
+    void parse_screenshot_key_combo();
     bool submit_notification(
         notification_type type,
         const std::string &msg,
@@ -335,6 +418,38 @@ class Steam_Overlay
     );
 
     void play_overlay_sound(const char* sound_key);
+    
+    void refresh_screenshots_list();
+    void render_gallery_window();
+    void render_pinned_screenshot();
+    void process_captured_screenshots();
+    // Clears all preview-popup state (path, index, texture, pixels). Does NOT call CloseCurrentPopup.
+    void clear_preview_state();
+    // Removes a single pinned screenshot by ID (cleans up GPU resources).
+    void unpin_screenshot(uint64_t id);
+    // Removes all pinned screenshots (cleans up GPU resources).
+    void unpin_all_screenshots();
+
+    // Drag state for the crop-rectangle editor. The pin version lives inside
+    // PinnedScreenshot (per-pin); the preview version is shared since only
+    // one preview exists at a time.
+    CropDragState preview_crop_drag{};
+
+    // Renders the crop-rectangle editor over a displayed image. `rect` is
+    // (x0, y0, x1, y1) in source pixels and is mutated in place. `tex_id` is
+    // the texture resource; it's used to redraw the image inside the
+    // selection area so the dim overlay outside doesn't cover it. Returns
+    // Active while the user keeps editing, Confirm when the Confirm button
+    // is clicked (caller applies the crop), Cancel when Cancel is clicked
+    // (caller discards).
+    enum class CropAction { Active, Confirm, Cancel };
+    CropAction render_crop_editor(ImVec4& rect, CropDragState& st,
+                                  ImTextureID tex_id,
+                                  uint32_t src_w, uint32_t src_h,
+                                  ImVec2 img_min, ImVec2 img_size);
+
+    static void on_screenshot_captured(const InGameOverlay::ScreenshotCallbackParameter_t* screenshot, void* userParameter);
+
     void notify_sound_user_invite(friend_window_state& friend_state);
     void notify_sound_chat_message(friend_window_state& friend_state);
     void notify_sound_user_achievement();

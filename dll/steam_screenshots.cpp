@@ -104,8 +104,10 @@ void Steam_Screenshots::TriggerScreenshot()
     if (hooked) {
         ScreenshotRequested_t data;
         callbacks->addCBResult(data.k_iCallback, &data, sizeof(data));
+    } else if (overlay_take_screenshot) {
+        overlay_take_screenshot();
     } else {
-        PRINT_DEBUG("  TODO: Make the overlay take a screenshot");
+        PRINT_DEBUG("  No overlay available to take screenshot");
     }
 }
 

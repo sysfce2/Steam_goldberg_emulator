@@ -606,6 +606,14 @@ std::string Local_Storage::get_path(std::string folder)
     return path;
 }
 
+bool Local_Storage::dir_exists(std::string folder)
+{
+    if (folder.size() && folder.back() != *PATH_SEPARATOR) {
+        folder.append(PATH_SEPARATOR);
+    }
+    return common_helpers::dir_exist(save_directory + appid + folder);
+}
+
 std::string Local_Storage::get_global_settings_path()
 {
     return save_directory + settings_storage_folder + PATH_SEPARATOR;

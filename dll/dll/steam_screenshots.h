@@ -19,6 +19,7 @@
 #define __INCLUDED_STEAM_SCRNSHOTS_H__
 
 #include "base.h"
+#include <functional>
 
 struct screenshot_infos_t {
 	std::string screenshot_name{};
@@ -33,7 +34,12 @@ public ISteamScreenshots
 	class Local_Storage *local_storage{};
 	class SteamCallBacks *callbacks{};
 
+public:
     bool hooked = false;
+    // Callback set by Steam_Overlay to delegate overlay screenshots to the renderer hook
+    std::function<void()> overlay_take_screenshot{};
+
+private:
 	std::map<ScreenshotHandle, screenshot_infos_t> _screenshots{};
 
 	ScreenshotHandle create_screenshot_handle();

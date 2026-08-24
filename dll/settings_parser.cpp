@@ -217,6 +217,23 @@ static void parse_overlay_hotkeys(class Settings *settings_client, class Setting
         settings_client->overlay_toggle_keys = combo;
         settings_server->overlay_toggle_keys = combo;
     }
+
+    auto screenshot_str = ini.GetValue("overlay::hotkeys", "screenshot_combo", "f12");
+    if (screenshot_str && screenshot_str[0]) {
+        auto combo = common_helpers::str_split(screenshot_str, "+");
+        std::for_each(combo.begin(), combo.end(),
+            [](std::string &item){ item = common_helpers::str_strip(item); }
+        );
+        combo.erase(
+            std::remove_if(
+                combo.begin(), combo.end(),
+                [](const std::string& item) { return item.empty(); }
+            ),
+            combo.end()
+        );
+        settings_client->overlay_screenshot_keys = combo;
+        settings_server->overlay_screenshot_keys = combo;
+    }
 }
 
 // overlay::appearance
@@ -374,9 +391,32 @@ static void load_overlay_appearance(class Settings *settings_client, class Setti
                 uint32 time = (uint32)(std::stof(value, NULL) * 1000.0f); // convert sec to milli
                 settings_client->overlay_appearance.notification_duration_chat = time;
                 settings_server->overlay_appearance.notification_duration_chat = time;
+            } else if (name.compare("Notification_Duration_Screenshot") == 0) {
+                uint32 time = (uint32)(std::stof(value, NULL) * 1000.0f); // convert sec to milli
+                settings_client->overlay_appearance.notification_duration_screenshot = time;
+                settings_server->overlay_appearance.notification_duration_screenshot = time;
             } else if (name.compare("Achievement_Unlock_Datetime_Format") == 0) {
                 settings_client->overlay_appearance.ach_unlock_datetime_format = value;
                 settings_server->overlay_appearance.ach_unlock_datetime_format = value;
+                } else if (name.compare("Screenshot_Datetime_Format") == 0) {
+                settings_client->overlay_appearance.screenshot_datetime_format = value;
+                settings_server->overlay_appearance.screenshot_datetime_format = value;
+            } else if (name.compare("Show_Notification_History") == 0) {
+                bool show = (std::stol(value, NULL) != 0);
+                settings_client->overlay_appearance.show_notification_history = show;
+                settings_server->overlay_appearance.show_notification_history = show;
+            } else if (name.compare("Show_Achievement_List") == 0) {
+                bool show = (std::stol(value, NULL) != 0);
+                settings_client->overlay_appearance.show_achievement_list = show;
+                settings_server->overlay_appearance.show_achievement_list = show;
+            } else if (name.compare("Unlocked_Expanded") == 0) {
+                bool expand = (std::stol(value, NULL) != 0);
+                settings_client->overlay_appearance.unlocked_expanded = expand;
+                settings_server->overlay_appearance.unlocked_expanded = expand;
+            } else if (name.compare("Locked_Expanded") == 0) {
+                bool expand = (std::stol(value, NULL) != 0);
+                settings_client->overlay_appearance.locked_expanded = expand;
+                settings_server->overlay_appearance.locked_expanded = expand;
             } else if (name.compare("Show_Playtime_In_User_Info") == 0) {
                 bool show = (std::stol(value, NULL) != 0);
                 settings_client->overlay_appearance.show_playtime_in_user_info = show;
@@ -1996,6 +2036,36 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
     settings_client->disable_overlay_warning_local_save = ini.GetBoolValue("overlay::general", "disable_warning_local_save", settings_client->disable_overlay_warning_local_save);
     settings_server->disable_overlay_warning_local_save = ini.GetBoolValue("overlay::general", "disable_warning_local_save", settings_server->disable_overlay_warning_local_save);
 
+    settings_client->overlay_show_button_user_info = ini.GetBoolValue("overlay::general", "show_button_user_info", settings_client->overlay_show_button_user_info);
+    settings_server->overlay_show_button_user_info = ini.GetBoolValue("overlay::general", "show_button_user_info", settings_server->overlay_show_button_user_info);
+
+    settings_client->overlay_show_button_achievements = ini.GetBoolValue("overlay::general", "show_button_achievements", settings_client->overlay_show_button_achievements);
+    settings_server->overlay_show_button_achievements = ini.GetBoolValue("overlay::general", "show_button_achievements", settings_server->overlay_show_button_achievements);
+
+    settings_client->overlay_show_button_test_achievement = ini.GetBoolValue("overlay::general", "show_button_test_achievement", settings_client->overlay_show_button_test_achievement);
+    settings_server->overlay_show_button_test_achievement = ini.GetBoolValue("overlay::general", "show_button_test_achievement", settings_server->overlay_show_button_test_achievement);
+
+    settings_client->overlay_show_button_copy_id = ini.GetBoolValue("overlay::general", "show_button_copy_id", settings_client->overlay_show_button_copy_id);
+    settings_server->overlay_show_button_copy_id = ini.GetBoolValue("overlay::general", "show_button_copy_id", settings_server->overlay_show_button_copy_id);
+
+    settings_client->overlay_show_button_screenshots = ini.GetBoolValue("overlay::general", "show_button_screenshots", settings_client->overlay_show_button_screenshots);
+    settings_server->overlay_show_button_screenshots = ini.GetBoolValue("overlay::general", "show_button_screenshots", settings_server->overlay_show_button_screenshots);
+
+    settings_client->overlay_show_button_history = ini.GetBoolValue("overlay::general", "show_button_history", settings_client->overlay_show_button_history);
+    settings_server->overlay_show_button_history = ini.GetBoolValue("overlay::general", "show_button_history", settings_server->overlay_show_button_history);
+
+    settings_client->overlay_show_button_settings = ini.GetBoolValue("overlay::general", "show_button_settings", settings_client->overlay_show_button_settings);
+    settings_server->overlay_show_button_settings = ini.GetBoolValue("overlay::general", "show_button_settings", settings_server->overlay_show_button_settings);
+
+    settings_client->overlay_show_checkbox_fps = ini.GetBoolValue("overlay::general", "show_checkbox_fps", settings_client->overlay_show_checkbox_fps);
+    settings_server->overlay_show_checkbox_fps = ini.GetBoolValue("overlay::general", "show_checkbox_fps", settings_server->overlay_show_checkbox_fps);
+
+    settings_client->overlay_show_checkbox_frametime = ini.GetBoolValue("overlay::general", "show_checkbox_frametime", settings_client->overlay_show_checkbox_frametime);
+    settings_server->overlay_show_checkbox_frametime = ini.GetBoolValue("overlay::general", "show_checkbox_frametime", settings_server->overlay_show_checkbox_frametime);
+
+    settings_client->overlay_show_checkbox_playtime = ini.GetBoolValue("overlay::general", "show_checkbox_playtime", settings_client->overlay_show_checkbox_playtime);
+    settings_server->overlay_show_checkbox_playtime = ini.GetBoolValue("overlay::general", "show_checkbox_playtime", settings_server->overlay_show_checkbox_playtime);
+    
     settings_client->overlay_upload_achs_icons_to_gpu = ini.GetBoolValue("overlay::general", "upload_achievements_icons_to_gpu", settings_client->overlay_upload_achs_icons_to_gpu);
     settings_server->overlay_upload_achs_icons_to_gpu = ini.GetBoolValue("overlay::general", "upload_achievements_icons_to_gpu", settings_server->overlay_upload_achs_icons_to_gpu);
 
@@ -2034,6 +2104,8 @@ static void parse_overlay_general_config(class Settings *settings_client, class 
             settings_server->overlay_graph_timeframe_sec = (int)val;
         }
     }
+    settings_client->enable_screenshot = ini.GetBoolValue("overlay::general", "enable_screenshot", settings_client->enable_screenshot);
+    settings_server->enable_screenshot = ini.GetBoolValue("overlay::general", "enable_screenshot", settings_server->enable_screenshot);
 
     {
         auto val = ini.GetLongValue("overlay::general", "fps_averaging_window", settings_client->overlay_fps_avg_window);
@@ -2084,8 +2156,7 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->enable_voice_chat = ini.GetBoolValue("main::general", "enable_voice_chat", settings_client->enable_voice_chat);
     settings_server->enable_voice_chat = ini.GetBoolValue("main::general", "enable_voice_chat", settings_server->enable_voice_chat);
 
-    settings_client->steam_deck = ini.GetBoolValue("main::general", "steam_deck", settings_client->steam_deck);
-    settings_server->steam_deck = ini.GetBoolValue("main::general", "steam_deck", settings_server->steam_deck);
+    bool steam_deck = ini.GetBoolValue("main::general", "steam_deck", false);
 
     settings_client->immediate_gameserver_stats = ini.GetBoolValue("main::general", "immediate_gameserver_stats", settings_client->immediate_gameserver_stats);
     settings_server->immediate_gameserver_stats = ini.GetBoolValue("main::general", "immediate_gameserver_stats", settings_server->immediate_gameserver_stats);
@@ -2096,6 +2167,95 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->matchmaking_server_list_always_lan_type = !ini.GetBoolValue("main::general", "matchmaking_server_list_actual_type", !settings_client->matchmaking_server_list_always_lan_type);
     settings_server->matchmaking_server_list_always_lan_type = !ini.GetBoolValue("main::general", "matchmaking_server_list_actual_type", !settings_server->matchmaking_server_list_always_lan_type);
 
+    {
+        ESteamHardwareType steam_hardware_type{};
+        long steam_hardware_type_long = ini.GetLongValue("main::general", "steam_hardware_type", static_cast<long>(settings_client->steam_hardware_type));
+        switch (steam_hardware_type_long) {
+        case 0:
+            steam_hardware_type = k_ESteamHardwareTypeNone;
+            break;
+        case 1:
+            steam_hardware_type = k_ESteamHardwareTypeSteamDeck;
+            break;
+        case 2:
+            steam_hardware_type = k_ESteamHardwareTypeSteamMachine;
+            break;
+        case 3:
+            steam_hardware_type = k_ESteamHardwareTypeSteamFrame;
+            break;
+
+        default:
+            steam_hardware_type = k_ESteamHardwareTypeNone;
+            break;
+        }
+        if (steam_hardware_type == k_ESteamHardwareTypeNone && steam_deck) {
+            steam_hardware_type = k_ESteamHardwareTypeSteamDeck; // temp compatibility for `steam_deck` option, will be removed eventually
+        }
+        settings_client->steam_hardware_type = steam_hardware_type;
+        settings_server->steam_hardware_type = steam_hardware_type;
+    }
+
+    {
+        ESteamHardwareDefaultConfig steam_hardware_def_config{};
+        long steam_hardware_def_config_long = ini.GetLongValue("main::general", "steam_hardware_default_config", static_cast<long>(settings_client->steam_hardware_def_config));
+        switch (steam_hardware_def_config_long) {
+        case 0:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigNone;
+            break;
+        case 1:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigLow;
+            break;
+        case 2:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigMedium;
+            break;
+        case 3:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigHigh;
+            break;
+        case 4:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigMax;
+            break;
+        case 5:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigSteamDeck;
+            break;
+        case 6:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigSteamMachine;
+            break;
+        case 7:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigSteamFrame;
+            break;
+
+        default:
+            steam_hardware_def_config = k_ESteamHardwareDefaultConfigNone;
+            break;
+        }
+
+        if (steam_hardware_def_config == k_ESteamHardwareDefaultConfigNone) {
+            switch (settings_client->steam_hardware_type) {
+            case k_ESteamHardwareTypeNone:
+                steam_hardware_def_config = k_ESteamHardwareDefaultConfigNone;
+                break;
+            case k_ESteamHardwareTypeSteamDeck:
+                steam_hardware_def_config = k_ESteamHardwareDefaultConfigSteamDeck;
+                break;
+            case k_ESteamHardwareTypeSteamMachine:
+                steam_hardware_def_config = k_ESteamHardwareDefaultConfigSteamMachine;
+                break;
+            case k_ESteamHardwareTypeSteamFrame:
+                steam_hardware_def_config = k_ESteamHardwareDefaultConfigSteamFrame;
+                break;
+
+            default:
+                steam_hardware_def_config = k_ESteamHardwareDefaultConfigNone;
+                break;
+            }
+        }
+
+        settings_client->steam_hardware_def_config = steam_hardware_def_config;
+        settings_server->steam_hardware_def_config = steam_hardware_def_config;
+    }
+
+    settings_client->is_under_proton = ini.GetBoolValue("main::general", "is_under_proton", settings_client->is_under_proton);
+    settings_server->is_under_proton = ini.GetBoolValue("main::general", "is_under_proton", settings_server->is_under_proton);
 
     // [main::connectivity]
     settings_client->disable_networking = ini.GetBoolValue("main::connectivity", "disable_networking", settings_client->disable_networking);
@@ -2456,8 +2616,10 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     uint32 alt_steamid_count = parse_alt_steamid_count(local_storage);
 
     // Language
-    std::string language(parse_current_language(local_storage));
-    // Supported languages, this will change the current language if needed
+    std::string requested_language(parse_current_language(local_storage));
+    std::string language = requested_language; // creating a copy for the game language
+    
+    // Supported languages
     std::set<std::string> supported_languages(parse_supported_languages(local_storage, language));
 
     bool steam_offline_mode = ini.GetBoolValue("main::connectivity", "offline", false);
@@ -2475,6 +2637,9 @@ uint32 create_localstorage_settings(Settings **settings_client_out, Settings **s
     // listen port
     settings_client->set_port(port);
     settings_server->set_port(port);
+    // provide the original 'requested_language' value, which is not affected by the txt file, as the overlay language
+    settings_client->set_overlay_language(requested_language.c_str());
+    settings_server->set_overlay_language(requested_language.c_str());
     // broadcasts list
     settings_client->custom_broadcasts = custom_broadcasts;
     settings_server->custom_broadcasts = custom_broadcasts;

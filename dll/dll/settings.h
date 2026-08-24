@@ -155,8 +155,14 @@ struct Overlay_Appearance {
     uint32 notification_duration_achievement = 7000; // achievement unlocked duration (millisec)
     uint32 notification_duration_invitation = 8000; // friend invitation duration (millisec)
     uint32 notification_duration_chat = 4000; // sliding animation duration duration (millisec)
+    uint32 notification_duration_screenshot = 1000; // screenshot saved duration (millisec)
 
     std::string ach_unlock_datetime_format = "%Y/%m/%d - %H:%M:%S";
+    std::string screenshot_datetime_format = "%Y/%m/%d - %H:%M:%S";
+    bool show_notification_history = false;
+    bool show_achievement_list = false;
+    bool unlocked_expanded = true;
+    bool locked_expanded = false;
     bool show_playtime_in_user_info = false;
     
     float background_r = 0.12f;
@@ -245,6 +251,7 @@ private:
 
     std::string name{};
     std::string language{}; // default "english"
+    std::string overlay_language{}; // for overlay language
     CSteamID lobby_id = k_steamIDNil;
 
     bool offline = false;
@@ -306,9 +313,6 @@ public:
     //steamhttp external download support
     bool download_steamhttp_requests = false;
     bool force_steamhttp_success = false;
-
-    //steam deck flag
-    bool steam_deck = false;
     
     // gracefully return nullptr for unknown interface versions instead of crashing
     // enabled automatically when third-party injectors (e.g. Special K) are detected
@@ -445,6 +449,17 @@ public:
     // disable all overlay warnings
     bool disable_overlay_warning_any = false;
     Overlay_Appearance overlay_appearance{};
+    // toggle overlay buttons
+    bool overlay_show_button_user_info = true;
+    bool overlay_show_button_achievements = true;
+    bool overlay_show_button_test_achievement = true;
+    bool overlay_show_button_copy_id = true;
+    bool overlay_show_button_screenshots = true;
+    bool overlay_show_button_history = true;
+    bool overlay_show_button_settings = true;
+    bool overlay_show_checkbox_fps = true;
+    bool overlay_show_checkbox_frametime = true;
+    bool overlay_show_checkbox_playtime = true;
     // whether to auto accept any overlay invites
     bool auto_accept_any_overlay_invites = false;
     // list of user steam IDs to auto-accept invites from
@@ -467,6 +482,10 @@ public:
     int  overlay_graph_timeframe_sec = 5;  // 1-30 seconds
     // keys used to toggle the overlay, default = Shift + Tab
     std::vector<std::string> overlay_toggle_keys{};
+    // 0=disable the F12 screenshot feature
+    // default=1
+    bool enable_screenshot = true;
+    std::vector<std::string> overlay_screenshot_keys{};
     // minimum time interval between achievement notifications (in milliseconds)
     int achievement_notification_delay_ms = 0;
 
@@ -478,6 +497,15 @@ public:
 
     // only use 32 bits for inventory item ids
     bool use_32bit_inventory_item_ids = false;
+
+    // steam hardware flag
+    ESteamHardwareType steam_hardware_type = k_ESteamHardwareTypeNone;
+
+    // steam hardware default config
+    ESteamHardwareDefaultConfig steam_hardware_def_config = k_ESteamHardwareDefaultConfigNone;
+
+    // steam proton flag
+    bool is_under_proton = false;
 
 
 #ifdef LOBBY_CONNECT
@@ -500,6 +528,9 @@ public:
 
     const char *get_language();
     void set_language(const char *language);
+
+    const char *get_overlay_language();
+    void set_overlay_language(const char *language);
 
     void set_supported_languages(const std::set<std::string> &langs);
     const std::set<std::string>& get_supported_languages_set() const;

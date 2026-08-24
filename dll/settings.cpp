@@ -85,6 +85,7 @@ Settings::Settings(CSteamID steam_id, CGameID game_id, const std::string &name, 
     std::transform(lang.begin(), lang.end(), lang.begin(), ::tolower);
     lang.erase(std::remove(lang.begin(), lang.end(), ' '), lang.end());
     this->language = lang;
+    this->overlay_language = lang;
 
     this->offline = offline;
 }
@@ -126,6 +127,16 @@ const char *Settings::get_local_name()
 const char *Settings::get_language()
 {
     return language.c_str();
+}
+
+const char *Settings::get_overlay_language()
+{
+    return overlay_language.c_str();
+}
+
+void Settings::set_overlay_language(const char *language)
+{
+    this->overlay_language = language;
 }
 
 void Settings::set_local_name(const char *name)

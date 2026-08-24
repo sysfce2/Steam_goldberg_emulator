@@ -132,7 +132,7 @@ const char translationCopyId[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER
   u8"Copy ID",
 
 	// 9 - French
-  u8"Copy ID",
+  u8"Copier l'ID",
 
 	// 10 - German
   u8"Copy ID",
@@ -228,7 +228,7 @@ const char translationTestAchievement[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATI
   u8"Test achievement",
 
 	// 9 - French
-  u8"Test achievement",
+  u8"Tester le succès",
 
 	// 10 - German
   u8"Test achievement",
@@ -422,7 +422,7 @@ const char translationInviteAll[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUF
   u8"Invite all",
 
 	// 9 - French
-  u8"Invite all",
+  u8"Inviter tout le monde",
 
 	// 10 - German
   u8"Invite all",
@@ -1008,7 +1008,7 @@ const char translationUserPlaying[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_B
   u8"Username: %s (%llu) playing %u",
 
 	// 9 - French
-  u8"Username: %s (%llu) playing %u",
+  u8"Nom d'utilisateur : %s (%llu) joue à %u",
 
 	// 10 - German
   u8"Username: %s (%llu) playing %u",
@@ -1075,6 +1075,198 @@ const char translationUserPlaying[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_B
   
 };
 
+const char translationTotalTime[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"%uh %um",
+
+	// 1 - Arabic
+  u8"%uh %um",
+
+	// 2 - Bulgarian
+  u8"%uh %um",
+
+	// 3 - Simplified Chinese
+  u8"%uh %um",
+
+	// 4 - Traditional Chinese
+  u8"%uh %um",
+
+	// 5 - Czech
+  u8"%uh %um",
+
+	// 6 - Danish
+  u8"%uh %um",
+
+	// 7 - Dutch
+  u8"%uh %um",
+
+	// 8 - Finnish
+  u8"%uh %um",
+
+	// 9 - French
+  u8"%uh %um",
+
+	// 10 - German
+  u8"%uh %um",
+
+	// 11 - Greek
+  u8"%uh %um",
+
+	// 12 - Hungarian
+  u8"%uh %um",
+
+	// 13 - Italian
+  u8"%uh %um",
+
+	// 14 - Japanese
+  u8"%uh %um",
+
+	// 15 - Korean
+  u8"%uh %um",
+
+	// 16 - Norwegian
+  u8"%uh %um",
+
+	// 17 - Polish
+  u8"%uh %um",
+
+	// 18 - Portuguese
+  u8"%uh %um",
+
+	// 19 - Brazilian Portuguese
+  u8"%uh %um",
+
+	// 20 - Romanian
+  u8"%uh %um",
+
+	// 21 - Russian
+  u8"%uh %um",
+
+	// 22 - Spanish
+  u8"%uh %um",
+
+	// 23 - Latin American
+  u8"%uh %um",
+
+	// 24 - Swedish
+  u8"%uh %um",
+
+	// 25 - Thai
+  u8"%uh %um",
+
+	// 26 - Turkish
+  u8"%us %ud",
+
+	// 27 - Ukrainian
+  u8"%uh %um",
+
+	// 28 - Vietnamese
+  u8"%uh %um",
+
+	// 29 - Croatian
+  u8"%uh %um",
+  
+  // 30 - Indonesian
+  u8"%uh %um",
+  
+};
+
+const char translationTotalTimeText[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Total: %s  Session: %s",
+
+	// 1 - Arabic
+  u8"Total: %s  Session: %s",
+
+	// 2 - Bulgarian
+  u8"Total: %s  Session: %s",
+
+	// 3 - Simplified Chinese
+  u8"Total: %s  Session: %s",
+
+	// 4 - Traditional Chinese
+  u8"合计: %s  会话: %s",
+
+	// 5 - Czech
+  u8"Total: %s  Session: %s",
+
+	// 6 - Danish
+  u8"Total: %s  Session: %s",
+
+	// 7 - Dutch
+  u8"Total: %s  Session: %s",
+
+	// 8 - Finnish
+  u8"Total: %s  Session: %s",
+
+	// 9 - French
+  u8"Total : %s  Session : %s",
+
+	// 10 - German
+  u8"Total: %s  Session: %s",
+
+	// 11 - Greek
+  u8"Total: %s  Session: %s",
+
+	// 12 - Hungarian
+  u8"Total: %s  Session: %s",
+
+	// 13 - Italian
+  u8"Total: %s  Session: %s",
+
+	// 14 - Japanese
+  u8"Total: %s  Session: %s",
+
+	// 15 - Korean
+  u8"Total: %s  Session: %s",
+
+	// 16 - Norwegian
+  u8"Total: %s  Session: %s",
+
+	// 17 - Polish
+  u8"Total: %s  Session: %s",
+
+	// 18 - Portuguese
+  u8"Total: %s  Session: %s",
+
+	// 19 - Brazilian Portuguese
+  u8"Total: %s  Session: %s",
+
+	// 20 - Romanian
+  u8"Total: %s  Session: %s",
+
+	// 21 - Russian
+  u8"Total: %s  Session: %s",
+
+	// 22 - Spanish
+  u8"Total: %s  Session: %s",
+
+	// 23 - Latin American
+  u8"Total: %s  Session: %s",
+
+	// 24 - Swedish
+  u8"Total: %s  Session: %s",
+
+	// 25 - Thai
+  u8"Total: %s  Session: %s",
+
+	// 26 - Turkish
+  u8"Toplam: %s  Oturum: %s",
+
+	// 27 - Ukrainian
+  u8"Total: %s  Session: %s",
+
+	// 28 - Vietnamese
+  u8"Total: %s  Session: %s",
+
+	// 29 - Croatian
+  u8"Total: %s  Session: %s",
+  
+  // 30 - Indonesian
+  u8"Total: %s  Session: %s",
+  
+};
+
 const char translationRenderer[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
 	// 0 - English
   u8"Renderer: %s",
@@ -1104,7 +1296,7 @@ const char translationRenderer[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFF
   u8"Renderer: %s",
 
 	// 9 - French
-  u8"Renderer: %s",
+  u8"Moteur de rendu : %s",
 
 	// 10 - German
   u8"Renderer: %s",
@@ -1200,7 +1392,7 @@ const char translationToggleUserInfo[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATIO
   u8"Toggle User Info",
 
 	// 9 - French
-  u8"Toggle User Info",
+  u8"Afficher/masquer les infos utilisateur",
 
 	// 10 - German
   u8"Toggle User Info",
@@ -1296,7 +1488,7 @@ const char translationShowAchievements[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLAT
   u8"Show Achievements",
 
 	// 9 - French
-  u8"Show Achievements",
+  u8"Afficher les succès",
 
 	// 10 - German
   u8"Show Achievements",
@@ -1490,7 +1682,7 @@ const char translationHistory[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFE
   u8"History",
 
 	// 9 - French
-  u8"History",
+  u8"Historique",
 
 	// 10 - German
   u8"History",
@@ -1554,6 +1746,102 @@ const char translationHistory[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFE
   
   // 30 - Indonesian
   u8"History",
+  
+};
+
+const char translationScreenshots[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Screenshots",
+
+	// 1 - Arabic
+  u8"Screenshots",
+
+	// 2 - Bulgarian
+  u8"Screenshots",
+
+	// 3 - Simplified Chinese
+  u8"截图",
+
+	// 4 - Traditional Chinese
+  u8"Screenshots",
+
+	// 5 - Czech
+  u8"Screenshots",
+
+	// 6 - Danish
+  u8"Screenshots",
+
+	// 7 - Dutch
+  u8"Screenshots",
+
+	// 8 - Finnish
+  u8"Screenshots",
+
+	// 9 - French
+  u8"Captures d'écran",
+
+	// 10 - German
+  u8"Screenshots",
+
+	// 11 - Greek
+  u8"Screenshots",
+
+	// 12 - Hungarian
+  u8"Screenshots",
+
+	// 13 - Italian
+  u8"Screenshots",
+
+	// 14 - Japanese
+  u8"Screenshots",
+
+	// 15 - Korean
+  u8"Screenshots",
+
+	// 16 - Norwegian
+  u8"Screenshots",
+
+	// 17 - Polish
+  u8"Screenshots",
+
+	// 18 - Portuguese
+  u8"Screenshots",
+
+	// 19 - Brazilian Portuguese
+  u8"Screenshots",
+
+	// 20 - Romanian
+  u8"Screenshots",
+
+	// 21 - Russian
+  u8"Screenshots",
+
+	// 22 - Spanish
+  u8"Screenshots",
+
+	// 23 - Latin American
+  u8"Screenshots",
+
+	// 24 - Swedish
+  u8"Screenshots",
+
+	// 25 - Thai
+  u8"Screenshots",
+
+	// 26 - Turkish
+  u8"Ekran Görüntüleri",
+
+	// 27 - Ukrainian
+  u8"Screenshots",
+
+	// 28 - Vietnamese
+  u8"Screenshots",
+
+	// 29 - Croatian
+  u8"Screenshots",
+  
+  // 30 - Indonesian
+  u8"Screenshots",
   
 };
 
@@ -1684,7 +1972,7 @@ const char translationNoNotification[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATIO
   u8"No notifications yet",
 
 	// 9 - French
-  u8"No notifications yet",
+  u8"Aucune notification pour le moment",
 
 	// 10 - German
   u8"No notifications yet",
@@ -1780,7 +2068,7 @@ const char translationClearAll[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFF
   u8"Clear All",
 
 	// 9 - French
-  u8"Clear All",
+  u8"Tout effacer",
 
 	// 10 - German
   u8"Clear All",
@@ -1847,6 +2135,582 @@ const char translationClearAll[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFF
 
 };
 
+const char translationHistoryChat[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Chat",
+
+	// 1 - Arabic
+  u8"Chat",
+
+	// 2 - Bulgarian
+  u8"Chat",
+
+	// 3 - Simplified Chinese
+  u8"聊天",
+
+	// 4 - Traditional Chinese
+  u8"Chat",
+
+	// 5 - Czech
+  u8"Chat",
+
+	// 6 - Danish
+  u8"Chat",
+
+	// 7 - Dutch
+  u8"Chat",
+
+	// 8 - Finnish
+  u8"Chat",
+
+	// 9 - French
+  u8"Chat",
+
+	// 10 - German
+  u8"Chat",
+
+	// 11 - Greek
+  u8"Chat",
+
+	// 12 - Hungarian
+  u8"Chat",
+
+	// 13 - Italian
+  u8"Chat",
+
+	// 14 - Japanese
+  u8"Chat",
+
+	// 15 - Korean
+  u8"Chat",
+
+	// 16 - Norwegian
+  u8"Chat",
+
+	// 17 - Polish
+  u8"Chat",
+
+	// 18 - Portuguese
+  u8"Chat",
+
+	// 19 - Brazilian Portuguese
+  u8"Chat",
+
+	// 20 - Romanian
+  u8"Chat",
+
+	// 21 - Russian
+  u8"Chat",
+
+	// 22 - Spanish
+  u8"Chat",
+
+	// 23 - Latin American
+  u8"Chat",
+
+	// 24 - Swedish
+  u8"Chat",
+
+	// 25 - Thai
+  u8"Chat",
+
+	// 26 - Turkish
+  u8"Shobet",
+
+	// 27 - Ukrainian
+  u8"Chat",
+
+	// 28 - Vietnamese
+  u8"Chat",
+
+	// 29 - Croatian
+  u8"Chat",
+  
+  // 30 - Indonesian
+  u8"Chat",
+
+};
+
+const char translationHistoryInvite[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Invite",
+
+	// 1 - Arabic
+  u8"Invite",
+
+	// 2 - Bulgarian
+  u8"Invite",
+
+	// 3 - Simplified Chinese
+  u8"邀请",
+
+	// 4 - Traditional Chinese
+  u8"Invite",
+
+	// 5 - Czech
+  u8"Invite",
+
+	// 6 - Danish
+  u8"Invite",
+
+	// 7 - Dutch
+  u8"Invite",
+
+	// 8 - Finnish
+  u8"Invite",
+
+	// 9 - French
+  u8"Inviter",
+
+	// 10 - German
+  u8"Invite",
+
+	// 11 - Greek
+  u8"Invite",
+
+	// 12 - Hungarian
+  u8"Invite",
+
+	// 13 - Italian
+  u8"Invite",
+
+	// 14 - Japanese
+  u8"Invite",
+
+	// 15 - Korean
+  u8"Invite",
+
+	// 16 - Norwegian
+  u8"Invite",
+
+	// 17 - Polish
+  u8"Invite",
+
+	// 18 - Portuguese
+  u8"Invite",
+
+	// 19 - Brazilian Portuguese
+  u8"Invite",
+
+	// 20 - Romanian
+  u8"Invite",
+
+	// 21 - Russian
+  u8"Invite",
+
+	// 22 - Spanish
+  u8"Invite",
+
+	// 23 - Latin American
+  u8"Invite",
+
+	// 24 - Swedish
+  u8"Invite",
+
+	// 25 - Thai
+  u8"Invite",
+
+	// 26 - Turkish
+  u8"Davet",
+
+	// 27 - Ukrainian
+  u8"Invite",
+
+	// 28 - Vietnamese
+  u8"Invite",
+
+	// 29 - Croatian
+  u8"Invite",
+  
+  // 30 - Indonesian
+  u8"Invite",
+
+};
+
+const char translationHistoryAchievement[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Achievement",
+
+	// 1 - Arabic
+  u8"Achievement",
+
+	// 2 - Bulgarian
+  u8"Achievement",
+
+	// 3 - Simplified Chinese
+  u8"成就",
+
+	// 4 - Traditional Chinese
+  u8"Achievement",
+
+	// 5 - Czech
+  u8"Achievement",
+
+	// 6 - Danish
+  u8"Achievement",
+
+	// 7 - Dutch
+  u8"Achievement",
+
+	// 8 - Finnish
+  u8"Achievement",
+
+	// 9 - French
+  u8"Succès",
+
+	// 10 - German
+  u8"Achievement",
+
+	// 11 - Greek
+  u8"Achievement",
+
+	// 12 - Hungarian
+  u8"Achievement",
+
+	// 13 - Italian
+  u8"Achievement",
+
+	// 14 - Japanese
+  u8"Achievement",
+
+	// 15 - Korean
+  u8"Achievement",
+
+	// 16 - Norwegian
+  u8"Achievement",
+
+	// 17 - Polish
+  u8"Achievement",
+
+	// 18 - Portuguese
+  u8"Achievement",
+
+	// 19 - Brazilian Portuguese
+  u8"Achievement",
+
+	// 20 - Romanian
+  u8"Achievement",
+
+	// 21 - Russian
+  u8"Achievement",
+
+	// 22 - Spanish
+  u8"Achievement",
+
+	// 23 - Latin American
+  u8"Achievement",
+
+	// 24 - Swedish
+  u8"Achievement",
+
+	// 25 - Thai
+  u8"Achievement",
+
+	// 26 - Turkish
+  u8"Başarım",
+
+	// 27 - Ukrainian
+  u8"Achievement",
+
+	// 28 - Vietnamese
+  u8"Achievement",
+
+	// 29 - Croatian
+  u8"Achievement",
+  
+  // 30 - Indonesian
+  u8"Achievement",
+
+};
+
+const char translationHistoryProgress[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Progress",
+
+	// 1 - Arabic
+  u8"Progress",
+
+	// 2 - Bulgarian
+  u8"Progress",
+
+	// 3 - Simplified Chinese
+  u8"进度",
+
+	// 4 - Traditional Chinese
+  u8"Progress",
+
+	// 5 - Czech
+  u8"Progress",
+
+	// 6 - Danish
+  u8"Progress",
+
+	// 7 - Dutch
+  u8"Progress",
+
+	// 8 - Finnish
+  u8"Progress",
+
+	// 9 - French
+  u8"Progression",
+
+	// 10 - German
+  u8"Progress",
+
+	// 11 - Greek
+  u8"Progress",
+
+	// 12 - Hungarian
+  u8"Progress",
+
+	// 13 - Italian
+  u8"Progress",
+
+	// 14 - Japanese
+  u8"Progress",
+
+	// 15 - Korean
+  u8"Progress",
+
+	// 16 - Norwegian
+  u8"Progress",
+
+	// 17 - Polish
+  u8"Progress",
+
+	// 18 - Portuguese
+  u8"Progress",
+
+	// 19 - Brazilian Portuguese
+  u8"Progress",
+
+	// 20 - Romanian
+  u8"Progress",
+
+	// 21 - Russian
+  u8"Progress",
+
+	// 22 - Spanish
+  u8"Progress",
+
+	// 23 - Latin American
+  u8"Progress",
+
+	// 24 - Swedish
+  u8"Progress",
+
+	// 25 - Thai
+  u8"Progress",
+
+	// 26 - Turkish
+  u8"Başarım İlerlemesi",
+
+	// 27 - Ukrainian
+  u8"Progress",
+
+	// 28 - Vietnamese
+  u8"Progress",
+
+	// 29 - Croatian
+  u8"Progress",
+  
+  // 30 - Indonesian
+  u8"Progress",
+
+};
+
+const char translationHistoryAutoInvite[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Auto-Invite",
+
+	// 1 - Arabic
+  u8"Auto-Invite",
+
+	// 2 - Bulgarian
+  u8"Auto-Invite",
+
+	// 3 - Simplified Chinese
+  u8"自动邀请",
+
+	// 4 - Traditional Chinese
+  u8"Auto-Invite",
+
+	// 5 - Czech
+  u8"Auto-Invite",
+
+	// 6 - Danish
+  u8"Auto-Invite",
+
+	// 7 - Dutch
+  u8"Auto-Invite",
+
+	// 8 - Finnish
+  u8"Auto-Invite",
+
+	// 9 - French
+  u8"Invitation automatique",
+
+	// 10 - German
+  u8"Auto-Invite",
+
+	// 11 - Greek
+  u8"Auto-Invite",
+
+	// 12 - Hungarian
+  u8"Auto-Invite",
+
+	// 13 - Italian
+  u8"Auto-Invite",
+
+	// 14 - Japanese
+  u8"Auto-Invite",
+
+	// 15 - Korean
+  u8"Auto-Invite",
+
+	// 16 - Norwegian
+  u8"Auto-Invite",
+
+	// 17 - Polish
+  u8"Auto-Invite",
+
+	// 18 - Portuguese
+  u8"Auto-Invite",
+
+	// 19 - Brazilian Portuguese
+  u8"Auto-Invite",
+
+	// 20 - Romanian
+  u8"Auto-Invite",
+
+	// 21 - Russian
+  u8"Auto-Invite",
+
+	// 22 - Spanish
+  u8"Auto-Invite",
+
+	// 23 - Latin American
+  u8"Auto-Invite",
+
+	// 24 - Swedish
+  u8"Auto-Invite",
+
+	// 25 - Thai
+  u8"Auto-Invite",
+
+	// 26 - Turkish
+  u8"Oto-Davet",
+
+	// 27 - Ukrainian
+  u8"Auto-Invite",
+
+	// 28 - Vietnamese
+  u8"Auto-Invite",
+
+	// 29 - Croatian
+  u8"Auto-Invite",
+  
+  // 30 - Indonesian
+  u8"Auto-Invite",
+
+};
+
+const char translationHistoryScreenshot[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Screenshot",
+
+	// 1 - Arabic
+  u8"Screenshot",
+
+	// 2 - Bulgarian
+  u8"Screenshot",
+
+	// 3 - Simplified Chinese
+  u8"截图",
+
+	// 4 - Traditional Chinese
+  u8"Screenshot",
+
+	// 5 - Czech
+  u8"Screenshot",
+
+	// 6 - Danish
+  u8"Screenshot",
+
+	// 7 - Dutch
+  u8"Screenshot",
+
+	// 8 - Finnish
+  u8"Screenshot",
+
+	// 9 - French
+  u8"Capture d'écran",
+
+	// 10 - German
+  u8"Screenshot",
+
+	// 11 - Greek
+  u8"Screenshot",
+
+	// 12 - Hungarian
+  u8"Screenshot",
+
+	// 13 - Italian
+  u8"Screenshot",
+
+	// 14 - Japanese
+  u8"Screenshot",
+
+	// 15 - Korean
+  u8"Screenshot",
+
+	// 16 - Norwegian
+  u8"Screenshot",
+
+	// 17 - Polish
+  u8"Screenshot",
+
+	// 18 - Portuguese
+  u8"Screenshot",
+
+	// 19 - Brazilian Portuguese
+  u8"Screenshot",
+
+	// 20 - Romanian
+  u8"Screenshot",
+
+	// 21 - Russian
+  u8"Screenshot",
+
+	// 22 - Spanish
+  u8"Screenshot",
+
+	// 23 - Latin American
+  u8"Screenshot",
+
+	// 24 - Swedish
+  u8"Screenshot",
+
+	// 25 - Thai
+  u8"Screenshot",
+
+	// 26 - Turkish
+  u8"Ekran Görüntüsü",
+
+	// 27 - Ukrainian
+  u8"Screenshot",
+
+	// 28 - Vietnamese
+  u8"Screenshot",
+
+	// 29 - Croatian
+  u8"Screenshot",
+  
+  // 30 - Indonesian
+  u8"Screenshot",
+
+};
+
 const char translationShow[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
 	// 0 - English
   u8"Show",
@@ -1876,7 +2740,7 @@ const char translationShow[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_S
   u8"Show",
 
 	// 9 - French
-  u8"Show",
+  u8"Afficher",
 
 	// 10 - German
   u8"Show",
@@ -1972,7 +2836,7 @@ const char translationUnlocked[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFF
   u8"Unlocked",
 
 	// 9 - French
-  u8"Unlocked",
+  u8"Déverrouillé",
 
 	// 10 - German
   u8"Unlocked",
@@ -2068,7 +2932,7 @@ const char translationNoUnlockedAchievements[TRANSLATION_NUMBER_OF_LANGUAGES][TR
   u8"No achievements unlocked yet",
 
 	// 9 - French
-  u8"No achievements unlocked yet",
+  u8"Aucun succès n'a encore été débloqué",
 
 	// 10 - German
   u8"No achievements unlocked yet",
@@ -2164,7 +3028,7 @@ const char translationLocked[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER
   u8"Locked",
 
 	// 9 - French
-  u8"Locked",
+  u8"Verrouillé",
 
 	// 10 - German
   u8"Locked",
@@ -2260,7 +3124,7 @@ const char translationAllAchievementsUnlocked[TRANSLATION_NUMBER_OF_LANGUAGES][T
   u8"All achievements unlocked!",
 
 	// 9 - French
-  u8"All achievements unlocked!",
+  u8"Tous les succès ont été débloqués !",
 
 	// 10 - German
   u8"All achievements unlocked!",
@@ -2356,7 +3220,7 @@ const char translationAchievementWindow[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLA
   u8"Achievement Window",
 
 	// 9 - French
-  u8"Achievement Window",
+  u8"Fenêtre des succès",
 
 	// 10 - German
   u8"Achievement Window",
@@ -2452,7 +3316,7 @@ const char translationListOfAchievements[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSL
   u8"List of achievements",
 
 	// 9 - French
-  u8"List of achievements",
+  u8"Liste des succès",
 
 	// 10 - German
   u8"List of achievements",
@@ -2503,7 +3367,7 @@ const char translationListOfAchievements[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSL
   u8"List of achievements",
 
 	// 26 - Turkish
-  u8"Başarımların listesi",
+  u8"Başarımların Listesi",
 
 	// 27 - Ukrainian
   u8"List of achievements",
@@ -2548,7 +3412,7 @@ const char translationAchievements[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_
   u8"Achievements",
 
 	// 9 - French
-  u8"Achievements",
+  u8"Succès",
 
 	// 10 - German
   u8"Achievements",
@@ -2740,7 +3604,7 @@ const char translationAchievedOn[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BU
   u8"achieved on %s",
 
 	// 9 - French
-  u8"achieved on %s",
+  u8"obtenu le %s",
 
 	// 10 - German
   u8"achieved on %s",
@@ -2836,7 +3700,7 @@ const char translationNotAchieved[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_B
   u8"not achieved",
 
 	// 9 - French
-  u8"not achieved",
+  u8"non obtenu",
 
 	// 10 - German
   u8"not achieved",
@@ -2997,7 +3861,7 @@ const char translationGlobalSettingsWindow[TRANSLATION_NUMBER_OF_LANGUAGES][TRAN
   u8"Global Settings Window",
 
 	// 9 - French
-  u8"Global Settings Window",
+  u8"Fenêtre des paramètres globaux",
 
 	// 10 - German
   u8"Global Settings Window",
@@ -3093,7 +3957,7 @@ const char translationGlobalSettingsWindowDescription[TRANSLATION_NUMBER_OF_LANG
   u8"These are global emulator settings and will apply to all games.",
 
 	// 9 - French
-  u8"These are global emulator settings and will apply to all games.",
+  u8"Ce sont des paramètres globaux de l'émulateur qui s'appliqueront à tous les jeux.",
 
 	// 10 - German
   u8"These are global emulator settings and will apply to all games.",
@@ -3189,7 +4053,7 @@ const char translationUsername[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFF
   u8"Username:",
 
 	// 9 - French
-  u8"Username:",
+  u8"Nom d'utilisateur :",
 
 	// 10 - German
   u8"Username:",
@@ -3285,7 +4149,7 @@ const char translationLanguage[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFF
   u8"Language:",
 
 	// 9 - French
-  u8"Language:",
+  u8"Langue :",
 
 	// 10 - German
   u8"Language:",
@@ -3381,7 +4245,7 @@ const char translationSelectedLanguage[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLAT
   u8"Selected Language: %s",
 
 	// 9 - French
-  u8"Selected Language: %s",
+  u8"Langue sélectionnée : %s",
 
 	// 10 - German
   u8"Selected Language: %s",
@@ -3477,7 +4341,7 @@ const char translationRestartTheGameToApply[TRANSLATION_NUMBER_OF_LANGUAGES][TRA
   u8"You may have to restart the game for these to apply.",
 
 	// 9 - French
-  u8"You may have to restart the game for these to apply.",
+  u8"Vous devrez peut-être redémarrer le jeu pour que les modifications prennent effet.",
 
 	// 10 - German
   u8"You may have to restart the game for these to apply.",
@@ -3573,7 +4437,7 @@ const char translationSave[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_S
   u8"Save",
 
 	// 9 - French
-  u8"Save",
+  u8"Enregistrer",
 
 	// 10 - German
   u8"Save",
@@ -3669,7 +4533,7 @@ const char translationWarning[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFE
   u8"WARNING",
 
 	// 9 - French
-  u8"WARNING",
+  u8"AVERTISSEMENT",
 
 	// 10 - German
   u8"WARNING",
@@ -3765,7 +4629,7 @@ const char translationWarningDescription_badAppid[TRANSLATION_NUMBER_OF_LANGUAGE
   u8"AppID is 0, please create a steam_appid.txt with the right appid and restart the game.",
 
 	// 9 - French
-  u8"AppID is 0, please create a steam_appid.txt with the right appid and restart the game.",
+  u8"AppID est 0, veuillez créer steam_appid.txt contenant le bon AppID et redémarrer le jeu.",
 
 	// 10 - German
   u8"AppID is 0, please create a steam_appid.txt with the right appid and restart the game.",
@@ -3861,7 +4725,7 @@ const char translationWarningDescription_localSave[TRANSLATION_NUMBER_OF_LANGUAG
   u8"local_save_path detected, the emu is saving locally to the game folder. Please delete it if you don't want this.",
 
 	// 9 - French
-  u8"local_save_path detected, the emu is saving locally to the game folder. Please delete it if you don't want this.",
+  u8"local_save_path détecté, l’émulateur enregistre localement dans le dossier du jeu. Veuillez le supprimer si vous ne le souhaitez pas.",
 
 	// 10 - German
   u8"local_save_path detected, the emu is saving locally to the game folder. Please delete it if you don't want this.",
@@ -3957,7 +4821,7 @@ const char translationSteamOverlayURL[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATI
   u8"The game tried to get the steam overlay to open this url:",
 
 	// 9 - French
-  u8"The game tried to get the steam overlay to open this url:",
+  u8"Le jeu a voulu ouvrir cette URL par l’overlay Steam :",
 
 	// 10 - German
   u8"The game tried to get the steam overlay to open this url:",
@@ -4151,7 +5015,7 @@ const char translationPlaying[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFE
   u8"playing",
 
 	// 9 - French
-  u8"playing",
+  u8"joue à",
 
 	// 10 - German
   u8"playing",
@@ -4218,6 +5082,1926 @@ const char translationPlaying[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFE
   
 };
 
+const char translationScreenshotSaved[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Screenshot saved: ",
+
+	// 1 - Arabic
+  u8"Screenshot saved: ",
+
+	// 2 - Bulgarian
+  u8"Screenshot saved: ",
+
+	// 3 - Simplified Chinese
+  u8"已保存截图：",
+
+	// 4 - Traditional Chinese
+  u8"Screenshot saved: ",
+
+	// 5 - Czech
+  u8"Screenshot saved: ",
+
+	// 6 - Danish
+  u8"Screenshot saved: ",
+
+	// 7 - Dutch
+  u8"Screenshot saved: ",
+
+	// 8 - Finnish
+  u8"Screenshot saved: ",
+
+	// 9 - French
+  u8"Capture d'écran enregistrée : ",
+
+	// 10 - German
+  u8"Screenshot saved: ",
+
+	// 11 - Greek
+  u8"Screenshot saved: ",
+
+	// 12 - Hungarian
+  u8"Screenshot saved: ",
+
+	// 13 - Italian
+  u8"Screenshot saved: ",
+
+	// 14 - Japanese
+  u8"Screenshot saved: ",
+
+	// 15 - Korean
+  u8"Screenshot saved: ",
+
+	// 16 - Norwegian
+  u8"Screenshot saved: ",
+
+	// 17 - Polish
+  u8"Screenshot saved: ",
+
+	// 18 - Portuguese
+  u8"Screenshot saved: ",
+
+	// 19 - Brazilian Portuguese
+  u8"Screenshot saved: ",
+
+	// 20 - Romanian
+  u8"Screenshot saved: ",
+
+	// 21 - Russian
+  u8"Screenshot saved: ",
+
+	// 22 - Spanish
+  u8"Screenshot saved: ",
+
+	// 23 - Latin American
+  u8"Screenshot saved: ",
+
+	// 24 - Swedish
+  u8"Screenshot saved: ",
+
+	// 25 - Thai
+  u8"Screenshot saved: ",
+
+	// 26 - Turkish
+  u8"Ekran görüntüsü kaydedildi: ",
+
+	// 27 - Ukrainian
+  u8"Screenshot saved: ",
+
+	// 28 - Vietnamese
+  u8"Screenshot saved: ",
+
+	// 29 - Croatian
+  u8"Screenshot saved: ",
+  
+  // 30 - Indonesian
+  u8"Screenshot saved: ",
+  
+};
+
+const char translationUnpinAll[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Unpin all",
+
+	// 1 - Arabic
+  u8"Unpin all",
+
+	// 2 - Bulgarian
+  u8"Unpin all",
+
+	// 3 - Simplified Chinese
+  u8"取消所有置顶",
+
+	// 4 - Traditional Chinese
+  u8"Unpin all",
+
+	// 5 - Czech
+  u8"Unpin all",
+
+	// 6 - Danish
+  u8"Unpin all",
+
+	// 7 - Dutch
+  u8"Unpin all",
+
+	// 8 - Finnish
+  u8"Unpin all",
+
+	// 9 - French
+  u8"Désépingler tout",
+
+	// 10 - German
+  u8"Unpin all",
+
+	// 11 - Greek
+  u8"Unpin all",
+
+	// 12 - Hungarian
+  u8"Unpin all",
+
+	// 13 - Italian
+  u8"Unpin all",
+
+	// 14 - Japanese
+  u8"Unpin all",
+
+	// 15 - Korean
+  u8"Unpin all",
+
+	// 16 - Norwegian
+  u8"Unpin all",
+
+	// 17 - Polish
+  u8"Unpin all",
+
+	// 18 - Portuguese
+  u8"Unpin all",
+
+	// 19 - Brazilian Portuguese
+  u8"Unpin all",
+
+	// 20 - Romanian
+  u8"Unpin all",
+
+	// 21 - Russian
+  u8"Unpin all",
+
+	// 22 - Spanish
+  u8"Unpin all",
+
+	// 23 - Latin American
+  u8"Unpin all",
+
+	// 24 - Swedish
+  u8"Unpin all",
+
+	// 25 - Thai
+  u8"Unpin all",
+
+	// 26 - Turkish
+  u8"Sabitlemeleri Kaldır",
+
+	// 27 - Ukrainian
+  u8"Unpin all",
+
+	// 28 - Vietnamese
+  u8"Unpin all",
+
+	// 29 - Croatian
+  u8"Unpin all",
+  
+  // 30 - Indonesian
+  u8"Unpin all",
+  
+};
+
+const char translationDeleteSelected[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Delete selected",
+
+	// 1 - Arabic
+  u8"Delete selected",
+
+	// 2 - Bulgarian
+  u8"Delete selected",
+
+	// 3 - Simplified Chinese
+  u8"删除所选项",
+
+	// 4 - Traditional Chinese
+  u8"Delete selected",
+
+	// 5 - Czech
+  u8"Delete selected",
+
+	// 6 - Danish
+  u8"Delete selected",
+
+	// 7 - Dutch
+  u8"Delete selected",
+
+	// 8 - Finnish
+  u8"Delete selected",
+
+	// 9 - French
+  u8"Supprimer la sélection",
+
+	// 10 - German
+  u8"Delete selected",
+
+	// 11 - Greek
+  u8"Delete selected",
+
+	// 12 - Hungarian
+  u8"Delete selected",
+
+	// 13 - Italian
+  u8"Delete selected",
+
+	// 14 - Japanese
+  u8"Delete selected",
+
+	// 15 - Korean
+  u8"Delete selected",
+
+	// 16 - Norwegian
+  u8"Delete selected",
+
+	// 17 - Polish
+  u8"Delete selected",
+
+	// 18 - Portuguese
+  u8"Delete selected",
+
+	// 19 - Brazilian Portuguese
+  u8"Delete selected",
+
+	// 20 - Romanian
+  u8"Delete selected",
+
+	// 21 - Russian
+  u8"Delete selected",
+
+	// 22 - Spanish
+  u8"Delete selected",
+
+	// 23 - Latin American
+  u8"Delete selected",
+
+	// 24 - Swedish
+  u8"Delete selected",
+
+	// 25 - Thai
+  u8"Delete selected",
+
+	// 26 - Turkish
+  u8"Seçilenleri Sil",
+
+	// 27 - Ukrainian
+  u8"Delete selected",
+
+	// 28 - Vietnamese
+  u8"Delete selected",
+
+	// 29 - Croatian
+  u8"Delete selected",
+  
+  // 30 - Indonesian
+  u8"Delete selected",
+  
+};
+
+const char translationOpenFolder[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Open Folder",
+
+	// 1 - Arabic
+  u8"Open Folder",
+
+	// 2 - Bulgarian
+  u8"Open Folder",
+
+	// 3 - Simplified Chinese
+  u8"打开文件夹",
+
+	// 4 - Traditional Chinese
+  u8"Open Folder",
+
+	// 5 - Czech
+  u8"Open Folder",
+
+	// 6 - Danish
+  u8"Open Folder",
+
+	// 7 - Dutch
+  u8"Open Folder",
+
+	// 8 - Finnish
+  u8"Open Folder",
+
+	// 9 - French
+  u8"Ouvrir le dossier",
+
+	// 10 - German
+  u8"Open Folder",
+
+	// 11 - Greek
+  u8"Open Folder",
+
+	// 12 - Hungarian
+  u8"Open Folder",
+
+	// 13 - Italian
+  u8"Open Folder",
+
+	// 14 - Japanese
+  u8"Open Folder",
+
+	// 15 - Korean
+  u8"Open Folder",
+
+	// 16 - Norwegian
+  u8"Open Folder",
+
+	// 17 - Polish
+  u8"Open Folder",
+
+	// 18 - Portuguese
+  u8"Open Folder",
+
+	// 19 - Brazilian Portuguese
+  u8"Open Folder",
+
+	// 20 - Romanian
+  u8"Open Folder",
+
+	// 21 - Russian
+  u8"Open Folder",
+
+	// 22 - Spanish
+  u8"Open Folder",
+
+	// 23 - Latin American
+  u8"Open Folder",
+
+	// 24 - Swedish
+  u8"Open Folder",
+
+	// 25 - Thai
+  u8"Open Folder",
+
+	// 26 - Turkish
+  u8"Klasörü Aç",
+
+	// 27 - Ukrainian
+  u8"Open Folder",
+
+	// 28 - Vietnamese
+  u8"Open Folder",
+
+	// 29 - Croatian
+  u8"Open Folder",
+  
+  // 30 - Indonesian
+  u8"Open Folder",
+  
+};
+
+const char translationNoScreenshotsYet[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"No screenshots yet",
+
+	// 1 - Arabic
+  u8"No screenshots yet",
+
+	// 2 - Bulgarian
+  u8"No screenshots yet",
+
+	// 3 - Simplified Chinese
+  u8"暂无截图",
+
+	// 4 - Traditional Chinese
+  u8"No screenshots yet",
+
+	// 5 - Czech
+  u8"No screenshots yet",
+
+	// 6 - Danish
+  u8"No screenshots yet",
+
+	// 7 - Dutch
+  u8"No screenshots yet",
+
+	// 8 - Finnish
+  u8"No screenshots yet",
+
+	// 9 - French
+  u8"Aucune capture d’écran pour le moment",
+
+	// 10 - German
+  u8"No screenshots yet",
+
+	// 11 - Greek
+  u8"No screenshots yet",
+
+	// 12 - Hungarian
+  u8"No screenshots yet",
+
+	// 13 - Italian
+  u8"No screenshots yet",
+
+	// 14 - Japanese
+  u8"No screenshots yet",
+
+	// 15 - Korean
+  u8"No screenshots yet",
+
+	// 16 - Norwegian
+  u8"No screenshots yet",
+
+	// 17 - Polish
+  u8"No screenshots yet",
+
+	// 18 - Portuguese
+  u8"No screenshots yet",
+
+	// 19 - Brazilian Portuguese
+  u8"No screenshots yet",
+
+	// 20 - Romanian
+  u8"No screenshots yet",
+
+	// 21 - Russian
+  u8"No screenshots yet",
+
+	// 22 - Spanish
+  u8"No screenshots yet",
+
+	// 23 - Latin American
+  u8"No screenshots yet",
+
+	// 24 - Swedish
+  u8"No screenshots yet",
+
+	// 25 - Thai
+  u8"No screenshots yet",
+
+	// 26 - Turkish
+  u8"Henüz ekran görüntüsü bulunmuyor",
+
+	// 27 - Ukrainian
+  u8"No screenshots yet",
+
+	// 28 - Vietnamese
+  u8"No screenshots yet",
+
+	// 29 - Croatian
+  u8"No screenshots yet",
+  
+  // 30 - Indonesian
+  u8"No screenshots yet",
+  
+};
+
+const char translationDelete[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Delete",
+
+	// 1 - Arabic
+  u8"Delete",
+
+	// 2 - Bulgarian
+  u8"Delete",
+
+	// 3 - Simplified Chinese
+  u8"删除",
+
+	// 4 - Traditional Chinese
+  u8"Delete",
+
+	// 5 - Czech
+  u8"Delete",
+
+	// 6 - Danish
+  u8"Delete",
+
+	// 7 - Dutch
+  u8"Delete",
+
+	// 8 - Finnish
+  u8"Delete",
+
+	// 9 - French
+  u8"Supprimer",
+
+	// 10 - German
+  u8"Delete",
+
+	// 11 - Greek
+  u8"Delete",
+
+	// 12 - Hungarian
+  u8"Delete",
+
+	// 13 - Italian
+  u8"Delete",
+
+	// 14 - Japanese
+  u8"Delete",
+
+	// 15 - Korean
+  u8"Delete",
+
+	// 16 - Norwegian
+  u8"Delete",
+
+	// 17 - Polish
+  u8"Delete",
+
+	// 18 - Portuguese
+  u8"Delete",
+
+	// 19 - Brazilian Portuguese
+  u8"Delete",
+
+	// 20 - Romanian
+  u8"Delete",
+
+	// 21 - Russian
+  u8"Delete",
+
+	// 22 - Spanish
+  u8"Delete",
+
+	// 23 - Latin American
+  u8"Delete",
+
+	// 24 - Swedish
+  u8"Delete",
+
+	// 25 - Thai
+  u8"Delete",
+
+	// 26 - Turkish
+  u8"Sil",
+
+	// 27 - Ukrainian
+  u8"Delete",
+
+	// 28 - Vietnamese
+  u8"Delete",
+
+	// 29 - Croatian
+  u8"Delete",
+  
+  // 30 - Indonesian
+  u8"Delete",
+  
+};
+
+const char translationScreenshotPreview[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Screenshot Preview",
+
+	// 1 - Arabic
+  u8"Screenshot Preview",
+
+	// 2 - Bulgarian
+  u8"Screenshot Preview",
+
+	// 3 - Simplified Chinese
+  u8"截图预览",
+
+	// 4 - Traditional Chinese
+  u8"Screenshot Preview",
+
+	// 5 - Czech
+  u8"Screenshot Preview",
+
+	// 6 - Danish
+  u8"Screenshot Preview",
+
+	// 7 - Dutch
+  u8"Screenshot Preview",
+
+	// 8 - Finnish
+  u8"Screenshot Preview",
+
+	// 9 - French
+  u8"Aperçu de la capture d'écran",
+
+	// 10 - German
+  u8"Screenshot Preview",
+
+	// 11 - Greek
+  u8"Screenshot Preview",
+
+	// 12 - Hungarian
+  u8"Screenshot Preview",
+
+	// 13 - Italian
+  u8"Screenshot Preview",
+
+	// 14 - Japanese
+  u8"Screenshot Preview",
+
+	// 15 - Korean
+  u8"Screenshot Preview",
+
+	// 16 - Norwegian
+  u8"Screenshot Preview",
+
+	// 17 - Polish
+  u8"Screenshot Preview",
+
+	// 18 - Portuguese
+  u8"Screenshot Preview",
+
+	// 19 - Brazilian Portuguese
+  u8"Screenshot Preview",
+
+	// 20 - Romanian
+  u8"Screenshot Preview",
+
+	// 21 - Russian
+  u8"Screenshot Preview",
+
+	// 22 - Spanish
+  u8"Screenshot Preview",
+
+	// 23 - Latin American
+  u8"Screenshot Preview",
+
+	// 24 - Swedish
+  u8"Screenshot Preview",
+
+	// 25 - Thai
+  u8"Screenshot Preview",
+
+	// 26 - Turkish
+  u8"Ekran Görüntüsü Önizlemesi",
+
+	// 27 - Ukrainian
+  u8"Screenshot Preview",
+
+	// 28 - Vietnamese
+  u8"Screenshot Preview",
+
+	// 29 - Croatian
+  u8"Screenshot Preview",
+  
+  // 30 - Indonesian
+  u8"Screenshot Preview",
+  
+};
+
+const char translationPrev[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"< Prev",
+
+	// 1 - Arabic
+  u8"< Prev",
+
+	// 2 - Bulgarian
+  u8"< Prev",
+
+	// 3 - Simplified Chinese
+  u8"< 上一项",
+
+	// 4 - Traditional Chinese
+  u8"< Prev",
+
+	// 5 - Czech
+  u8"< Prev",
+
+	// 6 - Danish
+  u8"< Prev",
+
+	// 7 - Dutch
+  u8"< Prev",
+
+	// 8 - Finnish
+  u8"< Prev",
+
+	// 9 - French
+  u8"< Préc.",
+
+	// 10 - German
+  u8"< Prev",
+
+	// 11 - Greek
+  u8"< Prev",
+
+	// 12 - Hungarian
+  u8"< Prev",
+
+	// 13 - Italian
+  u8"< Prev",
+
+	// 14 - Japanese
+  u8"< Prev",
+
+	// 15 - Korean
+  u8"< Prev",
+
+	// 16 - Norwegian
+  u8"< Prev",
+
+	// 17 - Polish
+  u8"< Prev",
+
+	// 18 - Portuguese
+  u8"< Prev",
+
+	// 19 - Brazilian Portuguese
+  u8"< Prev",
+
+	// 20 - Romanian
+  u8"< Prev",
+
+	// 21 - Russian
+  u8"< Prev",
+
+	// 22 - Spanish
+  u8"< Prev",
+
+	// 23 - Latin American
+  u8"< Prev",
+
+	// 24 - Swedish
+  u8"< Prev",
+
+	// 25 - Thai
+  u8"< Prev",
+
+	// 26 - Turkish
+  u8"< Önceki",
+
+	// 27 - Ukrainian
+  u8"< Prev",
+
+	// 28 - Vietnamese
+  u8"< Prev",
+
+	// 29 - Croatian
+  u8"< Prev",
+  
+  // 30 - Indonesian
+  u8"< Prev",
+  
+};
+
+const char translationPin[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Pin",
+
+	// 1 - Arabic
+  u8"Pin",
+
+	// 2 - Bulgarian
+  u8"Pin",
+
+	// 3 - Simplified Chinese
+  u8"置顶",
+
+	// 4 - Traditional Chinese
+  u8"Pin",
+
+	// 5 - Czech
+  u8"Pin",
+
+	// 6 - Danish
+  u8"Pin",
+
+	// 7 - Dutch
+  u8"Pin",
+
+	// 8 - Finnish
+  u8"Pin",
+
+	// 9 - French
+  u8"Épingler",
+
+	// 10 - German
+  u8"Pin",
+
+	// 11 - Greek
+  u8"Pin",
+
+	// 12 - Hungarian
+  u8"Pin",
+
+	// 13 - Italian
+  u8"Pin",
+
+	// 14 - Japanese
+  u8"Pin",
+
+	// 15 - Korean
+  u8"Pin",
+
+	// 16 - Norwegian
+  u8"Pin",
+
+	// 17 - Polish
+  u8"Pin",
+
+	// 18 - Portuguese
+  u8"Pin",
+
+	// 19 - Brazilian Portuguese
+  u8"Pin",
+
+	// 20 - Romanian
+  u8"Pin",
+
+	// 21 - Russian
+  u8"Pin",
+
+	// 22 - Spanish
+  u8"Pin",
+
+	// 23 - Latin American
+  u8"Pin",
+
+	// 24 - Swedish
+  u8"Pin",
+
+	// 25 - Thai
+  u8"Pin",
+
+	// 26 - Turkish
+  u8"Sabitle",
+
+	// 27 - Ukrainian
+  u8"Pin",
+
+	// 28 - Vietnamese
+  u8"Pin",
+
+	// 29 - Croatian
+  u8"Pin",
+  
+  // 30 - Indonesian
+  u8"Pin",
+  
+};
+
+const char translationCrop[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Crop",
+
+	// 1 - Arabic
+  u8"Crop",
+
+	// 2 - Bulgarian
+  u8"Crop",
+
+	// 3 - Simplified Chinese
+  u8"裁剪",
+
+	// 4 - Traditional Chinese
+  u8"Crop",
+
+	// 5 - Czech
+  u8"Crop",
+
+	// 6 - Danish
+  u8"Crop",
+
+	// 7 - Dutch
+  u8"Crop",
+
+	// 8 - Finnish
+  u8"Crop",
+
+	// 9 - French
+  u8"Recadrer",
+
+	// 10 - German
+  u8"Crop",
+
+	// 11 - Greek
+  u8"Crop",
+
+	// 12 - Hungarian
+  u8"Crop",
+
+	// 13 - Italian
+  u8"Crop",
+
+	// 14 - Japanese
+  u8"Crop",
+
+	// 15 - Korean
+  u8"Crop",
+
+	// 16 - Norwegian
+  u8"Crop",
+
+	// 17 - Polish
+  u8"Crop",
+
+	// 18 - Portuguese
+  u8"Crop",
+
+	// 19 - Brazilian Portuguese
+  u8"Crop",
+
+	// 20 - Romanian
+  u8"Crop",
+
+	// 21 - Russian
+  u8"Crop",
+
+	// 22 - Spanish
+  u8"Crop",
+
+	// 23 - Latin American
+  u8"Crop",
+
+	// 24 - Swedish
+  u8"Crop",
+
+	// 25 - Thai
+  u8"Crop",
+
+	// 26 - Turkish
+  u8"Kırp",
+
+	// 27 - Ukrainian
+  u8"Crop",
+
+	// 28 - Vietnamese
+  u8"Crop",
+
+	// 29 - Croatian
+  u8"Crop",
+  
+  // 30 - Indonesian
+  u8"Crop",
+  
+};
+
+const char translationNext[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Next >",
+
+	// 1 - Arabic
+  u8"Next >",
+
+	// 2 - Bulgarian
+  u8"Next >",
+
+	// 3 - Simplified Chinese
+  u8"下一项 >",
+
+	// 4 - Traditional Chinese
+  u8"Next >",
+
+	// 5 - Czech
+  u8"Next >",
+
+	// 6 - Danish
+  u8"Next >",
+
+	// 7 - Dutch
+  u8"Next >",
+
+	// 8 - Finnish
+  u8"Next >",
+
+	// 9 - French
+  u8"Suiv. >",
+
+	// 10 - German
+  u8"Next >",
+
+	// 11 - Greek
+  u8"Next >",
+
+	// 12 - Hungarian
+  u8"Next >",
+
+	// 13 - Italian
+  u8"Next >",
+
+	// 14 - Japanese
+  u8"Next >",
+
+	// 15 - Korean
+  u8"Next >",
+
+	// 16 - Norwegian
+  u8"Next >",
+
+	// 17 - Polish
+  u8"Next >",
+
+	// 18 - Portuguese
+  u8"Next >",
+
+	// 19 - Brazilian Portuguese
+  u8"Next >",
+
+	// 20 - Romanian
+  u8"Next >",
+
+	// 21 - Russian
+  u8"Next >",
+
+	// 22 - Spanish
+  u8"Next >",
+
+	// 23 - Latin American
+  u8"Next >",
+
+	// 24 - Swedish
+  u8"Next >",
+
+	// 25 - Thai
+  u8"Next >",
+
+	// 26 - Turkish
+  u8"Sonraki >",
+
+	// 27 - Ukrainian
+  u8"Next >",
+
+	// 28 - Vietnamese
+  u8"Next >",
+
+	// 29 - Croatian
+  u8"Next >",
+  
+  // 30 - Indonesian
+  u8"Next >",
+  
+};
+
+const char translationDeleteThisScreenshot[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Delete this screenshot?",
+
+	// 1 - Arabic
+  u8"Delete this screenshot?",
+
+	// 2 - Bulgarian
+  u8"Delete this screenshot?",
+
+	// 3 - Simplified Chinese
+  u8"是否删除该截图？",
+
+	// 4 - Traditional Chinese
+  u8"Delete this screenshot?",
+
+	// 5 - Czech
+  u8"Delete this screenshot?",
+
+	// 6 - Danish
+  u8"Delete this screenshot?",
+
+	// 7 - Dutch
+  u8"Delete this screenshot?",
+
+	// 8 - Finnish
+  u8"Delete this screenshot?",
+
+	// 9 - French
+  u8"Supprimer cette capture d'écran ?",
+
+	// 10 - German
+  u8"Delete this screenshot?",
+
+	// 11 - Greek
+  u8"Delete this screenshot?",
+
+	// 12 - Hungarian
+  u8"Delete this screenshot?",
+
+	// 13 - Italian
+  u8"Delete this screenshot?",
+
+	// 14 - Japanese
+  u8"Delete this screenshot?",
+
+	// 15 - Korean
+  u8"Delete this screenshot?",
+
+	// 16 - Norwegian
+  u8"Delete this screenshot?",
+
+	// 17 - Polish
+  u8"Delete this screenshot?",
+
+	// 18 - Portuguese
+  u8"Delete this screenshot?",
+
+	// 19 - Brazilian Portuguese
+  u8"Delete this screenshot?",
+
+	// 20 - Romanian
+  u8"Delete this screenshot?",
+
+	// 21 - Russian
+  u8"Delete this screenshot?",
+
+	// 22 - Spanish
+  u8"Delete this screenshot?",
+
+	// 23 - Latin American
+  u8"Delete this screenshot?",
+
+	// 24 - Swedish
+  u8"Delete this screenshot?",
+
+	// 25 - Thai
+  u8"Delete this screenshot?",
+
+	// 26 - Turkish
+  u8"Bu ekran görüntüsünü silmek istiyor musunuz?",
+
+	// 27 - Ukrainian
+  u8"Delete this screenshot?",
+
+	// 28 - Vietnamese
+  u8"Delete this screenshot?",
+
+	// 29 - Croatian
+  u8"Delete this screenshot?",
+  
+  // 30 - Indonesian
+  u8"Delete this screenshot?",
+  
+};
+
+const char translationDeleteAllScelectedScreenshots[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Delete all selected screenshots?",
+
+	// 1 - Arabic
+  u8"Delete all selected screenshots?",
+
+	// 2 - Bulgarian
+  u8"Delete all selected screenshots?",
+
+	// 3 - Simplified Chinese
+  u8"是否删除所有截图？",
+
+	// 4 - Traditional Chinese
+  u8"Delete all selected screenshots?",
+
+	// 5 - Czech
+  u8"Delete all selected screenshots?",
+
+	// 6 - Danish
+  u8"Delete all selected screenshots?",
+
+	// 7 - Dutch
+  u8"Delete all selected screenshots?",
+
+	// 8 - Finnish
+  u8"Delete all selected screenshots?",
+
+	// 9 - French
+  u8"Supprimer toutes les captures d'écran sélectionnées ?",
+
+	// 10 - German
+  u8"Delete all selected screenshots?",
+
+	// 11 - Greek
+  u8"Delete all selected screenshots?",
+
+	// 12 - Hungarian
+  u8"Delete all selected screenshots?",
+
+	// 13 - Italian
+  u8"Delete all selected screenshots?",
+
+	// 14 - Japanese
+  u8"Delete all selected screenshots?",
+
+	// 15 - Korean
+  u8"Delete all selected screenshots?",
+
+	// 16 - Norwegian
+  u8"Delete all selected screenshots?",
+
+	// 17 - Polish
+  u8"Delete all selected screenshots?",
+
+	// 18 - Portuguese
+  u8"Delete all selected screenshots?",
+
+	// 19 - Brazilian Portuguese
+  u8"Delete all selected screenshots?",
+
+	// 20 - Romanian
+  u8"Delete all selected screenshots?",
+
+	// 21 - Russian
+  u8"Delete all selected screenshots?",
+
+	// 22 - Spanish
+  u8"Delete all selected screenshots?",
+
+	// 23 - Latin American
+  u8"Delete all selected screenshots?",
+
+	// 24 - Swedish
+  u8"Delete all selected screenshots?",
+
+	// 25 - Thai
+  u8"Delete all selected screenshots?",
+
+	// 26 - Turkish
+  u8"Seçili tüm ekran görüntülerini silmek istiyor musunuz?",
+
+	// 27 - Ukrainian
+  u8"Delete all selected screenshots?",
+
+	// 28 - Vietnamese
+  u8"Delete all selected screenshots?",
+
+	// 29 - Croatian
+  u8"Delete all selected screenshots?",
+  
+  // 30 - Indonesian
+  u8"Delete all selected screenshots?",
+  
+};
+
+const char translationYes[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Yes",
+
+	// 1 - Arabic
+  u8"Yes",
+
+	// 2 - Bulgarian
+  u8"Yes",
+
+	// 3 - Simplified Chinese
+  u8"是",
+
+	// 4 - Traditional Chinese
+  u8"Yes",
+
+	// 5 - Czech
+  u8"Yes",
+
+	// 6 - Danish
+  u8"Yes",
+
+	// 7 - Dutch
+  u8"Yes",
+
+	// 8 - Finnish
+  u8"Yes",
+
+	// 9 - French
+  u8"Oui",
+
+	// 10 - German
+  u8"Yes",
+
+	// 11 - Greek
+  u8"Yes",
+
+	// 12 - Hungarian
+  u8"Yes",
+
+	// 13 - Italian
+  u8"Yes",
+
+	// 14 - Japanese
+  u8"Yes",
+
+	// 15 - Korean
+  u8"Yes",
+
+	// 16 - Norwegian
+  u8"Yes",
+
+	// 17 - Polish
+  u8"Yes",
+
+	// 18 - Portuguese
+  u8"Yes",
+
+	// 19 - Brazilian Portuguese
+  u8"Yes",
+
+	// 20 - Romanian
+  u8"Yes",
+
+	// 21 - Russian
+  u8"Yes",
+
+	// 22 - Spanish
+  u8"Yes",
+
+	// 23 - Latin American
+  u8"Yes",
+
+	// 24 - Swedish
+  u8"Yes",
+
+	// 25 - Thai
+  u8"Yes",
+
+	// 26 - Turkish
+  u8"Evet",
+
+	// 27 - Ukrainian
+  u8"Yes",
+
+	// 28 - Vietnamese
+  u8"Yes",
+
+	// 29 - Croatian
+  u8"Yes",
+  
+  // 30 - Indonesian
+  u8"Yes",
+  
+};
+
+const char translationNo[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"No",
+
+	// 1 - Arabic
+  u8"No",
+
+	// 2 - Bulgarian
+  u8"No",
+
+	// 3 - Simplified Chinese
+  u8"否",
+
+	// 4 - Traditional Chinese
+  u8"No",
+
+	// 5 - Czech
+  u8"No",
+
+	// 6 - Danish
+  u8"No",
+
+	// 7 - Dutch
+  u8"No",
+
+	// 8 - Finnish
+  u8"No",
+
+	// 9 - French
+  u8"Non",
+
+	// 10 - German
+  u8"No",
+
+	// 11 - Greek
+  u8"No",
+
+	// 12 - Hungarian
+  u8"No",
+
+	// 13 - Italian
+  u8"No",
+
+	// 14 - Japanese
+  u8"No",
+
+	// 15 - Korean
+  u8"No",
+
+	// 16 - Norwegian
+  u8"No",
+
+	// 17 - Polish
+  u8"No",
+
+	// 18 - Portuguese
+  u8"No",
+
+	// 19 - Brazilian Portuguese
+  u8"No",
+
+	// 20 - Romanian
+  u8"No",
+
+	// 21 - Russian
+  u8"No",
+
+	// 22 - Spanish
+  u8"No",
+
+	// 23 - Latin American
+  u8"No",
+
+	// 24 - Swedish
+  u8"No",
+
+	// 25 - Thai
+  u8"No",
+
+	// 26 - Turkish
+  u8"Hayır",
+
+	// 27 - Ukrainian
+  u8"No",
+
+	// 28 - Vietnamese
+  u8"No",
+
+	// 29 - Croatian
+  u8"No",
+  
+  // 30 - Indonesian
+  u8"No",
+  
+};
+
+const char translationConfirmDelete[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Confirm Delete",
+
+	// 1 - Arabic
+  u8"Confirm Delete",
+
+	// 2 - Bulgarian
+  u8"Confirm Delete",
+
+	// 3 - Simplified Chinese
+  u8"确认删除",
+
+	// 4 - Traditional Chinese
+  u8"Confirm Delete",
+
+	// 5 - Czech
+  u8"Confirm Delete",
+
+	// 6 - Danish
+  u8"Confirm Delete",
+
+	// 7 - Dutch
+  u8"Confirm Delete",
+
+	// 8 - Finnish
+  u8"Confirm Delete",
+
+	// 9 - French
+  u8"Confirmer la suppression",
+
+	// 10 - German
+  u8"Confirm Delete",
+
+	// 11 - Greek
+  u8"Confirm Delete",
+
+	// 12 - Hungarian
+  u8"Confirm Delete",
+
+	// 13 - Italian
+  u8"Confirm Delete",
+
+	// 14 - Japanese
+  u8"Confirm Delete",
+
+	// 15 - Korean
+  u8"Confirm Delete",
+
+	// 16 - Norwegian
+  u8"Confirm Delete",
+
+	// 17 - Polish
+  u8"Confirm Delete",
+
+	// 18 - Portuguese
+  u8"Confirm Delete",
+
+	// 19 - Brazilian Portuguese
+  u8"Confirm Delete",
+
+	// 20 - Romanian
+  u8"Confirm Delete",
+
+	// 21 - Russian
+  u8"Confirm Delete",
+
+	// 22 - Spanish
+  u8"Confirm Delete",
+
+	// 23 - Latin American
+  u8"Confirm Delete",
+
+	// 24 - Swedish
+  u8"Confirm Delete",
+
+	// 25 - Thai
+  u8"Confirm Delete",
+
+	// 26 - Turkish
+  u8"Silme İşlemini Onayla",
+
+	// 27 - Ukrainian
+  u8"Confirm Delete",
+
+	// 28 - Vietnamese
+  u8"Confirm Delete",
+
+	// 29 - Croatian
+  u8"Confirm Delete",
+  
+  // 30 - Indonesian
+  u8"Confirm Delete",
+  
+};
+
+const char translationConfirm[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Confirm",
+
+	// 1 - Arabic
+  u8"Confirm",
+
+	// 2 - Bulgarian
+  u8"Confirm",
+
+	// 3 - Simplified Chinese
+  u8"确认",
+
+	// 4 - Traditional Chinese
+  u8"Confirm",
+
+	// 5 - Czech
+  u8"Confirm",
+
+	// 6 - Danish
+  u8"Confirm",
+
+	// 7 - Dutch
+  u8"Confirm",
+
+	// 8 - Finnish
+  u8"Confirm",
+
+	// 9 - French
+  u8"Confirmer",
+
+	// 10 - German
+  u8"Confirm",
+
+	// 11 - Greek
+  u8"Confirm",
+
+	// 12 - Hungarian
+  u8"Confirm",
+
+	// 13 - Italian
+  u8"Confirm",
+
+	// 14 - Japanese
+  u8"Confirm",
+
+	// 15 - Korean
+  u8"Confirm",
+
+	// 16 - Norwegian
+  u8"Confirm",
+
+	// 17 - Polish
+  u8"Confirm",
+
+	// 18 - Portuguese
+  u8"Confirm",
+
+	// 19 - Brazilian Portuguese
+  u8"Confirm",
+
+	// 20 - Romanian
+  u8"Confirm",
+
+	// 21 - Russian
+  u8"Confirm",
+
+	// 22 - Spanish
+  u8"Confirm",
+
+	// 23 - Latin American
+  u8"Confirm",
+
+	// 24 - Swedish
+  u8"Confirm",
+
+	// 25 - Thai
+  u8"Confirm",
+
+	// 26 - Turkish
+  u8"Onayla",
+
+	// 27 - Ukrainian
+  u8"Confirm",
+
+	// 28 - Vietnamese
+  u8"Confirm",
+
+	// 29 - Croatian
+  u8"Confirm",
+  
+  // 30 - Indonesian
+  u8"Confirm",
+  
+};
+
+const char translationCancel[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Cancel",
+
+	// 1 - Arabic
+  u8"Cancel",
+
+	// 2 - Bulgarian
+  u8"Cancel",
+
+	// 3 - Simplified Chinese
+  u8"取消",
+
+	// 4 - Traditional Chinese
+  u8"Cancel",
+
+	// 5 - Czech
+  u8"Cancel",
+
+	// 6 - Danish
+  u8"Cancel",
+
+	// 7 - Dutch
+  u8"Cancel",
+
+	// 8 - Finnish
+  u8"Cancel",
+
+	// 9 - French
+  u8"Annuler",
+
+	// 10 - German
+  u8"Cancel",
+
+	// 11 - Greek
+  u8"Cancel",
+
+	// 12 - Hungarian
+  u8"Cancel",
+
+	// 13 - Italian
+  u8"Cancel",
+
+	// 14 - Japanese
+  u8"Cancel",
+
+	// 15 - Korean
+  u8"Cancel",
+
+	// 16 - Norwegian
+  u8"Cancel",
+
+	// 17 - Polish
+  u8"Cancel",
+
+	// 18 - Portuguese
+  u8"Cancel",
+
+	// 19 - Brazilian Portuguese
+  u8"Cancel",
+
+	// 20 - Romanian
+  u8"Cancel",
+
+	// 21 - Russian
+  u8"Cancel",
+
+	// 22 - Spanish
+  u8"Cancel",
+
+	// 23 - Latin American
+  u8"Cancel",
+
+	// 24 - Swedish
+  u8"Cancel",
+
+	// 25 - Thai
+  u8"Cancel",
+
+	// 26 - Turkish
+  u8"İptal Et",
+
+	// 27 - Ukrainian
+  u8"Cancel",
+
+	// 28 - Vietnamese
+  u8"Cancel",
+
+	// 29 - Croatian
+  u8"Cancel",
+  
+  // 30 - Indonesian
+  u8"Cancel",
+  
+};
+
+const char translationPinnedScreenshots[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 1 - Arabic
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 2 - Bulgarian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 3 - Simplified Chinese
+  u8"置顶截图###pinned_ss_%llu",
+
+	// 4 - Traditional Chinese
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 5 - Czech
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 6 - Danish
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 7 - Dutch
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 8 - Finnish
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 9 - French
+  u8"Capture d'écran épinglée###pinned_ss_%llu",
+
+	// 10 - German
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 11 - Greek
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 12 - Hungarian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 13 - Italian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 14 - Japanese
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 15 - Korean
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 16 - Norwegian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 17 - Polish
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 18 - Portuguese
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 19 - Brazilian Portuguese
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 20 - Romanian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 21 - Russian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 22 - Spanish
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 23 - Latin American
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 24 - Swedish
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 25 - Thai
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 26 - Turkish
+  u8"Sabitlenmiş Ekran Görüntüsü###pinned_ss_%llu",
+
+	// 27 - Ukrainian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 28 - Vietnamese
+  u8"Pinned Screenshot###pinned_ss_%llu",
+
+	// 29 - Croatian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+  
+  // 30 - Indonesian
+  u8"Pinned Screenshot###pinned_ss_%llu",
+  
+};
+
+const char translationOpacity[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
+	// 0 - English
+  u8"Opacity",
+
+	// 1 - Arabic
+  u8"Opacity",
+
+	// 2 - Bulgarian
+  u8"Opacity",
+
+	// 3 - Simplified Chinese
+  u8"透明度",
+
+	// 4 - Traditional Chinese
+  u8"Opacity",
+
+	// 5 - Czech
+  u8"Opacity",
+
+	// 6 - Danish
+  u8"Opacity",
+
+	// 7 - Dutch
+  u8"Opacity",
+
+	// 8 - Finnish
+  u8"Opacity",
+
+	// 9 - French
+  u8"Opacité",
+
+	// 10 - German
+  u8"Opacity",
+
+	// 11 - Greek
+  u8"Opacity",
+
+	// 12 - Hungarian
+  u8"Opacity",
+
+	// 13 - Italian
+  u8"Opacity",
+
+	// 14 - Japanese
+  u8"Opacity",
+
+	// 15 - Korean
+  u8"Opacity",
+
+	// 16 - Norwegian
+  u8"Opacity",
+
+	// 17 - Polish
+  u8"Opacity",
+
+	// 18 - Portuguese
+  u8"Opacity",
+
+	// 19 - Brazilian Portuguese
+  u8"Opacity",
+
+	// 20 - Romanian
+  u8"Opacity",
+
+	// 21 - Russian
+  u8"Opacity",
+
+	// 22 - Spanish
+  u8"Opacity",
+
+	// 23 - Latin American
+  u8"Opacity",
+
+	// 24 - Swedish
+  u8"Opacity",
+
+	// 25 - Thai
+  u8"Opacity",
+
+	// 26 - Turkish
+  u8"Opaklık",
+
+	// 27 - Ukrainian
+  u8"Opacity",
+
+	// 28 - Vietnamese
+  u8"Opacity",
+
+	// 29 - Croatian
+  u8"Opacity",
+  
+  // 30 - Indonesian
+  u8"Opacity",
+  
+};
+
 const char translationAutoAcceptFriendInvite[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATION_BUFFER_SIZE] = {
 	// 0 - English
   u8"Invitations are controlled by auto_accept_invite.txt!",
@@ -4247,7 +7031,7 @@ const char translationAutoAcceptFriendInvite[TRANSLATION_NUMBER_OF_LANGUAGES][TR
   u8"Invitations are controlled by auto_accept_invite.txt!",
 
 	// 9 - French
-  u8"Invitations are controlled by auto_accept_invite.txt!",
+  u8"Les invitations sont gérées par auto_accept_invite.txt !",
 
 	// 10 - German
   u8"Invitations are controlled by auto_accept_invite.txt!",
@@ -4823,7 +7607,7 @@ const char translationPlaytimeCheckbox[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLAT
   u8"Playtime",
 
 	// 9 - French
-  u8"Playtime",
+  u8"Temps de jeu",
 
 	// 10 - German
   u8"Playtime",
@@ -4919,7 +7703,7 @@ const char translationPlaytimeDisplay[TRANSLATION_NUMBER_OF_LANGUAGES][TRANSLATI
   u8"PLT: ",
 
 	// 9 - French
-  u8"PLT: ",
+  u8"TdJ: ",
 
 	// 10 - German
   u8"PLT: ",
