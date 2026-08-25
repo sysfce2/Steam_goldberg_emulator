@@ -6794,7 +6794,7 @@ void Steam_Overlay::render_gallery_window()
 {
     if (!show_screenshots_window) return;
 
-    ImGui::PushFont(font_default);
+    ImGui::PushFont(font_default, 0.0f);
     uint32 style_color_stack = apply_global_style_color();
 
     ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(8192, 8192));
@@ -7712,7 +7712,7 @@ void Steam_Overlay::render_pinned_screenshot()
     if (pinned_screenshots.empty())
         return;
 
-    ImGui::PushFont(font_default);
+    ImGui::PushFont(font_default, 0.0f);
 
     // Track overlay state transitions once — applies to all pin windows.
     static bool prev_overlay_state = false;
