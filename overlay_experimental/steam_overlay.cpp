@@ -2835,6 +2835,41 @@ static void srgb_decode_pixels_if_needed(InGameOverlay::RendererHook_t *renderer
 
     if (!decode_linear_hdr && !decode_pq && !decode_srgb_rtv && !sdr_contrast) return;
 
+    // Apply the user's brightness / contrast / gamma adjustments in linear space.
+    // This runs as a pre-pass in the sRGB domain, so every transfer path below
+    // (linear HDR / PQ / sRGB RTV / SDR) works on already-adjusted pixels:
+    //   adjusted = srgb_encode(adjust(srgb_decode(byte)))
+    // which is exactly what the FP16 path does via transform_pixels_to_fp16(),
+    // keeping the 8-bit fallback consistent with it (just with less precision).
+    const bool has_adj = (s_img_brightness != 1.0f || s_img_contrast != 1.0f || s_img_gamma_adj != 1.0f);
+    if (has_adj) {
+        static uint8_t adj_lut[256];
+        static float   adj_lut_for_b = -1.0f, adj_lut_for_c = -1.0f, adj_lut_for_g = -1.0f;
+        if (adj_lut_for_b != s_img_brightness || adj_lut_for_c != s_img_contrast || adj_lut_for_g != s_img_gamma_adj) {
+            adj_lut_for_b = s_img_brightness;
+            adj_lut_for_c = s_img_contrast;
+            adj_lut_for_g = s_img_gamma_adj;
+            for (int i = 0; i < 256; ++i) {
+                float s = i / 255.0f;
+                float l = (s <= 0.04045f) ? s / 12.92f : powf((s + 0.055f) / 1.055f, 2.4f);
+                if (s_img_gamma_adj != 1.0f && l > 0.0f)
+                    l = powf(l, s_img_gamma_adj);
+                if (s_img_contrast != 1.0f)
+                    l = (l - 0.5f) * s_img_contrast + 0.5f;
+                if (s_img_brightness != 1.0f)
+                    l *= s_img_brightness;
+                if (l < 0.0f) l = 0.0f; else if (l > 1.0f) l = 1.0f;
+                const float e = (l <= 0.0031308f) ? l * 12.92f : 1.055f * powf(l, 1.0f / 2.4f) - 0.055f;
+                adj_lut[i] = (uint8_t)(fminf(e * 255.0f + 0.5f, 255.0f));
+            }
+        }
+        for (size_t i = 0; i < npixels; ++i, rgba += 4) {
+            rgba[0] = adj_lut[rgba[0]];
+            rgba[1] = adj_lut[rgba[1]];
+            rgba[2] = adj_lut[rgba[2]];
+        }
+    }
+
     if (decode_linear_hdr) {
         // HDR / FP16-scRGB path: sRGB→linear decode scaled by s_sdr_white_scale.
         // s_sdr_white_scale = sdr_white_nits / 80.0f (queried from the OS display API).
@@ -3105,10 +3140,20 @@ static std::vector<uint16_t> transform_pixels_to_fp16(const uint8_t *pixels, int
     return out;
 }
 
+// Capability of the active renderer backend, refreshed once per frame in
+// overlay_render_proc(). Uploading RGBA16F requires the backend to actually
+// understand that format: a backend that does not would reinterpret the buffer as
+// RGBA8 and corrupt the image instead of reporting an error, so this must be
+// checked before every upload (the 8-bit path is still colour-correct, just lossy).
+static bool s_renderer_supports_fp16 = false;
+
 // Decide whether FP16 upload is available and appropriate.
 // Also used when image adjustments are active (even on SDR) for better precision.
 static bool should_use_fp16()
 {
+    if (!s_renderer_supports_fp16)
+        return false;
+
     SwapchainColorSpace cs = effective_swapchain_cs();
     if (cs == SCS_LINEAR_HDR || cs == SCS_HDR10_PQ || cs == SCS_SDR_SRGB_RTV)
         return true;
@@ -3286,6 +3331,14 @@ void Steam_Overlay::overlay_render_proc()
     s_img_brightness = settings->overlay_appearance.image_brightness;
     s_img_contrast   = settings->overlay_appearance.image_contrast;
     s_img_gamma_adj  = settings->overlay_appearance.image_gamma_adjust;
+
+    // Query the renderer's supported upload formats. Backends that cannot upload
+    // RGBA16F (e.g. the Linux/macOS hooks) must never receive one: they would
+    // reinterpret the 16-bit buffer as RGBA8. Callers fall back to RGBA8 instead,
+    // which still gets the correct brightness / contrast / gamma via the
+    // adjustment pre-pass in srgb_decode_pixels_if_needed().
+    s_renderer_supports_fp16 = (_renderer != nullptr) &&
+        _renderer->SupportsPixelFormat(InGameOverlay::RendererPixelFormat::RGBA16F);
 
     // Deferred SCE texture cleanup - do this BEFORE any ImGui rendering
     // to avoid deleting resources mid-frame (which crashes DX9)
