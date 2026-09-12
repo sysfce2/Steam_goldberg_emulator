@@ -2311,6 +2311,9 @@ static void parse_simple_features(class Settings *settings_client, class Setting
     settings_client->disable_reshade_banner = ini.GetBoolValue("overlay::reshade", "disable_reshade_banner", settings_client->disable_reshade_banner);
     settings_server->disable_reshade_banner = ini.GetBoolValue("overlay::reshade", "disable_reshade_banner", settings_server->disable_reshade_banner);
 
+    settings_client->warn_tool_conflicts = ini.GetBoolValue("overlay::misc", "warn_tool_conflicts", settings_client->warn_tool_conflicts);
+    settings_server->warn_tool_conflicts = ini.GetBoolValue("overlay::misc", "warn_tool_conflicts", settings_server->warn_tool_conflicts);
+
     {
         const char *val = ini.GetValue("overlay::specialk", "specialk_install_path");
         if (val && val[0]) {

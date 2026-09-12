@@ -334,6 +334,10 @@ public:
     // disable ReShade startup banner (writes ShowStartupBanner=0 to ReShade.ini in game dir)
     bool disable_reshade_banner = false;
 
+    // warn the user at startup when the detected third-party tools are known to be
+    // incompatible with each other (rule table + sources in dll/known_tools.h)
+    bool warn_tool_conflicts = true;
+
     // disable Special K startup notification (writes Silent=true to per-game SpecialK.ini)
     bool disable_specialk_notification = false;
 

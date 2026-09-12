@@ -470,9 +470,15 @@ public:
     bool specialk_proxy_detected = false;
     bool reshade_proxy_detected = false;
     std::string cached_detected_overlays;
+    // documented incompatibilities between the detected tools; kept as text so
+    // that no known_tools type has to leak into this header
+    std::string cached_conflicts;          // one-line summary, goes to the report
+    std::string cached_conflict_details;   // full detail, goes to the report
+    std::string cached_conflict_alert;     // warning/blocking only, goes in the pop-up
     bool overlays_scanned = false;
     unsigned missing_interface_count = 0;
     void detect_thirdparty_injectors();
+    void show_tool_conflict_warning();
     bool is_caller_special_k();
     void try_start_specialk_injection();
 

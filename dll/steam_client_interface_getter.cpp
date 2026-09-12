@@ -16,6 +16,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "dll/steam_client.h"
+#include "dll/known_tools.h"
 
 #if defined(__WINDOWS__)
 #include <TlHelp32.h>
@@ -1187,8 +1188,10 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
         ss << "THREAD ID=" << GetCurrentThreadId() << "\n";
     }
     catch(...) { }
+#endif
 
-    // detected third-party modules (use cached results from detect_thirdparty_injectors)
+    // detected third-party modules (use cached results from detect_thirdparty_injectors).
+    // Deliberately outside the Windows guard so Linux reports them as well.
     try {
         if (!overlays_scanned) {
             detect_thirdparty_injectors();
@@ -1196,9 +1199,19 @@ void Steam_Client::report_missing_impl(std::string_view itf, std::string_view ca
         if (!cached_detected_overlays.empty()) {
             ss << "DETECTED OVERLAYS=" << cached_detected_overlays << "\n";
         }
+        if (!cached_conflicts.empty()) {
+            ss << "TOOL CONFLICTS=" << cached_conflicts << "\n";
+        }
     }
     catch(...) { }
-#endif
+
+    // full conflict detail with the source of each claim
+    try {
+        if (!cached_conflict_details.empty()) {
+            ss << "--- detected tool incompatibilities ---\n" << cached_conflict_details;
+        }
+    }
+    catch(...) { }
 
     // injector detection status
     try {
@@ -1282,217 +1295,131 @@ void Steam_Client::detect_thirdparty_injectors()
 {
     thirdparty_injector_detected = false;
 
-#if defined(__WINDOWS__)
-    // scan all known overlays/injectors and log each one found
-    struct { const wchar_t* name; const char* label; const char* type; } known_modules[] = {
-        // --- injectors / post-processors ---
-        #if defined(_WIN64)
-        { L"SpecialK64.dll",            "Special K",            "injector" },
-        { L"ReShade64.dll",             "ReShade",              "post-processor" },
-        #else
-        { L"SpecialK32.dll",            "Special K",            "injector" },
-        { L"ReShade32.dll",             "ReShade",              "post-processor" },
-        #endif
-        { L"d3dcompiler_46e.dll",       "ENB Series",           "post-processor" },
+    // Scan all known overlays/injectors and log each one found.
+    // Table + probing live in dll/known_tools.h so this file, base.cpp and both
+    // platforms (Windows module scan / Linux /proc/self/maps) stay in sync.
+    std::vector<DetectedTool> tools;
+    known_tools::collect(tools);
 
-        // --- recording / streaming ---
-        #if defined(_WIN64)
-        { L"nvspcap64.dll",             "NVIDIA ShadowPlay",    "recording" },
-        { L"graphics-hook64.dll",       "OBS Game Capture",     "recording" },
-        { L"fraps64.dll",               "Fraps",                "recording" },
-        { L"MedalHook64.dll",           "Medal.tv",             "recording" },
-        { L"bdcam64.dll",               "Bandicam",             "recording" },
-        { L"Action64.dll",              "Mirillis Action",      "recording" },
-        { L"XSplit.Core64.dll",         "XSplit",               "recording" },
-        { L"d3dgear64.dll",             "D3DGear",              "recording" },
-        #else
-        { L"nvspcap.dll",               "NVIDIA ShadowPlay",    "recording" },
-        { L"graphics-hook32.dll",       "OBS Game Capture",     "recording" },
-        { L"fraps32.dll",               "Fraps",                "recording" },
-        { L"MedalHook.dll",             "Medal.tv",             "recording" },
-        { L"bdcam32.dll",               "Bandicam",             "recording" },
-        { L"Action.dll",                "Mirillis Action",      "recording" },
-        { L"XSplit.Core.dll",           "XSplit",               "recording" },
-        { L"d3dgear.dll",               "D3DGear",              "recording" },
-        #endif
-        { L"Streamlabs.dll",            "Streamlabs",           "recording" },
-
-        // --- monitoring ---
-        { L"RTSSHooks64.dll",           "RTSS",                 "monitoring" },
-        { L"RTSSHooks.dll",             "RTSS",                 "monitoring" },
-        #if defined(_WIN64)
-        { L"fpshook64.dll",             "FPS Monitor",          "monitoring" },
-        { L"PresentMon64.dll",          "Intel PresentMon",     "monitoring" },
-        #else
-        { L"fpshook.dll",               "FPS Monitor",          "monitoring" },
-        { L"PresentMon32.dll",          "Intel PresentMon",     "monitoring" },
-        #endif
-
-        // --- store overlays ---
-        { L"GameOverlayRenderer64.dll", "Steam Overlay",        "store overlay" },
-        { L"GameOverlayRenderer.dll",   "Steam Overlay",        "store overlay" },
-        { L"DiscordHook64.dll",         "Discord",              "store overlay" },
-        { L"DiscordHook.dll",           "Discord",              "store overlay" },
-        #if defined(_WIN64)
-        { L"EOSOVH-Win64-Shipping.dll", "Epic Online Services", "store overlay" },
-        { L"Galaxy64.dll",              "GOG Galaxy",           "store overlay" },
-        { L"GalaxyOverlayRenderer64.dll", "GOG Galaxy",         "store overlay" },
-        { L"igo64.dll",                 "EA App / Origin",      "store overlay" },
-        { L"uplay_r2_loader64.dll",     "Ubisoft Connect",      "store overlay" },
-        { L"upc_r2_loader64.dll",       "Ubisoft Connect",      "store overlay" },
-        #else
-        { L"EOSOVH-Win32-Shipping.dll", "Epic Online Services", "store overlay" },
-        { L"Galaxy.dll",                "GOG Galaxy",           "store overlay" },
-        { L"GalaxyOverlayRenderer.dll", "GOG Galaxy",           "store overlay" },
-        { L"igo32.dll",                 "EA App / Origin",      "store overlay" },
-        { L"uplay_r2_loader.dll",       "Ubisoft Connect",      "store overlay" },
-        { L"upc_r2_loader.dll",         "Ubisoft Connect",      "store overlay" },
-        #endif
-
-        // --- GPU vendor software ---
-        #if defined(_WIN64)
-        { L"aaborern64.dll",            "AMD Adrenalin",        "gpu vendor" },
-        { L"atiumd64.dll",              "AMD Display Driver",   "gpu vendor" },
-        #else
-        { L"aaborern.dll",              "AMD Adrenalin",        "gpu vendor" },
-        { L"atiumdag.dll",              "AMD Display Driver",   "gpu vendor" },
-        #endif
-        { L"RadeonSoftware.dll",        "AMD Software",         "gpu vendor" },
-
-        // --- system / platform overlays ---
-        { L"GameBar.dll",               "Xbox Game Bar",        "system overlay" },
-        { L"GameBarPresenceWriter.dll", "Xbox Game Bar",        "system overlay" },
-        { L"SSOverlay64.dll",           "Samsung Gaming Hub",   "system overlay" },
-        { L"SSOverlay.dll",             "Samsung Gaming Hub",   "system overlay" },
-        { L"AcLayer.dll",               "Windows Compatibility","system overlay" },
-
-        // --- gaming platforms / launchers ---
-        { L"OWClient.dll",              "Overwolf",             "platform" },
-        { L"OWExplorer.dll",            "Overwolf",             "platform" },
-        #if defined(_WIN64)
-        { L"ltc_game64.dll",            "Playnite",             "platform" },
-        #else
-        { L"ltc_game32.dll",            "Playnite",             "platform" },
-        #endif
-
-        // --- peripheral software ---
-        #if defined(_WIN64)
-        { L"Nahimic2OSD64.dll",         "Nahimic",              "peripheral" },
-        { L"LogiOverlay64.dll",         "Logitech G Hub",       "peripheral" },
-        { L"iCUEOverlay64.dll",         "Corsair iCUE",         "peripheral" },
-        { L"SteelSeriesGG64.dll",       "SteelSeries GG",       "peripheral" },
-        { L"RzChromaSDK64.dll",         "Razer Chroma",         "peripheral" },
-        #else
-        { L"Nahimic2OSD.dll",           "Nahimic",              "peripheral" },
-        { L"LogiOverlay.dll",           "Logitech G Hub",       "peripheral" },
-        { L"iCUEOverlay.dll",           "Corsair iCUE",         "peripheral" },
-        { L"SteelSeriesGG.dll",         "SteelSeries GG",       "peripheral" },
-        { L"RzChromaSDK.dll",           "Razer Chroma",         "peripheral" },
-        #endif
-        { L"NahimicOSD.dll",            "Nahimic",              "peripheral" },
-
-        // --- communication ---
-        #if defined(_WIN64)
-        { L"mumble_ol_x64.dll",         "Mumble",               "communication" },
-        { L"ts3overlay_hook_x64.dll",   "TeamSpeak",            "communication" },
-        #else
-        { L"mumble_ol.dll",             "Mumble",               "communication" },
-        { L"ts3overlay_hook_x86.dll",   "TeamSpeak",            "communication" },
-        #endif
-
-        // --- VR ---
-        { L"openvr_api.dll",            "SteamVR",              "vr" },
-        #if defined(_WIN64)
-        { L"vrclient_x64.dll",          "SteamVR Client",       "vr" },
-        { L"LibOVRRT64_1.dll",          "Oculus Runtime",       "vr" },
-        #else
-        { L"vrclient.dll",              "SteamVR Client",       "vr" },
-        { L"LibOVRRT32_1.dll",          "Oculus Runtime",       "vr" },
-        #endif
-        { L"OculusXRPlugin.dll",        "Oculus/Meta",          "vr" },
-
-        // --- anti-cheat (informational) ---
-        #if defined(_WIN64)
-        { L"EasyAntiCheat_x64.dll",     "EasyAntiCheat",        "anti-cheat" },
-        { L"BEService_x64.dll",         "BattlEye",             "anti-cheat" },
-        { L"BEClient_x64.dll",          "BattlEye",             "anti-cheat" },
-        #else
-        { L"EasyAntiCheat_x86.dll",     "EasyAntiCheat",        "anti-cheat" },
-        { L"BEService_x86.dll",         "BattlEye",             "anti-cheat" },
-        { L"BEClient_x86.dll",          "BattlEye",             "anti-cheat" },
-        #endif
-        { L"easyanticheat.dll",         "EasyAntiCheat",        "anti-cheat" },
-        { L"vanguard.dll",              "Vanguard",             "anti-cheat" },
-
-        // --- modding / script hooks ---
-        { L"ScriptHookV.dll",           "ScriptHookV",          "modding" },
-        { L"ScriptHookRDR2.dll",        "ScriptHookRDR2",       "modding" },
-        { L"ScriptHook.dll",            "ScriptHook",           "modding" },
-        { L"ScriptHookDotNet.dll",      "ScriptHookDotNet",     "modding" },
-        #if defined(_WIN64)
-        { L"version.dll",               "ASI Loader",           "modding" },
-        #else
-        { L"version.dll",               "ASI Loader",           "modding" },
-        #endif
-    };
-    std::set<std::string> seen;
     std::string detected;
-    for (auto& entry : known_modules) {
-        if (GetModuleHandleW(entry.name) && seen.insert(entry.label).second) {
-            PRINT_DEBUG("detected [%s]: %s (via %ls)", entry.type, entry.label, entry.name);
-            if (!detected.empty()) detected += ", ";
-            detected += entry.label;
-        }
-    }
+    for (const auto &t : tools) {
+        PRINT_DEBUG("detected [%s]: %s", t.type.c_str(), t.label.c_str());
+        if (!detected.empty()) detected += ", ";
+        detected += t.label;
 
-    // check proxy DLLs for Special K or ReShade exports
-    const wchar_t* proxy_dlls[] = {
-        L"dxgi.dll", L"d3d11.dll", L"d3d12.dll", L"d3d10_1.dll", L"d3d10.dll", L"d3d9.dll",
-        L"d3d8.dll", L"ddraw.dll", L"dinput8.dll", L"dinput.dll", L"winmm.dll",
-        L"OpenGL32.dll", L"version.dll", L"dsound.dll", L"wininet.dll", L"winhttp.dll",
-        L"xinput1_1.dll", L"xinput1_2.dll", L"xinput1_3.dll", L"xinput1_4.dll",
-        L"xinput9_1_0.dll", L"xinputuap.dll",
-        L"binkw32.dll", L"bink2w32.dll", L"binkw64.dll", L"bink2w64.dll",
-        L"vorbisFile.dll", L"msacm32.dll", L"msvfw32.dll", L"xlive.dll"
-    };
-    for (auto dll_name : proxy_dlls) {
-        HMODULE hMod = GetModuleHandleW(dll_name);
-        if (!hMod) continue;
-        if (GetProcAddress(hMod, "SK_GetVersionStr")) {
-            PRINT_DEBUG("detected Special K via proxy DLL '%ls'", dll_name);
+#if defined(__WINDOWS__)
+        // Preserve the original flag semantics: Special K counts as an injector
+        // whether it was found by name or behind a proxy, but only the proxy
+        // form sets specialk_proxy_detected.
+        if (t.label == "Special K" || t.label == "Special K (proxy)") {
             thirdparty_injector_detected = true;
-            specialk_proxy_detected = true;
-            if (seen.insert("Special K (proxy)").second) {
-                if (!detected.empty()) detected += ", ";
-                detected += "Special K (proxy)";
-            }
-        } else if (GetProcAddress(hMod, "ReShadeVersion")) {
-            PRINT_DEBUG("detected ReShade via proxy DLL '%ls'", dll_name);
-            reshade_proxy_detected = true;
-            if (seen.insert("ReShade (proxy)").second) {
-                if (!detected.empty()) detected += ", ";
-                detected += "ReShade (proxy)";
-            }
-        } else if (GetProcAddress(hMod, "GetASILoadLibrary")) {
-            PRINT_DEBUG("detected Ultimate ASI Loader via proxy DLL '%ls'", dll_name);
-            if (seen.insert("Ultimate ASI Loader (proxy)").second) {
-                if (!detected.empty()) detected += ", ";
-                detected += "Ultimate ASI Loader (proxy)";
-            }
+            if (t.label == "Special K (proxy)") specialk_proxy_detected = true;
         }
+        if (t.label == "ReShade (proxy)") reshade_proxy_detected = true;
+#endif
     }
-
-    // Special K (global injection) sets the flag
-    #if defined(_WIN64)
-    if (GetModuleHandleW(L"SpecialK64.dll")) thirdparty_injector_detected = true;
-    #else
-    if (GetModuleHandleW(L"SpecialK32.dll")) thirdparty_injector_detected = true;
-    #endif
 
     cached_detected_overlays = std::move(detected);
-#endif
+
+    // Turn the detected set into documented incompatibilities. The rules and the
+    // pages they came from live in dll/known_tools.h.
+    std::vector<known_tools::Conflict> conflicts;
+    known_tools::collect_conflicts(tools, conflicts);
+
+    std::string summary, details, alert;
+    for (const auto &c : conflicts) {
+        PRINT_DEBUG("[CONFLICT/%s] %s (detected: %s)", c.severity.c_str(), c.title.c_str(), c.tools.c_str());
+
+        if (!summary.empty()) summary += "; ";
+        summary += c.severity + ": " + c.title;
+
+        details += "[" + c.severity + "] " + c.title + "\n";
+        details += "    detected: " + c.tools + "\n";
+        details += "    " + c.detail + "\n";
+        if (!c.source.empty()) details += "    source:   " + c.source + "\n";
+        details += "\n";
+
+        // 'note' severity is log-only: it is not worth interrupting a game launch
+        // for, and showing it would train users to dismiss the real warnings.
+        if (c.severity == "warning" || c.severity == "blocking") {
+            alert += "[" + c.severity + "] " + c.title + "\n";
+            alert += "    " + c.tools + "\n";
+            alert += "    " + c.detail + "\n";
+            if (!c.source.empty()) alert += "    more info: " + c.source + "\n";
+            alert += "\n";
+        }
+    }
+
+    if (!conflicts.empty()) {
+        PRINT_DEBUG("[CONFLICT] %zu incompatibility(ies) between loaded tools", conflicts.size());
+    }
+
+    cached_conflicts = std::move(summary);
+    cached_conflict_details = std::move(details);
+    cached_conflict_alert = std::move(alert);
+
+    // Always record the result on disk. Deliberately independent of
+    // `warn_tool_conflicts` (that setting only controls the pop-up) and
+    // independent of the build type, because PRINT_DEBUG compiles away to
+    // nothing in release builds - without this the whole finding would be
+    // invisible to a user running a release DLL, which is most of them.
+    try {
+        std::string block;
+        block += "--------------------\n";
+        block += "TOOL DETECTION\n";
+        block += "DETECTED OVERLAYS=" + cached_detected_overlays + "\n";
+        block += cached_conflicts.empty() ? "TOOL CONFLICTS=none\n"
+                                          : "TOOL CONFLICTS=" + cached_conflicts + "\n";
+        if (!cached_conflict_details.empty()) {
+            block += "--- detected tool incompatibilities ---\n" + cached_conflict_details;
+        }
+        if (settings_client) {
+            block += std::string("CONFLICT POPUP=") +
+                     (settings_client->warn_tool_conflicts ? "enabled" : "disabled") + "\n";
+        }
+        block += "--------------------\n";
+
+        std::ofstream report(std::filesystem::u8path(get_full_program_path() + "EMU_MISSING_INTERFACE.txt"), std::ios::out | std::ios::app);
+        if (report.is_open()) {
+            report << block;
+        }
+    }
+    catch(...) { }
 
     overlays_scanned = true;
+}
+
+// Surfaces the detected incompatibilities to the user. Special K's own wiki does
+// exactly this (an "Incompatibility" pop-up), which is the convention users of
+// these tools already expect; without it the finding only ever reaches a log file
+// nobody reads.
+void Steam_Client::show_tool_conflict_warning()
+{
+    if (!settings_client || !settings_client->warn_tool_conflicts) return;
+
+    if (!overlays_scanned) {
+        detect_thirdparty_injectors();
+    }
+    // nothing at warning/blocking severity -> stay quiet
+    if (cached_conflict_alert.empty()) return;
+
+    PRINT_DEBUG("[CONFLICT] warning the user about incompatible tools");
+
+    std::string body =
+        "The following third-party tools loaded into this game are known to be "
+        "incompatible with each other:\n\n" +
+        cached_conflict_alert +
+        "Note: only one tool can own a given proxy DLL name (dxgi.dll, d3d11.dll, "
+        "d3d9.dll, ...), so some of these cannot work together even when all of "
+        "them appear to load. Disabling the redundant ones is usually enough.\n\n"
+        "This warning is informational - nothing has been changed automatically.";
+
+#if defined(__WINDOWS__)
+    MessageBoxA(nullptr, body.c_str(), "Incompatible tools detected", MB_OK | MB_ICONWARNING);
+#else
+    // no modal dialog on Linux; the report file is the user-facing channel there
+    PRINT_DEBUG("%s", body.c_str());
+#endif
 }
 
 bool Steam_Client::is_caller_special_k()

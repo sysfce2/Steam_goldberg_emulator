@@ -193,6 +193,7 @@ Steam_Client::Steam_Client()
     last_cb_run = 0;
 
     detect_thirdparty_injectors();
+    show_tool_conflict_warning();
     try_start_specialk_injection();
 
     PRINT_DEBUG("end *********");
