@@ -3954,7 +3954,11 @@ void Steam_Overlay::render_main_window()
             }
             ImGui::Separator();
             if (notification_history.empty()) {
-                ImGui::TextDisabled(translationNoNotification[current_language]);
+                // Explicit "%s": these strings are runtime data, and ImGui::* treats the
+                // first argument as a printf format. None of the translations contain a
+                // specifier today, but a translator adding one would turn this into a
+                // read of a nonexistent vararg.
+                ImGui::TextDisabled("%s", translationNoNotification[current_language]);
             } else {
                 ImGui::BeginChild("##history_scroll", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 10), true);
 
@@ -5755,13 +5759,20 @@ void Steam_Overlay::render_main_window()
                     auto &a = adapters[ai];
                     // Collapsible header per adapter
                     char header[256];
+                    // GCC-only suppression: MSVC does not understand `#pragma GCC` and
+                    // reports each line as C4068 (unknown pragma), so the block has to be
+                    // hidden from it. Same intent as the fread suppression in base.cpp.
+#if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
                     if (a.subnet_str[0])
                         snprintf(header, sizeof(header), "%s (%s) - %s", a.name, a.ip_str, a.subnet_str);
                     else
                         snprintf(header, sizeof(header), "%s", a.name);
+#if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#endif
 
                     if (ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen)) {
                         if (a.range_str[0]) {
@@ -6942,10 +6953,16 @@ void Steam_Overlay::render_gallery_window()
                 ShellExecuteW(NULL, L"open", wpath.c_str(), NULL, NULL, SW_SHOWNORMAL);
 #elif defined(__linux__)
                 std::string cmd = "xdg-open \"" + path + "\"";
-                std::system(cmd.c_str());
+                // std::system is declared warn_unused_result on glibc: ignoring it is both a
+                // warning and a lost diagnostic, so report a failure instead
+                if (std::system(cmd.c_str()) != 0) {
+                    PRINT_DEBUG("open folder: 'xdg-open' failed for '%s'", path.c_str());
+                }
 #elif defined(__APPLE__)
                 std::string cmd = "open \"" + path + "\"";
-                std::system(cmd.c_str());
+                if (std::system(cmd.c_str()) != 0) {
+                    PRINT_DEBUG("open folder: 'open' failed for '%s'", path.c_str());
+                }
 #endif
             }
         }
@@ -6956,7 +6973,7 @@ void Steam_Overlay::render_gallery_window()
             if (!screenshots_loaded)
                 refresh_screenshots_list();
             if (screenshot_items.empty()) {
-                ImGui::TextDisabled(translationNoScreenshotsYet[current_language]);
+                ImGui::TextDisabled("%s", translationNoScreenshotsYet[current_language]);
             }
         }
 
@@ -7330,7 +7347,7 @@ void Steam_Overlay::render_gallery_window()
                     // Inline delete confirmation (avoids stacking modals which closes the preview)
                     if (preview_delete_pending) {
                         ImGui::Separator();
-                        ImGui::Text(translationDeleteThisScreenshot[current_language]);
+                        ImGui::Text("%s", translationDeleteThisScreenshot[current_language]);
                         ImGui::SameLine();
                         if (ImGui::Button(translationYes[current_language])) {
                             preview_delete_pending = false;
@@ -7412,9 +7429,9 @@ void Steam_Overlay::render_gallery_window()
             }
             if (ImGui::BeginPopupModal(translationConfirmDelete[current_language], nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
                 if (delete_all_selected) {
-                    ImGui::Text(translationDeleteAllScelectedScreenshots[current_language]);
+                    ImGui::Text("%s", translationDeleteAllScelectedScreenshots[current_language]);
                 } else {
-                    ImGui::Text(translationDeleteThisScreenshot[current_language]);
+                    ImGui::Text("%s", translationDeleteThisScreenshot[current_language]);
                 }
                 ImGui::Separator();
                 if (ImGui::Button(translationYes[current_language])) {

@@ -195,7 +195,10 @@ static inline void reset_LastError()
     } while (0)
 
 #else // EMU_RELEASE_BUILD
-    #define PRINT_DEBUG(...)
+    // An empty *statement*, not nothing at all. A call site written as
+    // `if (cond) PRINT_DEBUG(...);` would otherwise reduce to `if (cond) ;`, which MSVC
+    // reports as C4390 and which would also silently capture a following `else`.
+    #define PRINT_DEBUG(...) do { } while (0)
 #endif // EMU_RELEASE_BUILD
 
 // function entry

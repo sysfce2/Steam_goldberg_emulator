@@ -55,7 +55,9 @@ dbg_log dbg_logger("STEAM_LOG.txt");
     } while (0)
 
 #else // EMU_RELEASE_BUILD
-    #define PRINT_DEBUG(...)
+    // Kept as an empty statement rather than expanding to nothing, so `if (c) PRINT_DEBUG(...);`
+    // does not become `if (c) ;` (MSVC C4390) and cannot swallow a following `else`.
+    #define PRINT_DEBUG(...) do { } while (0)
 #endif // EMU_RELEASE_BUILD
 
 #if defined(WIN32) || defined(_WIN32)
