@@ -1,6 +1,14 @@
 /*
  * GSE Overlay Bridge — C ABI shared between steam_api DLL and ReShade addon.
- * Version 7 (clean rewrite).
+ * Current version: see GSE_BRIDGE_ABI_VERSION below.
+ *
+ * Version history (highlights):
+ *   v7  clean rewrite
+ *   v8  GSE_OverlayState.steam_id
+ *   v11 GSE_OverlayState.app_name
+ *   v15 chat state / avatars / notif appearance / network info / lobby chat
+ *   v16 window_state bit constants, GSE_NOTIF_SCREENSHOT, screenshots,
+ *       notification history
  *
  * The emu DLL (steam_api.dll / steam_api64.dll) exports functions prefixed
  * with GSE_OverlayBridge_.  The ReShade addon resolves them at load time via
@@ -21,9 +29,21 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 15
+#define GSE_BRIDGE_ABI_VERSION 16
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
+
+/* GSE_Friend.window_state bit flags.
+ * These mirror the native overlay's `enum window_state` (overlay/steam_overlay.h)
+ * bit for bit — GSE_Friend.window_state is a raw copy of the native byte, so a
+ * client MUST use these constants rather than guessing a bit position. */
+#define GSE_WSTATE_SHOW            0x01u
+#define GSE_WSTATE_INVITE          0x02u
+#define GSE_WSTATE_JOIN            0x04u
+#define GSE_WSTATE_LOBBY_INVITE    0x08u
+#define GSE_WSTATE_RICH_INVITE     0x10u
+#define GSE_WSTATE_SEND_MESSAGE    0x20u
+#define GSE_WSTATE_NEED_ATTENTION  0x40u
 
 enum GSE_NotifPosition {
     GSE_NOTIF_POS_TOP_LEFT     = 0,
@@ -45,6 +65,7 @@ enum GSE_NotifType {
     GSE_NOTIF_LOBBY_KICKED       = 7,
     GSE_NOTIF_FRIEND_LOBBY       = 8,
     GSE_NOTIF_LOBBY_STATUS       = 9,
+    GSE_NOTIF_SCREENSHOT         = 10,  /* added in ABI v16 */
 };
 
 enum GSE_RendererAPI {
@@ -299,6 +320,46 @@ typedef struct GSE_AvatarData {
     uint8_t  pixels[GSE_AVATAR_BYTES];      /* RGBA 64x64 = 16384 bytes */
 } GSE_AvatarData;
 
+/* ── Screenshots (added in ABI v16) ──────────────────────────────────────
+ *
+ * The bridge never copies pixel data for screenshots: the emu hands out the
+ * on-disk paths and the client decodes/upload them itself (same approach as
+ * the SCE asset browser). This keeps the per-frame ABI traffic tiny and lets
+ * the client build thumbnails at whatever resolution it wants.
+ *
+ * Screenshot capture requires the emu's own renderer hook. When the emu runs
+ * in bridge-only mode (Disable_Overlay + Enable_Overlay_Bridge) no renderer
+ * exists, so GSE_OverlayBridge_IsScreenshotSupported() returns 0 and the
+ * client should hide its screenshot UI.
+ */
+
+#define GSE_SCREENSHOT_NAME_SIZE 256
+#define GSE_SCREENSHOT_PATH_SIZE 512
+
+typedef struct GSE_ScreenshotInfo {
+    uint64_t id;                /* stable id derived from the full path */
+    uint64_t size_bytes;        /* file size, 0 if unknown */
+    int64_t  mtime;             /* file modification time (unix seconds), 0 if unknown */
+    char     filename[GSE_SCREENSHOT_NAME_SIZE];  /* display name, e.g. "20260912_194500.png" */
+    char     full_path[GSE_SCREENSHOT_PATH_SIZE]; /* absolute path the client can open */
+} GSE_ScreenshotInfo;
+
+/* ── Notification history (added in ABI v16) ─────────────────────────────
+ *
+ * A bounded archive of past notifications (the native overlay caps it at
+ * MAX_NOTIFICATION_HISTORY). Entries are raw — the client formats the
+ * timestamp and translates the type label itself.
+ */
+
+#define GSE_NOTIF_HISTORY_MESSAGE_SIZE 512
+
+typedef struct GSE_NotificationHistoryEntry {
+    int64_t  timestamp_ms;      /* wall-clock unix milliseconds */
+    uint8_t  type;              /* GSE_NotifType */
+    uint8_t  _pad[7];
+    char     message[GSE_NOTIF_HISTORY_MESSAGE_SIZE];
+} GSE_NotificationHistoryEntry;
+
 /* ── Function pointer typedefs (for GetProcAddress) ───────────────────── */
 
 /* Core */
@@ -436,6 +497,19 @@ typedef int       (*pfn_GSE_OverlayBridge_GetNetworkInfo)(GSE_NetAdapter *out, i
 typedef int       (*pfn_GSE_OverlayBridge_GetLobbyChatState)(GSE_LobbyChatState *out);  /* returns 1 if in lobby */
 typedef void      (*pfn_GSE_OverlayBridge_SendLobbyChatMsg)(const char *msg);
 
+/* Screenshots (ABI v16) */
+typedef int       (*pfn_GSE_OverlayBridge_IsScreenshotSupported)(void);  /* 1 if capture is possible */
+typedef void      (*pfn_GSE_OverlayBridge_TakeScreenshot)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetScreenshotCount)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetScreenshots)(GSE_ScreenshotInfo *out, int max_count);
+typedef int       (*pfn_GSE_OverlayBridge_DeleteScreenshot)(uint64_t id);  /* returns 1 on success */
+typedef int       (*pfn_GSE_OverlayBridge_GetScreenshotsFolder)(char *out, int out_size);
+
+/* Notification history (ABI v16) */
+typedef int       (*pfn_GSE_OverlayBridge_GetNotificationHistoryCount)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetNotificationHistory)(GSE_NotificationHistoryEntry *out, int max_count);
+typedef void      (*pfn_GSE_OverlayBridge_ClearNotificationHistory)(void);
+
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE         1
 #define GSE_FRIEND_ACTION_JOIN           2
@@ -448,7 +522,10 @@ typedef void      (*pfn_GSE_OverlayBridge_SendLobbyChatMsg)(const char *msg);
 /* Option IDs for Get/SetOption */
 #define GSE_OPT_FRIEND_NOTIF_ENABLE          1  /* bool */
 #define GSE_OPT_ACH_NOTIF_ENABLE             2  /* bool */
-#define GSE_OPT_INVITE_NOTIF_ENABLE          3  /* bool */
+#define GSE_OPT_INVITE_NOTIF_ENABLE          3  /* bool — ALIAS of GSE_OPT_FRIEND_NOTIF_ENABLE:
+                                                 * the native overlay gates invite/lobby-join
+                                                 * notifications with the same setting, so both
+                                                 * options read and write one flag. */
 #define GSE_OPT_ACH_PROGRESS_NOTIF_ENABLE    4  /* bool */
 #define GSE_OPT_SORT_BY_GLOBAL_PERCENT       5  /* bool */
 #define GSE_OPT_LOCAL_SAVE_WARNING           6  /* bool */
@@ -457,7 +534,11 @@ typedef void      (*pfn_GSE_OverlayBridge_SendLobbyChatMsg)(const char *msg);
 #define GSE_OPT_DISABLE_ALL_WARNINGS         9  /* bool */
 #define GSE_OPT_DISABLE_BAD_APPID_WARNING   10  /* bool */
 #define GSE_OPT_DISABLE_LOCAL_SAVE_WARNING  11  /* bool */
-#define GSE_OPT_NOTIF_POSITION              12  /* GSE_NotifPosition */
+#define GSE_OPT_NOTIF_POSITION              12  /* GSE_NotifPosition — the global position, mirroring
+                                                 * ISteamUtils::SetOverlayNotificationPosition.
+                                                 * Steam's ENotificationPosition only has the four
+                                                 * corners, so TOP_CENTER/BOT_CENTER writes are
+                                                 * rejected here; use a per-type option for those. */
 #define GSE_OPT_SHOW_FPS                    13  /* bool */
 #define GSE_OPT_SHOW_FRAMETIME              14  /* bool */
 #define GSE_OPT_SHOW_PLAYTIME               15  /* bool */
@@ -524,6 +605,15 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetNetworkInfo       GetNetworkInfo;
     pfn_GSE_OverlayBridge_GetLobbyChatState    GetLobbyChatState;
     pfn_GSE_OverlayBridge_SendLobbyChatMsg     SendLobbyChatMsg;
+    pfn_GSE_OverlayBridge_IsScreenshotSupported IsScreenshotSupported;
+    pfn_GSE_OverlayBridge_TakeScreenshot       TakeScreenshot;
+    pfn_GSE_OverlayBridge_GetScreenshotCount   GetScreenshotCount;
+    pfn_GSE_OverlayBridge_GetScreenshots       GetScreenshots;
+    pfn_GSE_OverlayBridge_DeleteScreenshot     DeleteScreenshot;
+    pfn_GSE_OverlayBridge_GetScreenshotsFolder GetScreenshotsFolder;
+    pfn_GSE_OverlayBridge_GetNotificationHistoryCount GetNotificationHistoryCount;
+    pfn_GSE_OverlayBridge_GetNotificationHistory GetNotificationHistory;
+    pfn_GSE_OverlayBridge_ClearNotificationHistory ClearNotificationHistory;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -581,6 +671,15 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetNetworkInfo);
     LOAD(GetLobbyChatState);
     LOAD(SendLobbyChatMsg);
+    LOAD(IsScreenshotSupported);
+    LOAD(TakeScreenshot);
+    LOAD(GetScreenshotCount);
+    LOAD(GetScreenshots);
+    LOAD(DeleteScreenshot);
+    LOAD(GetScreenshotsFolder);
+    LOAD(GetNotificationHistoryCount);
+    LOAD(GetNotificationHistory);
+    LOAD(ClearNotificationHistory);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

@@ -3315,20 +3315,6 @@ bool Steam_Overlay::try_load_local_avatar()
 // Try to make this function as short as possible or it might affect game's fps.
 void Steam_Overlay::overlay_render_proc()
 {
-    // When the ReShade addon is actively connected, it handles all rendering.
-    // We still keep data structures alive so the bridge can read them.
-    // If the addon stops calling (unloaded/disabled), the heartbeat goes stale
-    // and the native overlay automatically resumes after the timeout.
-    if (Bridge_IsConnected()) {
-        // Even in bridge mode, render the tabbed chat window if any chats are open
-        // (provides native chat UI alongside ReShade addon)
-        std::lock_guard lock(overlay_mutex);
-        if (Ready()) {
-            build_chat_window();
-        }
-        return;
-    }
-
     std::lock_guard lock(overlay_mutex);
 
     if (!Ready()) return;
@@ -3567,6 +3553,26 @@ void Steam_Overlay::overlay_render_proc()
 
     // Process any captured screenshots and save them to disk
     process_captured_screenshots();
+
+    // ── ReShade addon takeover point ────────────────────────────────────
+    // Everything above this line runs in BOTH modes and must not be skipped:
+    //   * the screenshot hotkey / process_captured_screenshots() — the emu still
+    //     owns the renderer hook while the addon is attached, and the addon
+    //     cannot capture screenshots itself;
+    //   * process_achievement_queue() — the only drain of the achievement
+    //     notification queue, which the addon reads through the bridge.
+    //
+    // When the addon is actively connected it handles all rendering below.
+    // We still keep the data structures alive so the bridge can read them.
+    // If the addon stops calling (unloaded/disabled) the heartbeat goes stale
+    // and the native overlay automatically resumes after the timeout.
+    if (Bridge_IsConnected()) {
+        // Keep the tabbed chat window available alongside the addon's UI
+        if (Ready()) {
+            build_chat_window();
+        }
+        return;
+    }
 
     if (show_overlay) {
         render_main_window();
@@ -6802,16 +6808,21 @@ void Steam_Overlay::refresh_screenshots_list()
         ScreenshotItem item;
         item.filename = f;
         item.full_path = path + PATH_SEPARATOR + f;
-        // Read file modification time
+        // Read file modification time (and size) so the gallery can sort
+        // chronologically and the bridge can report sizes without re-stat'ing.
 #ifdef __WINDOWS__
         struct _stat st;
         auto wstat_path = common_helpers::to_wstr(item.full_path);
-        if (_wstat(wstat_path.c_str(), &st) == 0)
+        if (_wstat(wstat_path.c_str(), &st) == 0) {
             item.mtime = st.st_mtime;
+            item.size  = (uint64_t)st.st_size;
+        }
 #else
         struct stat st;
-        if (stat(item.full_path.c_str(), &st) == 0)
+        if (stat(item.full_path.c_str(), &st) == 0) {
             item.mtime = st.st_mtime;
+            item.size  = (uint64_t)st.st_size;
+        }
 #endif
         if (_renderer)
             item.texture = _renderer->CreateResource();
@@ -8061,6 +8072,27 @@ int Steam_Overlay::Bridge_GetNotifPosition() const
     }
 }
 
+bool Steam_Overlay::Bridge_SetNotifPosition(int gse_pos)
+{
+    // Inverse of Bridge_GetNotifPosition(). Steam's ENotificationPosition only has
+    // the four corners, so the two center values cannot be expressed here — those
+    // are available through the per-type options (GSE_OPT_NOTIF_POS_*), which map
+    // to Overlay_Appearance::NotificationPosition and do have center variants.
+    ENotificationPosition p;
+    switch (gse_pos) {
+    case GSE_NOTIF_POS_TOP_LEFT:  p = k_EPositionTopLeft; break;
+    case GSE_NOTIF_POS_TOP_RIGHT: p = k_EPositionTopRight; break;
+    case GSE_NOTIF_POS_BOT_LEFT:  p = k_EPositionBottomLeft; break;
+    case GSE_NOTIF_POS_BOT_RIGHT: p = k_EPositionBottomRight; break;
+    default: return false;  // TOP_CENTER / BOT_CENTER: not representable
+    }
+
+    // Reuse the public Steam-facing setter so the settings check, lock and
+    // debug logging all stay in one place.
+    SetNotificationPosition(p);
+    return true;
+}
+
 Steam_Overlay::BridgeStatsSnapshot Steam_Overlay::Bridge_GetStatsState() const
 {
     BridgeStatsSnapshot s{};
@@ -9295,6 +9327,180 @@ void Steam_Overlay::Bridge_SendLobbyChatMsg(const char *msg)
     size_t len = strlen(msg);
     if (len > 4000) len = 4000;  // Steam's 4KB limit
     matchmaking->SendLobbyChatMsg(lobby, msg, (int)len + 1);
+}
+
+// ── Screenshots (ABI v16) ───────────────────────────────────────────────
+//
+// The bridge hands out on-disk paths; the client decodes and uploads them
+// itself. That keeps per-frame ABI traffic tiny and lets the client pick its
+// own thumbnail resolution.
+
+// Stable 64-bit id for a screenshot path (FNV-1a). Never returns 0 so the
+// client can use 0 as "invalid".
+static uint64_t bridge_screenshot_id(const std::string &path)
+{
+    uint64_t h = 1469598103934665603ULL;
+    for (unsigned char c : path) {
+        h ^= (uint64_t)c;
+        h *= 1099511628211ULL;
+    }
+    return h ? h : 1ULL;
+}
+
+int Steam_Overlay::Bridge_IsScreenshotSupported() const
+{
+    // Capture goes through the emu's own renderer hook, which only exists when
+    // the native overlay path is active. In bridge-only mode there is no
+    // renderer to grab a back buffer from, so report unsupported.
+    return _renderer ? 1 : 0;
+}
+
+void Steam_Overlay::Bridge_TakeScreenshot()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!_renderer) return;
+
+    // BeforeOverlay == the game frame without our overlay drawn on top, which is
+    // what the native F12 hotkey uses.
+    _renderer->TakeScreenshot(InGameOverlay::ScreenshotType_t::BeforeOverlay);
+    PRINT_DEBUG("bridge: screenshot requested");
+}
+
+int Steam_Overlay::Bridge_GetScreenshotCount()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!screenshots_loaded)
+        refresh_screenshots_list();
+    return (int)screenshot_items.size();
+}
+
+int Steam_Overlay::Bridge_GetScreenshots(GSE_ScreenshotInfo *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!screenshots_loaded)
+        refresh_screenshots_list();
+
+    int written = 0;
+    for (auto &item : screenshot_items) {
+        if (written >= max_count) break;
+
+        auto &o = out[written];
+        memset(&o, 0, sizeof(o));
+        o.id         = bridge_screenshot_id(item.full_path);
+        o.mtime      = (int64_t)item.mtime;
+        o.size_bytes = item.size;
+        bridge_safe_copy(o.filename, sizeof(o.filename), item.filename);
+        bridge_safe_copy(o.full_path, sizeof(o.full_path), item.full_path);
+        ++written;
+    }
+    return written;
+}
+
+int Steam_Overlay::Bridge_DeleteScreenshot(uint64_t id)
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    if (!screenshots_loaded)
+        refresh_screenshots_list();
+
+    // Resolve the id first: refresh_screenshots_list() invalidates all iterators.
+    std::string victim_path, victim_name;
+    for (auto &item : screenshot_items) {
+        if (bridge_screenshot_id(item.full_path) == id) {
+            victim_path = item.full_path;
+            victim_name = item.filename;
+            break;
+        }
+    }
+    if (victim_path.empty()) return 0;
+
+    // Release GPU resources. These only exist when the native overlay owns the
+    // renderer; in bridge mode item.texture is always null.
+    for (auto &item : screenshot_items) {
+        if (item.texture && item.full_path == victim_path) {
+            if (item.texture->GetResourceId() != 0) item.texture->Unload();
+            item.texture->Delete();
+            item.texture = nullptr;
+        }
+    }
+    // A pin holds its own texture for the same file — release that too, exactly
+    // like the native gallery does when it deletes a pinned screenshot.
+    for (auto pit = pinned_screenshots.begin(); pit != pinned_screenshots.end(); ) {
+        if (pit->path == victim_path) {
+            if (pit->texture) {
+                if (pit->texture->GetResourceId() != 0) pit->texture->Unload();
+                pit->texture->Delete();
+            }
+            pit = pinned_screenshots.erase(pit);
+        } else {
+            ++pit;
+        }
+    }
+
+    // Remove the same two files the native gallery removes: the image and its
+    // .json sidecar (screenshot metadata).
+    local_storage->file_delete(Local_Storage::screenshots_folder, victim_name);
+    if (victim_name.size() > 4) {
+        std::string json_name = victim_name.substr(0, victim_name.size() - 4) + ".json";
+        local_storage->file_delete(Local_Storage::screenshots_folder, json_name);
+    }
+
+    // Rescan so the caller sees the updated list on its very next query.
+    screenshots_loaded = false;
+    refresh_screenshots_list();
+    return 1;
+}
+
+int Steam_Overlay::Bridge_GetScreenshotsFolder(char *out, int out_size)
+{
+    if (!out || out_size <= 0) return 0;
+    out[0] = '\0';
+
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    std::string path = local_storage->get_path(Local_Storage::screenshots_folder);
+    if (path.empty()) return 0;
+
+    bridge_safe_copy(out, (size_t)out_size, path);
+    return 1;
+}
+
+// ── Notification history (ABI v16) ──────────────────────────────────────
+
+int Steam_Overlay::Bridge_GetNotificationHistoryCount()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    return (int)notification_history.size();
+}
+
+int Steam_Overlay::Bridge_GetNotificationHistory(GSE_NotificationHistoryEntry *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+
+    // Newest first — matches the order the native history panel renders in.
+    int written = 0;
+    for (auto it = notification_history.rbegin(); it != notification_history.rend(); ++it) {
+        if (written >= max_count) break;
+
+        auto &o = out[written];
+        memset(&o, 0, sizeof(o));
+        o.timestamp_ms = it->timestamp.count();
+        o.type         = it->type;
+        bridge_safe_copy(o.message, sizeof(o.message), it->message);
+        ++written;
+    }
+    return written;
+}
+
+void Steam_Overlay::Bridge_ClearNotificationHistory()
+{
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    // Mirrors the native "Clear All" button, including dropping the formatted cache.
+    notification_history.clear();
+    notification_history_cache.clear();
+    notification_history_cache_dirty = false;
 }
 
 #endif

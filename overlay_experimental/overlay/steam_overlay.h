@@ -301,6 +301,7 @@ class Steam_Overlay
         bool selected = false;
         bool failed_to_load = false;
         time_t mtime = 0;  // file modification time, 0 = unknown
+        uint64_t size = 0; // file size in bytes, 0 = unknown
     };
 
     struct CapturedScreenshot {
@@ -582,6 +583,10 @@ public:
     bool Bridge_GetWarnLocalSave() const;
     bool Bridge_GetWarnBadAppId() const;
     int  Bridge_GetNotifPosition() const;
+    // Sets the global notification position from a GSE_NotifPosition value.
+    // Only the four corners are representable (Steam's ENotificationPosition has
+    // no center variants); returns true if the value was applied.
+    bool Bridge_SetNotifPosition(int gse_pos);
     BridgeStatsSnapshot Bridge_GetStatsState() const;
     int  Bridge_GetAchievementCount() const;
     int  Bridge_GetAchievements(struct GSE_Achievement *out, int max_count);
@@ -643,6 +648,21 @@ public:
 
     // Network topology for overlay
     int  Bridge_GetNetworkInfo(struct GSE_NetAdapter *out, int max_adapters) const;
+
+    // Screenshots (ABI v16). Capture needs the emu's own renderer hook, which does
+    // not exist in bridge-only mode — Bridge_IsScreenshotSupported() reports that.
+    int  Bridge_IsScreenshotSupported() const;
+    void Bridge_TakeScreenshot();
+    int  Bridge_GetScreenshotCount();
+    int  Bridge_GetScreenshots(struct GSE_ScreenshotInfo *out, int max_count);
+    int  Bridge_DeleteScreenshot(uint64_t id);
+    int  Bridge_GetScreenshotsFolder(char *out, int out_size);
+
+    // Notification history (ABI v16)
+    int  Bridge_GetNotificationHistoryCount();
+    int  Bridge_GetNotificationHistory(struct GSE_NotificationHistoryEntry *out, int max_count);
+    void Bridge_ClearNotificationHistory();
+
     // Rate-limiting queue functions
     void process_achievement_queue();
 };

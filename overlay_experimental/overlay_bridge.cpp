@@ -59,6 +59,20 @@ static int bridge_map_notif_pos(int pos)
     }
 }
 
+/* ── helper: inverse of the above — GSE_NotifPosition → Overlay_Appearance::NotificationPosition ── */
+static int bridge_unmap_notif_pos(int gse_pos)
+{
+    switch (gse_pos) {
+    case GSE_NOTIF_POS_TOP_LEFT:   return 0;  // top_left
+    case GSE_NOTIF_POS_TOP_CENTER: return 1;  // top_center
+    case GSE_NOTIF_POS_TOP_RIGHT:  return 2;  // top_right
+    case GSE_NOTIF_POS_BOT_LEFT:   return 3;  // bot_left
+    case GSE_NOTIF_POS_BOT_CENTER: return 4;  // bot_center
+    case GSE_NOTIF_POS_BOT_RIGHT:  return 5;  // bot_right
+    default:                       return 2;  // top_right (matches Overlay_Appearance::default_pos)
+    }
+}
+
 /* ── Exported bridge functions ────────────────────────────────────────── */
 
 extern "C" {
@@ -314,7 +328,7 @@ __declspec(dllexport) int GSE_OverlayBridge_GetOption(int option_id)
     switch (option_id) {
     case GSE_OPT_FRIEND_NOTIF_ENABLE:          return !s->disable_overlay_friend_notification;
     case GSE_OPT_ACH_NOTIF_ENABLE:             return !s->disable_overlay_achievement_notification;
-    case GSE_OPT_INVITE_NOTIF_ENABLE:          return 1; // always enabled for now
+    case GSE_OPT_INVITE_NOTIF_ENABLE:          return !s->disable_overlay_friend_notification; // alias, see SetOption
     case GSE_OPT_ACH_PROGRESS_NOTIF_ENABLE:    return !s->disable_overlay_achievement_progress;
     case GSE_OPT_SORT_BY_GLOBAL_PERCENT:       return s->overlay_achievement_sort_by_global_percent;
     case GSE_OPT_LOCAL_SAVE_WARNING:           return s->overlay_warn_local_save;
@@ -353,13 +367,32 @@ __declspec(dllexport) void GSE_OverlayBridge_SetOption(int option_id, int value)
     switch (option_id) {
     case GSE_OPT_FRIEND_NOTIF_ENABLE:          s->disable_overlay_friend_notification = !value; break;
     case GSE_OPT_ACH_NOTIF_ENABLE:             s->disable_overlay_achievement_notification = !value; break;
+    // Invite/lobby-join notifications share the "friend notifications" setting in the
+    // native overlay (see Steam_Overlay::add_invite_notification), so this option is a
+    // documented alias rather than a separate flag. GetOption returns the same value.
+    case GSE_OPT_INVITE_NOTIF_ENABLE:          s->disable_overlay_friend_notification = !value; break;
     case GSE_OPT_ACH_PROGRESS_NOTIF_ENABLE:    s->disable_overlay_achievement_progress = !value; break;
     case GSE_OPT_SORT_BY_GLOBAL_PERCENT:       s->overlay_achievement_sort_by_global_percent = !!value; break;
     case GSE_OPT_LOCAL_SAVE_WARNING:           s->overlay_warn_local_save = !!value; break;
     case GSE_OPT_ALWAYS_SHOW_USER:             s->overlay_always_show_user_info = !!value; break;
+    case GSE_OPT_ALWAYS_SHOW_STATS:            s->overlay_always_show_fps = !!value;
+                                               s->overlay_always_show_frametime = !!value;
+                                               s->overlay_always_show_playtime = !!value;
+                                               if (overlay) {
+                                                   overlay->Bridge_SetShowFps(!!value);
+                                                   overlay->Bridge_SetShowFrametime(!!value);
+                                                   overlay->Bridge_SetShowPlaytime(!!value);
+                                               }
+                                               break;
     case GSE_OPT_DISABLE_ALL_WARNINGS:         s->disable_overlay_warning_any = !!value; break;
     case GSE_OPT_DISABLE_BAD_APPID_WARNING:    s->disable_overlay_warning_bad_appid = !!value; break;
     case GSE_OPT_DISABLE_LOCAL_SAVE_WARNING:   s->disable_overlay_warning_local_save = !!value; break;
+    case GSE_OPT_NOTIF_POSITION:               if (overlay) overlay->Bridge_SetNotifPosition(value); break;
+    // Per-type positions map straight onto Overlay_Appearance::NotificationPosition,
+    // which (unlike Steam's ENotificationPosition) does have center variants.
+    case GSE_OPT_NOTIF_POS_ACHIEVEMENT:        s->overlay_appearance.ach_earned_pos = static_cast<Overlay_Appearance::NotificationPosition>(bridge_unmap_notif_pos(value)); break;
+    case GSE_OPT_NOTIF_POS_INVITE:             s->overlay_appearance.invite_pos     = static_cast<Overlay_Appearance::NotificationPosition>(bridge_unmap_notif_pos(value)); break;
+    case GSE_OPT_NOTIF_POS_CHAT:               s->overlay_appearance.chat_msg_pos   = static_cast<Overlay_Appearance::NotificationPosition>(bridge_unmap_notif_pos(value)); break;
     case GSE_OPT_SHOW_FPS:                     s->overlay_always_show_fps = !!value;
                                                if (overlay) overlay->Bridge_SetShowFps(!!value); break;
     case GSE_OPT_SHOW_FRAMETIME:               s->overlay_always_show_frametime = !!value;
@@ -683,6 +716,80 @@ __declspec(dllexport) void GSE_OverlayBridge_SendLobbyChatMsg(const char *msg)
     auto *client = get_steam_client();
     if (!client || !client->steam_overlay) return;
     client->steam_overlay->Bridge_SendLobbyChatMsg(msg);
+}
+
+// ── Screenshots (ABI v16) ───────────────────────────────────────────────
+
+__declspec(dllexport) int GSE_OverlayBridge_IsScreenshotSupported(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_IsScreenshotSupported();
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_TakeScreenshot(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_TakeScreenshot();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetScreenshotCount(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetScreenshotCount();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetScreenshots(GSE_ScreenshotInfo *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+    memset(out, 0, sizeof(GSE_ScreenshotInfo) * (size_t)max_count);
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetScreenshots(out, max_count);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_DeleteScreenshot(uint64_t id)
+{
+    if (!id) return 0;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_DeleteScreenshot(id);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetScreenshotsFolder(char *out, int out_size)
+{
+    if (!out || out_size <= 0) return 0;
+    out[0] = '\0';
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetScreenshotsFolder(out, out_size);
+}
+
+// ── Notification history (ABI v16) ──────────────────────────────────────
+
+__declspec(dllexport) int GSE_OverlayBridge_GetNotificationHistoryCount(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetNotificationHistoryCount();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetNotificationHistory(GSE_NotificationHistoryEntry *out, int max_count)
+{
+    if (!out || max_count <= 0) return 0;
+    memset(out, 0, sizeof(GSE_NotificationHistoryEntry) * (size_t)max_count);
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetNotificationHistory(out, max_count);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_ClearNotificationHistory(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_ClearNotificationHistory();
 }
 
 } // extern "C"

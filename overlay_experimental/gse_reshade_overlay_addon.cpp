@@ -34,12 +34,17 @@
 #include <algorithm>
 #include <numeric>
 #include <string>
+#include <shellapi.h>   // ShellExecuteA — used by the gallery's "Open Folder" button
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_GIF
 #include "../libs/stb/stb_image.h"
+
+// Used to downscale full-resolution screenshots before uploading thumbnails.
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "../libs/stb/stb_image_resize2.h"
 
 using namespace reshade::api;
 
@@ -79,6 +84,9 @@ static void render_achievement_list();
 static void render_friends_list();
 static void render_chat_windows();
 static void check_incoming_messages();
+static void render_gallery_window();
+static void render_pinned_screenshots();
+static void render_notification_history_panel();
 
 /* ── Overlay toggle state ─────────────────────────────────────────────── */
 
@@ -112,6 +120,35 @@ struct AddonChatWindow {
     bool scroll_to_bottom = true;
 };
 static std::vector<AddonChatWindow> s_open_chats;  // currently open chat windows in addon
+
+/* ── Notification history panel state ─────────────────────────────────── */
+
+static bool                     s_show_notification_history = false;
+static std::vector<std::string> s_notif_history_cache;      // pre-formatted rows
+static int64_t                  s_notif_history_fingerprint = -1;
+
+/* ── Screenshot gallery + pinned screenshots ──────────────────────────── */
+
+static bool s_show_gallery   = false;
+static bool s_show_screenshots_supported = false;  // cached from the bridge
+static std::vector<GSE_ScreenshotInfo> s_shot_list;
+static int64_t s_shot_list_fingerprint = -1;  // (count, newest mtime) — cheap change detector
+static int  s_shot_preview_index = -1;        // -1 = no preview open
+static bool s_shot_delete_pending = false;
+
+// A pinned screenshot is a floating, always-on-top window showing one image.
+// Pins are addon-local (session-scoped): the emu owns no renderer in bridge
+// mode, so it cannot host them.
+struct PinWindow {
+    uint64_t id = 0;
+    std::string path;
+    float    opacity = 1.0f;
+    ImVec2   pos = ImVec2(100.0f, 100.0f);
+    ImVec2   size = ImVec2(320.0f, 180.0f);
+    bool     pos_set = false;
+    bool     open = true;
+};
+static std::vector<PinWindow> s_pins;
 
 /* ── Color constants ─────────────────────────────────────────────────── */
 // Configurable colors (COL_NOTIF_BG, COL_MAIN_BG, COL_ELEMENT, etc.)
@@ -1057,6 +1094,524 @@ static void free_sce_textures()
     }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+ *  Screenshots (gallery + pinned windows)
+ *
+ *  The emu owns capture (it holds the renderer hook) and hands us file paths;
+ *  we decode, downscale and upload the textures ourselves. Keys are prefixed
+ *  ("shot_thumb|" / "shot_full|") so screenshot textures can be freed
+ *  independently of the SCE asset cache.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Helper: free screenshot + pin textures from the cache ─────────────── */
+
+static void free_screenshot_textures()
+{
+    if (!s_current_device) return;
+    auto *data = s_current_device->get_private_data<addon_device_data>();
+    if (!data) return;
+
+    // Same deferred-destroy dance as free_sce_textures(): destroying a texture
+    // mid-frame can hang the D3D12 device.
+    for (auto it = data->icon_cache.begin(); it != data->icon_cache.end(); ) {
+        if (it->first.rfind("shot_thumb|", 0) == 0 || it->first.rfind("shot_full|", 0) == 0) {
+            if (it->second.valid)
+                data->pending_destroy.push_back(it->second);
+            it = data->icon_cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+/* ── Helper: get or upload a screenshot texture ────────────────────────── */
+
+static const IconTexture *get_or_upload_screenshot_tex(const std::string &path, float thumb_w, float thumb_h)
+{
+    if (!s_current_device || path.empty()) return nullptr;
+
+    auto *data = s_current_device->get_private_data<addon_device_data>();
+    if (!data) return nullptr;
+
+    const bool want_thumb = (thumb_w > 0.0f && thumb_h > 0.0f);
+    const std::string key = (want_thumb ? "shot_thumb|" : "shot_full|") + path;
+
+    auto it = data->icon_cache.find(key);
+    if (it != data->icon_cache.end())
+        return it->second.valid ? &it->second : nullptr;
+
+    // Thumbnails are budgeted per frame — a gallery can hold hundreds of images.
+    // Full-size previews/pins are loaded on demand without a cap.
+    if (want_thumb) {
+        if (s_sce_tex_per_frame >= MAX_SCE_TEX_PER_FRAME) return nullptr;
+        ++s_sce_tex_per_frame;
+    }
+
+    // Record a failure placeholder immediately so we never retry every frame.
+    data->icon_cache[key] = IconTexture{};
+
+    int w = 0, h = 0;
+    uint8_t *pixels = stbi_load(path.c_str(), &w, &h, nullptr, 4);
+    if (!pixels) return nullptr;
+
+    IconTexture icon{};
+    if (want_thumb) {
+        // Downscale before upload: screenshots are full-resolution and a gallery
+        // full of 4K textures would be ruinous.
+        const int tw = (int)thumb_w;
+        const int th = (int)thumb_h;
+        std::vector<uint8_t> scaled((size_t)tw * (size_t)th * 4, 0);
+        if (stbir_resize_uint8_linear(pixels, w, h, 0, scaled.data(), tw, th, 0, STBIR_RGBA))
+            icon = upload_icon(s_current_device, scaled.data(), tw, th);
+    } else {
+        icon = upload_icon(s_current_device, pixels, w, h);
+    }
+    stbi_image_free(pixels);
+
+    if (!icon.valid) return nullptr;
+
+    data->icon_cache[key] = icon;
+    return &data->icon_cache[key];
+}
+
+/* ── Helper: refresh the screenshot list from the bridge ───────────────── */
+
+static void refresh_shot_list(bool force)
+{
+    if (!s_show_screenshots_supported) {
+        if (!s_shot_list.empty()) {
+            s_shot_list.clear();
+            s_shot_list_fingerprint = -1;
+            s_shot_preview_index = -1;
+        }
+        return;
+    }
+    if (!s_bridge.GetScreenshotCount || !s_bridge.GetScreenshots) return;
+
+    const int count = s_bridge.GetScreenshotCount();
+    if (count <= 0) {
+        s_shot_list.clear();
+        s_shot_list_fingerprint = -1;
+        s_shot_preview_index = -1;
+        return;
+    }
+
+    // Cheap change detector: entry count + the newest modification time. That is
+    // one small bridge call per frame instead of copying the whole list.
+    GSE_ScreenshotInfo probe{};
+    const int probe_n = s_bridge.GetScreenshots(&probe, 1);
+    const int64_t fingerprint = probe_n ? ((((int64_t)count) << 48) ^ probe.mtime) : -1;
+    if (!force && fingerprint == s_shot_list_fingerprint) return;
+    s_shot_list_fingerprint = fingerprint;
+
+    std::vector<GSE_ScreenshotInfo> list(count > 512 ? 512 : count);
+    const int n = s_bridge.GetScreenshots(list.data(), (int)list.size());
+    list.resize(n > 0 ? (size_t)n : 0);
+    s_shot_list = std::move(list);
+
+    if (s_shot_preview_index >= (int)s_shot_list.size())
+        s_shot_preview_index = s_shot_list.empty() ? -1 : (int)s_shot_list.size() - 1;
+}
+
+/* ── Helper: pin / delete ──────────────────────────────────────────────── */
+
+static void pin_screenshot(int idx)
+{
+    if (idx < 0 || idx >= (int)s_shot_list.size()) return;
+    const auto &item = s_shot_list[idx];
+
+    for (const auto &p : s_pins)
+        if (p.id == item.id) return;  // already pinned
+
+    PinWindow pin{};
+    pin.id   = item.id;
+    pin.path = item.full_path;
+    // Cascade so consecutive pins don't land exactly on top of each other.
+    const float off = 24.0f * (float)(s_pins.size() % 8);
+    pin.pos = ImVec2(80.0f + off, 80.0f + off);
+    s_pins.push_back(std::move(pin));
+}
+
+static void delete_screenshot(uint64_t id)
+{
+    if (!id) return;
+    if (s_bridge.DeleteScreenshot)
+        s_bridge.DeleteScreenshot(id);
+
+    // Drop the cached texture for the removed file, then that pin if any.
+    free_screenshot_textures();
+    for (auto it = s_pins.begin(); it != s_pins.end(); ) {
+        if (it->id == id) it = s_pins.erase(it); else ++it;
+    }
+    // Re-reads the list and clamps s_shot_preview_index (or clears it when empty).
+    refresh_shot_list(true);
+}
+
+/* ── Full-size preview overlay ─────────────────────────────────────────── */
+
+static void render_screenshot_preview()
+{
+    if (s_shot_preview_index < 0 || s_shot_preview_index >= (int)s_shot_list.size()) return;
+
+    // Copy out of the vector: delete_screenshot() can reallocate it mid-frame.
+    const uint64_t    cur_id   = s_shot_list[s_shot_preview_index].id;
+    const std::string cur_path = s_shot_list[s_shot_preview_index].full_path;
+
+    auto &io = ImGui::GetIO();
+
+    // Dim everything behind the preview
+    ImGui::GetBackgroundDrawList()->AddRectFilled(
+        ImVec2(0, 0), io.DisplaySize, TC32(IM_COL32(0, 0, 0, 180)));
+
+    const IconTexture *tex = get_or_upload_screenshot_tex(cur_path, 0.0f, 0.0f);
+
+    float pw = io.DisplaySize.x * 0.75f;
+    float ph = pw * (9.0f / 16.0f);
+    if (tex && tex->valid && tex->w > 0 && tex->h > 0) {
+        ph = pw * ((float)tex->h / (float)tex->w);
+        const float max_h = io.DisplaySize.y * 0.80f;
+        if (ph > max_h) { ph = max_h; pw = ph * ((float)tex->w / (float)tex->h); }
+    }
+    ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - pw) * 0.5f, (io.DisplaySize.y - ph) * 0.5f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(pw, ph), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.97f);
+
+    char ptitle[256];
+    snprintf(ptitle, sizeof(ptitle), "%s##gse_shot_preview", translationScreenshotPreview[s_current_language]);
+
+    bool open = true;
+    if (ImGui::Begin(ptitle, &open, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+        constexpr float BTN_H = 28.0f;
+        constexpr float BTN_W = 72.0f;
+        const float img_avail_h = ImGui::GetContentRegionAvail().y - BTN_H * 2.0f - 24.0f;
+
+        if (tex && tex->valid) {
+            ImVec2 avail(ImGui::GetContentRegionAvail().x, img_avail_h);
+            const float sa = (tex->h > 0) ? (float)tex->w / (float)tex->h : 1.0f;
+            float dw = avail.x, dh = avail.x / sa;
+            if (dh > avail.y) { dh = avail.y; dw = avail.y * sa; }
+            ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + (avail.x - dw) * 0.5f,
+                                       ImGui::GetCursorPosY() + (avail.y - dh) * 0.5f));
+            ImGui::Image(ImTextureRef(tex->srv.handle), ImVec2(dw, dh));
+        } else {
+            ImGui::SetCursorPosY(img_avail_h * 0.45f);
+            ImGui::SetCursorPosX((pw - ImGui::CalcTextSize("Loading...").x) * 0.5f);
+            ImGui::TextDisabled("Loading...");
+        }
+
+        // Arrow / A-D navigation (same as the native preview)
+        if (s_shot_preview_index > 0 &&
+            (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_A))) {
+            --s_shot_preview_index; s_shot_delete_pending = false;
+        }
+        if (s_shot_preview_index < (int)s_shot_list.size() - 1 &&
+            (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_D))) {
+            ++s_shot_preview_index; s_shot_delete_pending = false;
+        }
+
+        const bool can_prev = s_shot_preview_index > 0;
+        const bool can_next = s_shot_preview_index < (int)s_shot_list.size() - 1;
+
+        const ImVec2 cpos = ImGui::GetWindowPos();
+        const ImVec2 csz  = ImGui::GetWindowSize();
+        const float  by   = cpos.y + csz.y - BTN_H - 6.0f;
+
+        // ── Action bar (Pin / Delete, above the nav bar) ──
+        ImGui::SetCursorScreenPos(ImVec2(cpos.x + 6.0f, by - BTN_H - 6.0f));
+        if (!s_shot_delete_pending) {
+            if (ImGui::Button("Pin##gse_shot_pin", ImVec2(BTN_W, BTN_H)))
+                pin_screenshot(s_shot_preview_index);
+            ImGui::SameLine();
+            if (ImGui::Button("Delete##gse_shot_del", ImVec2(BTN_W * 1.4f, BTN_H)))
+                s_shot_delete_pending = true;
+        } else {
+            ImGui::TextColored(TC(ImVec4(1.0f, 0.5f, 0.0f, 1.0f)), "%s",
+                translationConfirmDelete[s_current_language]);
+            ImGui::SameLine();
+            if (ImGui::Button(translationYes[s_current_language], ImVec2(0, BTN_H))) {
+                s_shot_delete_pending = false;
+                delete_screenshot(cur_id);
+                if (s_shot_list.empty()) open = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(translationNo[s_current_language], ImVec2(0, BTN_H)))
+                s_shot_delete_pending = false;
+        }
+
+        // ── Nav bar: < Prev | n / N | Next > ──
+        ImGui::SetCursorScreenPos(ImVec2(cpos.x + 6.0f, by));
+        ImGui::BeginDisabled(!can_prev);
+        if (ImGui::Button("< Prev##gse_shot_prev", ImVec2(BTN_W, BTN_H)) && can_prev) {
+            --s_shot_preview_index; s_shot_delete_pending = false;
+        }
+        ImGui::EndDisabled();
+
+        char cnt[32]{};
+        snprintf(cnt, sizeof(cnt), "%d / %d", s_shot_preview_index + 1, (int)s_shot_list.size());
+        const ImVec2 tsz = ImGui::CalcTextSize(cnt);
+        ImGui::SetCursorScreenPos(ImVec2(cpos.x + (csz.x - tsz.x) * 0.5f, by + (BTN_H - tsz.y) * 0.5f));
+        ImGui::TextDisabled("%s", cnt);
+
+        ImGui::SetCursorScreenPos(ImVec2(cpos.x + csz.x - BTN_W - 6.0f, by));
+        ImGui::BeginDisabled(!can_next);
+        if (ImGui::Button("Next >##gse_shot_next", ImVec2(BTN_W, BTN_H)) && can_next) {
+            ++s_shot_preview_index; s_shot_delete_pending = false;
+        }
+        ImGui::EndDisabled();
+
+        // Close: Esc, right-click, or clicking outside
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+            ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+            (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) &&
+             ImGui::IsMouseClicked(ImGuiMouseButton_Left)))
+            open = false;
+    }
+    ImGui::End();
+
+    if (!open) {
+        s_shot_preview_index = -1;
+        s_shot_delete_pending = false;
+    }
+}
+
+/* ── Gallery window ────────────────────────────────────────────────────── */
+
+static void render_gallery_window()
+{
+    if (!s_show_gallery) return;
+    if (!s_show_screenshots_supported) { s_show_gallery = false; return; }
+
+    refresh_shot_list(false);
+
+    ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(8192, 8192));
+    ImGui::SetNextWindowSize(ImVec2(700, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(1.0f);
+
+    char title[256];
+    snprintf(title, sizeof(title), "%s##gse_gallery", translationScreenshots[s_current_language]);
+
+    if (ImGui::Begin(title, &s_show_gallery)) {
+        // ── Toolbar ──
+        if (ImGui::Button("Take Screenshot##gse_shot_take") && s_bridge.TakeScreenshot)
+            s_bridge.TakeScreenshot();
+
+        ImGui::SameLine();
+        if (ImGui::Button(translationOpenFolder[s_current_language])) {
+            char folder[GSE_SCREENSHOT_PATH_SIZE]{};
+            if (s_bridge.GetScreenshotsFolder && s_bridge.GetScreenshotsFolder(folder, sizeof(folder)) && folder[0])
+                ShellExecuteA(nullptr, "open", folder, nullptr, nullptr, SW_SHOWNORMAL);
+        }
+
+        if (!s_pins.empty()) {
+            ImGui::SameLine();
+            if (ImGui::Button(translationUnpinAll[s_current_language]))
+                s_pins.clear();
+        }
+
+        ImGui::Separator();
+
+        if (s_shot_list.empty()) {
+            ImGui::TextDisabled("%s", translationNoScreenshotsYet[s_current_language]);
+        } else {
+            // Fixed-width columns so the grid doesn't reflow while resizing.
+            const float thumb_w = 160.0f;
+            const float thumb_h = 90.0f;
+            const float cell_w  = thumb_w + ImGui::GetStyle().ItemSpacing.x;
+            const float avail_x = ImGui::GetContentRegionAvail().x;
+            const int   columns = (std::max)(1, (int)(avail_x / cell_w));
+
+            if (ImGui::BeginTable("##screenshot_grid", columns, ImGuiTableFlags_SizingFixedFit)) {
+                for (int c = 0; c < columns; ++c)
+                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, cell_w);
+
+                for (int idx = 0; idx < (int)s_shot_list.size(); ++idx) {
+                    const auto &item = s_shot_list[idx];
+                    ImGui::TableNextColumn();
+                    ImGui::PushID(idx);
+
+                    const IconTexture *thumb = get_or_upload_screenshot_tex(item.full_path, thumb_w, thumb_h);
+                    if (thumb && thumb->valid) {
+                        if (ImGui::ImageButton("##thumb",
+                                ImTextureRef(thumb->srv.handle), ImVec2(thumb_w, thumb_h))) {
+                            s_shot_preview_index = idx;
+                            s_shot_delete_pending = false;
+                        }
+                    } else {
+                        // Still queued behind the per-frame upload cap
+                        const ImVec2 p = ImGui::GetCursorScreenPos();
+                        ImGui::GetWindowDrawList()->AddRectFilled(
+                            p, ImVec2(p.x + thumb_w, p.y + thumb_h), TC32(IM_COL32(40, 40, 50, 255)));
+                        ImGui::InvisibleButton("##thumb_placeholder", ImVec2(thumb_w, thumb_h));
+                        if (ImGui::IsItemClicked()) {
+                            s_shot_preview_index = idx;
+                            s_shot_delete_pending = false;
+                        }
+                    }
+
+                    if (ImGui::BeginPopupContextItem("##shot_ctx")) {
+                        if (ImGui::MenuItem("Pin"))    pin_screenshot(idx);
+                        if (ImGui::MenuItem("Delete")) delete_screenshot(item.id);
+                        ImGui::EndPopup();
+                    }
+
+                    ImGui::TextDisabled("%s", item.filename);
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+        }
+    }
+    ImGui::End();
+
+    // Re-clamp in case the list shrank, then draw the preview on top.
+    if (s_shot_preview_index >= (int)s_shot_list.size())
+        s_shot_preview_index = s_shot_list.empty() ? -1 : (int)s_shot_list.size() - 1;
+    render_screenshot_preview();
+}
+
+/* ── Pinned screenshots (always drawn, independent of the main overlay) ── */
+
+static void render_pinned_screenshots()
+{
+    if (s_pins.empty()) return;
+
+    for (size_t i = 0; i < s_pins.size(); ) {
+        auto &pin = s_pins[i];
+        if (!pin.open) { s_pins.erase(s_pins.begin() + (ptrdiff_t)i); continue; }
+
+        const IconTexture *tex = get_or_upload_screenshot_tex(pin.path, 0.0f, 0.0f);
+
+        char wnd[64];
+        snprintf(wnd, sizeof(wnd), "##gse_pin_%llu", (unsigned long long)pin.id);
+
+        if (!pin.pos_set) {
+            ImGui::SetNextWindowPos(pin.pos, ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(pin.size, ImGuiCond_FirstUseEver);
+            pin.pos_set = true;
+        }
+        ImGui::SetNextWindowBgAlpha(pin.opacity);
+
+        bool window_open = true;
+        if (ImGui::Begin(wnd, &window_open,
+                ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+            const ImVec2 avail = ImGui::GetContentRegionAvail();
+            if (tex && tex->valid && avail.x > 1.0f && avail.y > 1.0f) {
+                const float sa = (tex->h > 0) ? (float)tex->w / (float)tex->h : 1.0f;
+                float dw = avail.x, dh = avail.x / sa;
+                if (dh > avail.y) { dh = avail.y; dw = avail.y * sa; }
+                ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + (avail.x - dw) * 0.5f,
+                                           ImGui::GetCursorPosY() + (avail.y - dh) * 0.5f));
+                ImGui::Image(ImTextureRef(tex->srv.handle), ImVec2(dw, dh));
+            } else {
+                ImGui::TextDisabled("Loading...");
+            }
+
+            if (ImGui::BeginPopupContextWindow("##pin_ctx")) {
+                ImGui::SetNextItemWidth(140.0f);
+                ImGui::SliderFloat("Opacity##pin_op", &pin.opacity, 0.1f, 1.0f, "%.2f");
+                if (ImGui::MenuItem("Unpin")) window_open = false;
+                ImGui::EndPopup();
+            }
+
+            // Remember geometry so the next SetNextWindow* isn't needed.
+            pin.pos  = ImGui::GetWindowPos();
+            pin.size = ImGui::GetWindowSize();
+        }
+        ImGui::End();
+
+        if (!window_open) { s_pins.erase(s_pins.begin() + (ptrdiff_t)i); continue; }
+        ++i;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ *  Notification history panel (inline in the main window, matching native)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+static const char *history_type_label(uint8_t type)
+{
+    switch (type) {
+    case GSE_NOTIF_MESSAGE:            return translationHistoryChat[s_current_language];
+    case GSE_NOTIF_INVITE:             return translationHistoryInvite[s_current_language];
+    case GSE_NOTIF_ACHIEVEMENT:        return translationHistoryAchievement[s_current_language];
+    case GSE_NOTIF_ACHIEVEMENT_PROG:   return translationHistoryProgress[s_current_language];
+    case GSE_NOTIF_AUTO_ACCEPT_INVITE: return translationHistoryAutoInvite[s_current_language];
+    case GSE_NOTIF_SCREENSHOT:         return translationHistoryScreenshot[s_current_language];
+    // Lobby-type notifications are archived too. The native history view has no
+    // dedicated label for them, so they share the invite label rather than "?".
+    case GSE_NOTIF_LOBBY_JOIN_REQ:
+    case GSE_NOTIF_LOBBY_JOIN_RESP:
+    case GSE_NOTIF_LOBBY_KICKED:
+    case GSE_NOTIF_FRIEND_LOBBY:
+    case GSE_NOTIF_LOBBY_STATUS:       return translationHistoryInvite[s_current_language];
+    default:                           return "?";
+    }
+}
+
+static void render_notification_history_panel()
+{
+    if (!s_bridge.GetNotificationHistoryCount || !s_bridge.GetNotificationHistory) return;
+
+    if (ImGui::Button(translationClearAll[s_current_language])) {
+        if (s_bridge.ClearNotificationHistory)
+            s_bridge.ClearNotificationHistory();
+        s_notif_history_cache.clear();
+        s_notif_history_fingerprint = -1;
+    }
+    ImGui::Separator();
+
+    const int count = s_bridge.GetNotificationHistoryCount();
+    if (count <= 0) {
+        ImGui::TextDisabled("%s", translationNoNotification[s_current_language]);
+        return;
+    }
+
+    // The bridge returns newest-first. Rebuild the formatted rows only when the
+    // archive actually changed (count or newest timestamp), like the native cache.
+    GSE_NotificationHistoryEntry newest{};
+    const int probe_n = s_bridge.GetNotificationHistory(&newest, 1);
+    const int64_t fingerprint = probe_n ? ((((int64_t)count) << 48) ^ newest.timestamp_ms) : -1;
+
+    if (fingerprint != s_notif_history_fingerprint) {
+        s_notif_history_fingerprint = fingerprint;
+        s_notif_history_cache.clear();
+
+        std::vector<GSE_NotificationHistoryEntry> entries(count > 256 ? 256 : count);
+        const int n = s_bridge.GetNotificationHistory(entries.data(), (int)entries.size());
+        s_notif_history_cache.reserve(n);
+
+        for (int i = 0; i < n; ++i) {
+            const auto &e = entries[i];
+
+            const time_t t = (time_t)(e.timestamp_ms / 1000);
+            struct tm tm_buf{};
+            localtime_s(&tm_buf, &t);
+
+            // Achievement entries carry "title\ndescription" — flatten for a compact row
+            std::string msg = e.message;
+            const size_t nl = msg.find('\n');
+            if (nl != std::string::npos)
+                msg.replace(nl, 1, " \xE2\x80\x94 ");
+
+            char line[GSE_NOTIF_HISTORY_MESSAGE_SIZE + 96]{};
+            snprintf(line, sizeof(line), "[%02d:%02d:%02d] %s  %s",
+                tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec,
+                history_type_label(e.type), msg.c_str());
+            s_notif_history_cache.emplace_back(line);
+        }
+    }
+
+    ImGui::BeginChild("##history_scroll",
+        ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 10), true);
+    for (const auto &line : s_notif_history_cache) {
+        ImGui::TextWrapped("%s", line.c_str());
+        ImGui::Separator();
+    }
+    ImGui::EndChild();
+}
+
 /* ── SCE browser helper: sanitize filename (same as native) ───────────── */
 
 static std::string sce_sanitize(const char *name)
@@ -1794,6 +2349,12 @@ static void on_reshade_overlay(effect_runtime *runtime)
         s_bridge.GetNotifAppearance(&s_appearance);
     }
 
+    // Screenshot capture goes through the emu's renderer hook, which does not
+    // exist in bridge-only mode (Disable_Overlay + Enable_Overlay_Bridge).
+    // Cheap pointer check on the emu side — refreshed every frame so the UI can
+    // hide the screenshots button when capture is impossible.
+    s_show_screenshots_supported = (s_bridge.IsScreenshotSupported && s_bridge.IsScreenshotSupported()) != 0;
+
     // ── Detect swapchain colour space and SDR white scale ──
     {
         SwapChainInfo sc = get_swapchain_info(runtime);
@@ -1907,7 +2468,12 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Main overlay window
     if (s_show_main_overlay) {
         render_main_overlay(runtime);
+        // The gallery is tied to the overlay's lifetime, like the native one
+        render_gallery_window();
     }
+
+    // Pinned screenshots float independently of the main overlay
+    render_pinned_screenshots();
 
     // Notifications rendered LAST so they always draw on top of everything
     render_notifications(runtime);
@@ -2053,14 +2619,21 @@ static void render_main_overlay(effect_runtime *runtime)
     if (ImGui::Button(translationToggleUserInfo[s_current_language]))
         s_show_user_info = !s_show_user_info;
 
-    // Friends button - show unread indicator if any friend needs attention
+    // Friends button - show unread indicator if any friend needs attention.
+    // Matches the native overlay, which scans EVERY friend's window_state and not
+    // just the ones that already have a chat window open.
     ImGui::SameLine();
     {
         bool has_unread = false;
-        for (auto &cw : s_open_chats) {
-            GSE_ChatState cs{};
-            if (s_bridge.GetChatState && s_bridge.GetChatState(cw.steam_id, &cs) && cs.needs_attention)
-                has_unread = true;
+        if (s_bridge.GetFriendCount && s_bridge.GetFriends) {
+            int fc = s_bridge.GetFriendCount();
+            if (fc > 0) {
+                std::vector<GSE_Friend> fl(fc > 256 ? 256 : fc);
+                int cnt = s_bridge.GetFriends(fl.data(), (int)fl.size());
+                for (int i = 0; i < cnt; ++i) {
+                    if (fl[i].window_state & GSE_WSTATE_NEED_ATTENTION) { has_unread = true; break; }
+                }
+            }
         }
         if (has_unread)
             ImGui::PushStyleColor(ImGuiCol_Text, TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)));
@@ -2080,6 +2653,18 @@ static void render_main_overlay(effect_runtime *runtime)
         snprintf(id_str, sizeof(id_str), "%llu", (unsigned long long)state.steam_id);
         ImGui::SetClipboardText(id_str);
     }
+
+    // Screenshots + History, in the native button order (... CopyId | Screenshots | History | Settings ...).
+    // Screenshots is hidden when the emu has no renderer hook to capture with.
+    if (s_show_screenshots_supported) {
+        ImGui::SameLine();
+        if (ImGui::Button(translationScreenshots[s_current_language]))
+            s_show_gallery = !s_show_gallery;
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button(translationHistory[s_current_language]))
+        s_show_notification_history = !s_show_notification_history;
 
     ImGui::SameLine();
     if (ImGui::Button(translationSettings[s_current_language]))
@@ -2388,6 +2973,11 @@ static void render_main_overlay(effect_runtime *runtime)
         }
     }
     ImGui::Separator();
+
+    // ── Notification history panel (inline, matching native placement) ──
+    if (s_show_notification_history) {
+        render_notification_history_panel();
+    }
 
     ImGui::End();
     ImGui::PopStyleColor(style_colors);
@@ -3285,7 +3875,7 @@ static void render_friends_list()
 
         // Line 1: FriendName (ID: steamid)
         ImGui::SetCursorPos(text_start);
-        bool needs_attn = (f.window_state & 0x08); // window_state_need_attention
+        bool needs_attn = (f.window_state & GSE_WSTATE_NEED_ATTENTION) != 0;
         if (needs_attn)
             ImGui::TextColored(TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "%s", f.name);
         else
