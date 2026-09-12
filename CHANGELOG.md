@@ -1,3 +1,343 @@
+## 2026/09/12
+
+* **[alex47exe]** overlay: ReShade addon brought to parity with the native overlay — bridge ABI **v16** (`GSE_WSTATE_*` window-state constants, notification types including screenshots, screenshot + notification-history APIs) and **v17** (configurable toggle hotkey, language list, username editing, `SaveSettings`)
+* **[alex47exe]** ReShade addon: screenshot gallery with thumbnails, preview, pinning and deletion; notification history panel; UI is hidden when the emu cannot capture (`Bridge_IsScreenshotSupported()`)
+* **[alex47exe]** overlay: fixed a bitmap bug that tested `window_state_lobby_invite` (`0x08`) where `window_state_need_attention` (`0x40`) was meant; named constants added to the bridge header so clients stop hardcoding bit values
+* **[alex47exe]** overlay: bridge mode no longer skips the screenshot hotkey or the achievement-notification queue; `process_achievement_queue()` is the only drain of that queue, so achievement notifications never reached the addon
+* **[alex47exe]** overlay: cross-app lobby invites no longer offer "Accept" — the addon now mirrors the native `same_app` guard instead of pushing `window_state_join` for a lobby belonging to another app
+* **[alex47exe]** build: fix the 32-bit ReShade addon filename — ReShade's loader only accepts `.addon` / `.addon32` / `.addon64` and **never** a plain `.dll`, and the x86 extension filter never applied because it tested `platforms:x32` while the workspace declares `x86`
+* **[alex47exe]** third-party detection: new shared table in `dll/known_tools.h` used by both `base.cpp` and `steam_client_interface_getter.cpp`; the Windows table previously existed verbatim twice and the Linux table was reachable only from `base.cpp`, so the getter reported nothing at all on Linux. `detect_thirdparty_injectors()` and the `DETECTED OVERLAYS=` report are now cross-platform
+* **[alex47exe]** third-party detection: added upscaler entries (`nvngx.dll`, `_nvngx.dll`, `dlssg_to_fsr3_amd_is_better.dll`, `amd_fidelityfx_dx12.dll`, `libxess.dll`, `OptiScaler.dll`, `Lossless.dll`), module-name prefix matching (`renodx*`, `optiscaler*`, `lossless*`), a generic ReShade-addon probe, GShade, NVIDIA Streamline (`sl.interposer.dll`), OpenXR, and on Linux `libobs-vkcapture.so` plus `.addon64` / `.addon32`
+* **[alex47exe]** third-party detection: removed the `gpu-screen-recorder` entry, which could never match — entries are substrings of `/proc/self/maps` lines, which hold only mapped file paths, while that is a process name and the package ships no shared object at all
+* **[alex47exe]** new: **incompatibility detection between loaded tools**, with the rule table and a source link for every claim (Special K + NVIDIA Streamline, Special K + GShade, Special K + ReShade, anti-cheat + injector, anti-cheat + post-processor, two post-processors, several store overlays). Findings are always written to `EMU_MISSING_INTERFACE.txt`; a startup popup is gated by the new `warn_tool_conflicts` setting (`[overlay::misc]`, default on)
+* **[alex47exe]** build: fixed the overlay build — synced the detector API, updated `ImDrawList::AddRect` to the 1.92.9 argument order and corrected the overlay link libraries; the overlay now fails safe on unsupported pixel formats instead of assuming FP16
+* **[alex47exe]** build: `ImGui::PushFont` calls updated to the 2-argument form required by ImGui 1.92.9
+
+---
+
+## 2026/08/25
+
+* **[alex47exe]** fix ingame_overlay build errors
+* **[alex47exe]** update ingame_overlay, preserving the changes for nemirtingas overlay by using my own fork
+
+---
+
+## 2026/08/19
+
+* **[WowIsntThisInconvenient]** fix return in unable to fulfill api call result case
+* **[WowIsntThisInconvenient]** no need for re-casts as types of params already
+
+---
+
+## 2026/08/13
+
+* **[TheKingFireS]** steam_overlay_translations.h: Add French translation
+
+---
+
+## 2026/08/08
+
+* **[WowIsntThisInconvenient]** proton detection
+* **[universal963]** Flat APIs
+* **[universal963]** Implement remaining APIs
+* **[universal963]** Add missing SDK changes
+
+---
+
+## 2026/08/05
+
+* **[rcyggdra]** Update Simplified Chinese translations in overlay
+
+---
+
+## 2026/08/02
+
+* **[WowIsntThisInconvenient]** ensure gamesearch separation
+* **[WowIsntThisInconvenient]** finish utils bump to v11
+* **[WowIsntThisInconvenient]** update utils sdk defs
+
+---
+
+## 2026/08/01
+
+* **[WowIsntThisInconvenient]** new ugc ranked query enums and metadata max const limit
+* **[WowIsntThisInconvenient]** new anonymity respecting handling of networking enums
+* **[WowIsntThisInconvenient]** update matchmaking public headers for mmservers bump to v2
+* **[WowIsntThisInconvenient]** update controller enums
+* **[WowIsntThisInconvenient]** update apps interf def
+
+---
+
+## 2026/07/31
+
+* **[Vic-41148]** fix(steam_input): refresh input when the game did not request explicit RunFrame
+
+---
+
+## 2026/07/14
+
+* **[universal963]** Revert `run SteamAPI_ManualDispatch_Init() only once`
+* **[universal963]** Fix `GetLaunchCommandLine()`
+
+---
+
+## 2026/07/13
+
+* **[universal963]** Fix `GetRelayNetworkStatus()`
+
+---
+
+## 2026/07/12
+
+* **[Piezometric]** Change language setting to use overlay language
+* **[Piezometric]** Refactor language handling in settings_parser
+* **[Piezometric]** Implement overlay language settings
+* **[Piezometric]** Add overlay language support in settings.h
+* **[Fatih Bakal]** -Add cross compilation docs & workflow
+
+---
+
+## 2026/07/09
+
+* **[milizteratha]** docs: update README architecture to x8
+
+---
+
+## 2026/07/06
+
+* **[Piezometric]** Rename overlay configuration options for buttons and checkboxes
+* **[Piezometric]** Rename overlay button settings for clarity
+* **[Piezometric]** Rename overlay button variables for consistency
+* **[Piezometric]** Rename overlay button settings for consistency
+* **[Piezometric]** Enhance overlay configuration comments and options
+* **[Piezometric]** Add settings checks for overlay FPS, frametime, and playtime
+* **[Piezometric]** Add overlay checkbox settings for FPS, frametime, and playtime
+* **[Piezometric]** Add overlay settings for FPS, frametime, and playtime
+
+---
+
+## 2026/07/05
+
+* **[Piezometric]** Add conditional display for overlay buttons
+* **[Piezometric]** Add overlay button settings to settings_parser
+* **[Piezometric]** Add overlay button toggles to settings
+* **[Piezometric]** Correct Turkish translation for achievements list
+* **[Piezometric]** Update Turkish translation for progress text
+* **[Piezometric]** Add multi-language translations for various terms
+* **[Piezometric]** Add translation support for notification types
+* **[Piezometric]** Enhance datetime format settings in config
+* **[Piezometric]** Change datetime format for screenshots in overlay
+* **[Piezometric]** Add screenshot datetime format to settings
+* **[Piezometric]** Add Screenshot Datetime Format setting
+* **[Piezometric]** Enhance screenshots UI with translations
+
+---
+
+## 2026/06/24
+
+* **[K0oRui]** fix(ColdClientLoader): restore all stale registry values on cleanup
+
+---
+
+## 2026/06/22
+
+* **[alex47exe]** fix mixing of steady_clock and high_resolution_clock for playtime tarcking, causing error in linux build
+* **[alex47exe]** fix fonts atlas IsBuilt error
+* **[alex47exe]** add missing closing } for Steam_Overlay::render_main_window()
+* **[David]** fix: replace goto with bool flag to avoid MSVC C2362 error
+
+---
+
+## 2026/06/21
+
+* **[Piezometric]** Add translations for total time in multiple languages
+* **[Piezometric]** Add translation support for total time display
+* **[Piezometric]** Add translation for total playtime in overlay
+
+---
+
+## 2026/06/20
+
+* **[David]** add enable_screenshot option
+
+---
+
+## 2026/06/19
+
+* **[David]** Only trigger screenshot hotkey when game window is focused
+
+---
+
+## 2026/06/16
+
+* **[David]** Fix UTF-8 path handling for _stat() and ShellExecuteW on Windows
+
+---
+
+## 2026/06/15
+
+* **[David]** Clean up includes, use __WINDOWS__, fix uninitialized buffer
+
+---
+
+## 2026/06/14
+
+* **[David]** Remove dead ternary in notification border color — both branches were identical black
+* **[David]** ISO 8601 screenshot filenames and Open Folder button
+* **[David]** fix: playtime tracking file creation and reliability bugs
+* **[David]** fix: screenshot color washing and needless screenshots folder creation
+* **[David]** fix: remove unused Windows-only #include <shellapi.h> for Linux build
+
+---
+
+## 2026/06/13
+
+* **[David]** Document screenshot settings in EXAMPLE config
+
+---
+
+## 2026/06/11
+
+* **[universal963]** Update Simplified Chinese translations
+
+---
+
+## 2026/06/09
+
+* **[Piezometric]** Update Turkish translation for achievements
+* **[Piezometric]** Change button styles for achievements display
+* **[Piezometric]** Change button to small button for achievements
+
+---
+
+## 2026/06/08
+
+* **[David]** Add crop tool for pinned screenshots
+
+---
+
+## 2026/06/06
+
+* **[David]** Add overlay screenshot system with gallery, pinned screenshots, and hotkey
+
+---
+
+## 2026/06/03
+
+* **[David]** Add Show_Achievement_List, Unlocked_Expanded, Locked_Expanded overlay settings
+* **[David]** Set default achievement window position on first use
+
+---
+
+## 2026/06/02
+
+* **[David]** Add playtime tracking to player info with pause-on-blur
+* **[David]** Add Show_Notification_History setting for overlay appearance
+
+---
+
+## 2026/05/31
+
+* **[David]** Add rare achievement notification effect
+* **[David]** Add optional unlock_percentage field to achievement overlay display
+
+---
+
+## 2026/05/28
+
+* **[Detanup01]** remove imgui Update detours, simpleini, utfcpp, stb resize2
+
+---
+
+## 2026/05/26
+
+* **[David]** Add persistent notification history panel to overlay
+* **[David]** Add Show button for hidden achievement descriptions
+* **[David]** Split achievement window into sorted unlocked/locked sections
+* **[alex47exe]** docs: improve README usability and organization
+* **[alex47exe]** docs: fix typos, heading style and grammar across all READMEs
+* **[alex47exe]** tools/steam_stats_converter: fix README and add run scripts
+* **[alex47exe]** tools: add steam_stats_converter — bidirectional Steam bin <-> GSE converter
+* **[alex47exe]** saves: always mark UGS bin as sync-pending for full re-upload
+
+---
+
+## 2026/05/25
+
+* **[alex47exe]** stats/achievements: replace individual stat files with stats.json, complete achievement manifest
+* **[alex47exe]** write_ugs_bin: skip zero groups to match Steam behaviour
+* **[alex47exe]** schema_gen: fix achievements.json and stats.json output format
+* **[alex47exe]** feat: UGS bin as primary stat/ach store; optional no-write flags for JSON/stats files
+
+---
+
+## 2026/05/24
+
+* **[David]** Fix localtime_s -> localtime_r for Linux cross-compilation
+* **[David]** Remove redundant Achievement_Notification_Delay parse in parse_overlay_general_config
+
+---
+
+## 2026/05/23
+
+* **[LuKeSt0rm]** ManualDispatchFix
+
+---
+
+## 2026/05/22
+
+* **[David]** Fix 2 bugs in achievement list display
+
+---
+
+## 2026/05/20
+
+* **[David]** Add debug output for achievement delay debugging
+* **[David]** Fix: parse Achievement_Notification_Delay in load_overlay_appearance
+* **[David]** Add sound for progress notifications
+* **[David]** Delay achievement sound to play when notification is shown
+* **[David]** Add rate-limiting queue for achievement notifications
+* **[David]** Add missing font override settings to overlay example config
+* **[David]** Add parsing for Font_Achievement_Title_Bold setting
+
+---
+
+## 2026/05/19
+
+* **[David]** Fix achievement title/description to use their specific font override settings
+* **[David]** Add parser for Font_Override_Achievement_Title and Font_Override_Achievement_Description settings
+* **[dasafe]** Add font override options for achievement title and description
+* **[Detanup01]** Fix rename working dir
+* **[alex47exe]** fix: suppress GCC -Wformat-truncation for snprintf in steam_overlay.cpp
+* **[alex47exe]** fix: suppress GCC -Wunused-result for fread calls in base.cpp
+* **[alex47exe]** fix: C4267 narrowing warnings in steam_game_coordinator.cpp; changelog 2026/05/18-19
+* **[alex47exe]** remove: all overwolf overlay files
+* **[alex47exe]** submodules: update third-party/deps/common to latest
+
+---
+
+## 2026/05/18
+
+* **[David]** Restore overlay font sizing and achievement notification text
+* **[dasafe]** Add independent font size settings for overlay (FPS, achievement title, description)
+* **[dasafe]** Update render_stats() to properly use FPS font with PushFont/PopFont
+* **[dasafe]** Update create_fonts() to support independent font sizes for FPS, achievement title, and description
+* **[dasafe]** Add independent font size support for FPS, achievement title and description
+* **[alex47exe]** ci: delete intermediate build artifacts after linux release/debug packaging
+* **[alex47exe]** ci: delete intermediate build artifacts after win release/debug packaging
+* **[alex47exe]** ci: add VS2022 build support alongside VS2026 in release workflow
+* **[Detanup01]** update python action
+* **[Detanup01]** fix release
+* **[Detanup01]** swap places
+* **[Detanup01]** fix vs22 build bugs and artifacts
+* **[Detanup01]** add support for vs22
+* **[alex47exe]** Revert "chore: delete intermediate build artifacts after release packages are created"
+* **[alex47exe]** Revert "chore: improve workflow step names and job names for better readability"
+* **[alex47exe]** Revert "feat: add build_configs option to select release/debug/both across all build and release workflows"
+* **[alex47exe]** Revert "feat: add build_configs option to select release/debug/both (Windows build workflow)"
+
+---
+
 ## 2026/05/17
 
 * **[alex47exe]** overlay: per-notification-type configurable WAV sound files in `steam_settings/sounds/`; full load-time fallback chain (`<type>.wav` → `notification.wav` → silence); example WAV files and `sounds/README.md` included

@@ -31,9 +31,9 @@ cd ..
 # Here's a mirror in case aur is down https://github.com/Twig6943/msvc-wine-git
 # see https://github.com/mstorsjo/msvc-wine/issues/229 for more info
 
-git clone --recursive https://github.com/Detanup01/gbe_fork
+git clone --recursive https://github.com/alex47exe/gse_fork
 
-cd gbe_fork
+cd gse_fork
 
 chmod +x third-party/common/linux/premake/premake5
 chmod +x third-party/deps/linux/7za/7za

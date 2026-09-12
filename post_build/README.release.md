@@ -12,6 +12,8 @@ Original project: https://gitlab.com/Mr_Goldberg/goldberg_emulator
 - [Saves and settings location](#savessettings-location)
 - [Portable saves](#portable-saves)
 - [Overlay](#overlay)
+- [ReShade addon overlay](#reshade-addon-overlay)
+- [Overlay notifications sounds](#overlay-notifications-sounds)
 - [Controller](#controller)
 - [Achievements / Inventory](#achievements-items-or-inventory)
 - [Stats](#stats)
@@ -282,11 +284,23 @@ Do not run more than one steam game with the **same appid** at the same time on 
 This is made possible using the amazing third-party library `Ingame Overlay project`: https://github.com/Nemirtingas/ingame_overlay  
 
 The overlay can be enabled by modifying `configs.overlay.ini` and setting `enable_experimental_overlay=1`  
-Use `SHIFT-TAB` to open the overlay  
+Use `SHIFT-TAB` to open the overlay, or set a different combination with `key_combo` in the same file  
+Screenshots use `screenshot_combo` (default `f12`)  
 
 This feature is **highly experimental** and might cause crashes or other problems 
 
+When other tools are loaded into the game, the emu checks for combinations that are **known to be incompatible** and warns you at startup. The full list, with a source for each claim, is always written to `EMU_MISSING_INTERFACE.txt` next to the game exe. Set `warn_tool_conflicts=0` in `[overlay::misc]` to suppress the popup — the log is written either way. 
+
 Alternatively, you can use the dedicated tool `lobby_connect` to join a game lobby  
+
+---
+
+## ReShade addon overlay:
+**Note: at the moment this feature is only enabled in the experimental builds for Windows**  
+
+An alternative overlay renderer that draws through [ReShade](https://reshade.me/) instead of the built-in ingame_overlay library. It is a *client* of the emu's overlay bridge, so it can run either alongside the native overlay or on its own with `enable_experimental_bridge=1` and `enable_experimental_overlay=0`.  
+
+See [README.reshade_addon.md](README.reshade_addon.md) for the file names, where to copy them and the ReShade build requirements.  
 
 ---
 
@@ -299,7 +313,9 @@ You can place a `.wav` file called `overlay_achievement_notification.wav` inside
 
 You can place a `.wav` file called `overlay_friend_notification.wav` inside either the local `.\steam_settings\sounds` folder of the game, or inside `.\GSE Settings\settings\sounds` folder, which will be played whenever a friend sends an invitation  
 
-You can find an example in `.\steam_settings.EXAMPLE`
+Both of the above are the **generic fallbacks** for their group. You can also override each notification type individually with `overlay_invite_notification.wav`, `overlay_chat_notification.wav`, `overlay_auto_accept_notification.wav`, `overlay_lobby_join_request.wav`, `overlay_lobby_kicked.wav`, `overlay_friend_lobby.wav`, `overlay_lobby_status.wav`, `overlay_lobby_join_accepted.wav` and `overlay_lobby_join_denied.wav`. At startup any missing per-type file is filled from the generic one, so you only need to provide the files you want to customise  
+
+The complete fallback chain is documented in `.\steam_settings.EXAMPLE\sounds.EXAMPLE\README.md`  
 
 ---
 

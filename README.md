@@ -54,6 +54,7 @@ Tools bundled in this repository:
 * **[generate_interfaces](./tools/generate_interfaces/)** — scans the game’s `steam_api(64).dll` / `libsteam_api.so` and writes the required `steam_interfaces.txt`
 * **[lobby_connect](./tools/lobby_connect/)** — discovers LAN peers and launches your game with the right join parameters
 * **[steam_stats_converter](./tools/steam_stats_converter/)** — converts between Steam’s local achievements/stats binary cache and GSE save files; see its [README](./tools/steam_stats_converter/README.md)
+* **[steamclient_loader](./tools/steamclient_loader/linux/)** — Linux launcher for the experimental `steamclient.so` / `steamclient64.so` build, taking the exe path, appid and optional working directory from the command line or `ldr_*.txt` files; see its [README](./tools/steamclient_loader/linux/README.md)
 
 ---
 # **Compiling**
@@ -62,7 +63,7 @@ Tools bundled in this repository:
 
  Clone the repo and its submodules **recursively**
  ```shell
- git clone --recurse-submodules -j8 https://github.com/Detanup01/gbe_fork.git
+ git clone --recurse-submodules -j8 https://github.com/alex47exe/gse_fork.git
  ```
  The switch `-j8` is optional, it allows Git to fetch up to 8 submodules
 
