@@ -1343,8 +1343,12 @@ project "reshade_addon_overlay"
     targetdir(path.join(build_dir, os_iden, _ACTION, "%{cfg.buildcfg}/reshade_addon/%{cfg.platform}"))
 
     -- target name & extension
+    -- ReShade's loader (source/addon_manager.cpp) only accepts *.addon on any
+    -- architecture, plus *.addon32 on 32-bit builds / *.addon64 on 64-bit builds.
+    -- A plain .dll is never picked up, so these extensions are what makes the
+    -- addon load at all.
     ---------
-    filter { "platforms:x32", }
+    filter { "platforms:x86", }
         targetname "gse_overlay"
         targetextension ".addon"
     filter { "platforms:x64", }
