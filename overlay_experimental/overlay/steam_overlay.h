@@ -663,6 +663,17 @@ public:
     int  Bridge_GetNotificationHistory(struct GSE_NotificationHistoryEntry *out, int max_count);
     void Bridge_ClearNotificationHistory();
 
+    // Toggle hotkey (ABI v17)
+    int  Bridge_GetToggleKeys(struct GSE_ToggleKeyInfo *out) const;
+
+    // Identity / localisation (ABI v17). The setters only stage the value in the
+    // same fields the native settings window edits; Bridge_RequestSaveSettings()
+    // persists them.
+    int  Bridge_GetLanguageCount() const;
+    int  Bridge_GetLanguageName(int index, char *out, int out_size) const;
+    int  Bridge_SetLanguageIndex(int index);
+    int  Bridge_SetUsername(const char *name);
+
     // Rate-limiting queue functions
     void process_achievement_queue();
 };

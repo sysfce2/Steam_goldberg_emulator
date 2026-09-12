@@ -9,6 +9,7 @@
  *   v15 chat state / avatars / notif appearance / network info / lobby chat
  *   v16 window_state bit constants, GSE_NOTIF_SCREENSHOT, screenshots,
  *       notification history
+ *   v17 toggle hotkey, language list / username editing, SaveSettings
  *
  * The emu DLL (steam_api.dll / steam_api64.dll) exports functions prefixed
  * with GSE_OverlayBridge_.  The ReShade addon resolves them at load time via
@@ -29,7 +30,7 @@ extern "C" {
 
 /* ── ABI version ──────────────────────────────────────────────────────── */
 
-#define GSE_BRIDGE_ABI_VERSION 16
+#define GSE_BRIDGE_ABI_VERSION 17
 
 /* ── Enums ────────────────────────────────────────────────────────────── */
 
@@ -360,6 +361,25 @@ typedef struct GSE_NotificationHistoryEntry {
     char     message[GSE_NOTIF_HISTORY_MESSAGE_SIZE];
 } GSE_NotificationHistoryEntry;
 
+/* ── Overlay toggle hotkey (added in ABI v17) ────────────────────────────
+ *
+ * The combo is configured in the emu's config file. The native overlay matches
+ * it as "ALL keys currently held" (see WindowsHook.cpp in ingame_overlay), which
+ * is order-independent — so do NOT assume the last entry is the trigger key.
+ */
+
+#define GSE_MAX_TOGGLE_KEYS 8
+
+typedef struct GSE_ToggleKeyInfo {
+    int32_t count;                       /* number of valid entries in vk[] */
+    int32_t vk[GSE_MAX_TOGGLE_KEYS];     /* Windows virtual-key codes */
+    char    label[64];                   /* human-readable, e.g. "SHIFT + TAB" */
+} GSE_ToggleKeyInfo;
+
+/* ── Username (added in ABI v17) ──────────────────────────────────────── */
+
+#define GSE_USERNAME_SIZE 256
+
 /* ── Function pointer typedefs (for GetProcAddress) ───────────────────── */
 
 /* Core */
@@ -510,6 +530,18 @@ typedef int       (*pfn_GSE_OverlayBridge_GetNotificationHistoryCount)(void);
 typedef int       (*pfn_GSE_OverlayBridge_GetNotificationHistory)(GSE_NotificationHistoryEntry *out, int max_count);
 typedef void      (*pfn_GSE_OverlayBridge_ClearNotificationHistory)(void);
 
+/* Toggle hotkey (ABI v17) */
+typedef int       (*pfn_GSE_OverlayBridge_GetToggleKeys)(GSE_ToggleKeyInfo *out);  /* returns 1 on success */
+
+/* Identity / localisation (ABI v17).
+ * SetUsername()/SetLanguageIndex() only stage the new value in the same fields
+ * the native settings window edits — call SaveSettings() to persist them. */
+typedef int       (*pfn_GSE_OverlayBridge_GetLanguageCount)(void);
+typedef int       (*pfn_GSE_OverlayBridge_GetLanguageName)(int index, char *out, int out_size);
+typedef int       (*pfn_GSE_OverlayBridge_SetLanguageIndex)(int index);        /* returns 1 on success */
+typedef int       (*pfn_GSE_OverlayBridge_SetUsername)(const char *name);      /* returns 1 on success */
+typedef void      (*pfn_GSE_OverlayBridge_SaveSettings)(void);
+
 /* Friend action IDs */
 #define GSE_FRIEND_ACTION_INVITE         1
 #define GSE_FRIEND_ACTION_JOIN           2
@@ -614,6 +646,12 @@ typedef struct GSE_BridgeFunctions {
     pfn_GSE_OverlayBridge_GetNotificationHistoryCount GetNotificationHistoryCount;
     pfn_GSE_OverlayBridge_GetNotificationHistory GetNotificationHistory;
     pfn_GSE_OverlayBridge_ClearNotificationHistory ClearNotificationHistory;
+    pfn_GSE_OverlayBridge_GetToggleKeys        GetToggleKeys;
+    pfn_GSE_OverlayBridge_GetLanguageCount     GetLanguageCount;
+    pfn_GSE_OverlayBridge_GetLanguageName      GetLanguageName;
+    pfn_GSE_OverlayBridge_SetLanguageIndex     SetLanguageIndex;
+    pfn_GSE_OverlayBridge_SetUsername          SetUsername;
+    pfn_GSE_OverlayBridge_SaveSettings         SaveSettings;
 } GSE_BridgeFunctions;
 
 #ifdef _WIN32
@@ -680,6 +718,12 @@ static inline int GSE_LoadBridgeFunctions(HMODULE emu_dll, GSE_BridgeFunctions *
     LOAD(GetNotificationHistoryCount);
     LOAD(GetNotificationHistory);
     LOAD(ClearNotificationHistory);
+    LOAD(GetToggleKeys);
+    LOAD(GetLanguageCount);
+    LOAD(GetLanguageName);
+    LOAD(SetLanguageIndex);
+    LOAD(SetUsername);
+    LOAD(SaveSettings);
     #undef LOAD
     /* At minimum, GetVersion must be present */
     return fn->GetVersion != NULL;

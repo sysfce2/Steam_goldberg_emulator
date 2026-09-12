@@ -150,6 +150,19 @@ struct PinWindow {
 };
 static std::vector<PinWindow> s_pins;
 
+/* ── Overlay toggle hotkey (configured in the emu's config file) ──────── */
+
+static GSE_ToggleKeyInfo s_toggle_keys{};
+
+/* ── Settings window edit state (username / language) ─────────────────── */
+
+static char s_settings_username[GSE_USERNAME_SIZE] = {};
+static bool s_settings_username_loaded = false;
+static int  s_settings_language = 0;
+static std::vector<std::string> s_language_names;
+static std::vector<const char *> s_language_ptrs;
+static bool s_language_list_loaded = false;
+
 /* ── Color constants ─────────────────────────────────────────────────── */
 // Configurable colors (COL_NOTIF_BG, COL_MAIN_BG, COL_ELEMENT, etc.)
 // are now macros defined after s_appearance below.
@@ -2355,6 +2368,11 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // hide the screenshots button when capture is impossible.
     s_show_screenshots_supported = (s_bridge.IsScreenshotSupported && s_bridge.IsScreenshotSupported()) != 0;
 
+    // Overlay toggle combo, configured in the emu's config file. Refreshed every
+    // frame so a config change is picked up without restarting.
+    if (s_bridge.GetToggleKeys)
+        s_bridge.GetToggleKeys(&s_toggle_keys);
+
     // ── Detect swapchain colour space and SDR white scale ──
     {
         SwapChainInfo sc = get_swapchain_info(runtime);
@@ -2421,13 +2439,29 @@ static void on_reshade_overlay(effect_runtime *runtime)
     // Stats HUD (always visible when enabled)
     render_stats_hud();
 
-    // Toggle main overlay with our own hotkey (Shift+Tab)
-    if (runtime->is_key_down(VK_SHIFT) && runtime->is_key_pressed(VK_TAB)) {
-        s_show_main_overlay = !s_show_main_overlay;
-        s_overlay_hidden_by_reshade = false;  // explicit toggle overrides any hiding
-        // Sync overlay state with the emu DLL so callbacks fire
-        if (s_bridge.ShowOverlay)
-            s_bridge.ShowOverlay(s_show_main_overlay ? 1 : 0);
+    // Toggle the main overlay with the combo configured in the emu's config file.
+    // The native overlay requires ALL keys to be held at once (see WindowsHook.cpp
+    // in ingame_overlay) and latches the edge, which is order-independent — so we
+    // test every key down plus at least one freshly pressed, never "last key".
+    {
+        static const int kFallback[2] = { VK_SHIFT, VK_TAB };  // pre-v17 bridge
+        const int count = (s_toggle_keys.count > 0) ? s_toggle_keys.count : 2;
+        const int *keys = (s_toggle_keys.count > 0) ? s_toggle_keys.vk : kFallback;
+
+        bool all_down = true;
+        bool any_pressed = false;
+        for (int i = 0; i < count; ++i) {
+            if (!runtime->is_key_down((uint32_t)keys[i]))    all_down = false;
+            if (runtime->is_key_pressed((uint32_t)keys[i]))  any_pressed = true;
+        }
+
+        if (all_down && any_pressed) {
+            s_show_main_overlay = !s_show_main_overlay;
+            s_overlay_hidden_by_reshade = false;  // explicit toggle overrides any hiding
+            // Sync overlay state with the emu DLL so callbacks fire
+            if (s_bridge.ShowOverlay)
+                s_bridge.ShowOverlay(s_show_main_overlay ? 1 : 0);
+        }
     }
 
     // If ReShade menu was opened while our overlay was visible, temporarily hide ours
@@ -3162,12 +3196,65 @@ static void render_main_overlay(effect_runtime *runtime)
     }
 
     // ── Settings Window (separate Begin(), matching native) ──
+    if (!s_show_settings)
+        s_settings_username_loaded = false;   // reload the staged values on next open
     if (s_show_settings) {
+        // Stage the current values the first time the window is shown
+        if (!s_settings_username_loaded) {
+            strncpy(s_settings_username, state.username, sizeof(s_settings_username) - 1);
+            s_settings_username[sizeof(s_settings_username) - 1] = '\0';
+            s_settings_language = s_current_language;
+            s_settings_username_loaded = true;
+        }
+
+        // Language names come from the emu so we can never drift out of sync with
+        // its valid_languages[] table (the same list the native ListBox uses).
+        if (!s_language_list_loaded && s_bridge.GetLanguageCount && s_bridge.GetLanguageName) {
+            s_language_list_loaded = true;
+            const int lc = s_bridge.GetLanguageCount();
+            s_language_names.clear();
+            s_language_names.reserve(lc > 0 ? (size_t)lc : 0);
+            for (int i = 0; i < lc; ++i) {
+                char buf[64] = {};
+                if (s_bridge.GetLanguageName(i, buf, sizeof(buf)) && buf[0])
+                    s_language_names.emplace_back(buf);
+                else
+                    s_language_names.emplace_back("?");
+            }
+            // Build the pointer list only after the vector is final, and never
+            // touch s_language_names again — otherwise these would dangle.
+            s_language_ptrs.clear();
+            s_language_ptrs.reserve(s_language_names.size());
+            for (const auto &n : s_language_names)
+                s_language_ptrs.push_back(n.c_str());
+        }
+
         ImGui::SetNextWindowBgAlpha(1.0f);
         char settings_title[256];
         snprintf(settings_title, sizeof(settings_title), "%s##gse_settings", translationGlobalSettingsWindow[s_current_language]);
         if (ImGui::Begin(settings_title, &s_show_settings)) {
             ImGui::Text("%s", translationGlobalSettingsWindowDescription[s_current_language]);
+            ImGui::Separator();
+
+            // ── Username (native parity) ──
+            ImGui::Text("%s", translationUsername[s_current_language]);
+            ImGui::SameLine();
+            ImGui::InputText("##username", s_settings_username, sizeof(s_settings_username), 0);
+
+            ImGui::Separator();
+
+            // ── Language (native parity) ──
+            ImGui::Text("%s", translationLanguage[s_current_language]);
+            if (!s_language_ptrs.empty()) {
+                ImGui::ListBox("##language", &s_settings_language,
+                    s_language_ptrs.data(), (int)s_language_ptrs.size(), 7);
+                if (s_settings_language >= 0 && s_settings_language < (int)s_language_ptrs.size())
+                    ImGui::Text(translationSelectedLanguage[s_current_language],
+                        s_language_ptrs[s_settings_language]);
+            } else {
+                ImGui::TextDisabled("(unavailable)");
+            }
+
             ImGui::Separator();
 
             if (s_bridge.GetOption && s_bridge.SetOption) {
@@ -3201,8 +3288,16 @@ static void render_main_overlay(effect_runtime *runtime)
             ImGui::Separator();
             ImGui::Text("%s", translationRestartTheGameToApply[s_current_language]);
             if (ImGui::Button(translationSave[s_current_language])) {
-                if (s_bridge.SetOption)
-                    s_bridge.SetOption(GSE_OPT_DISABLE_ALL_WARNINGS, s_bridge.GetOption(GSE_OPT_DISABLE_ALL_WARNINGS)); // triggers save
+                // Stage username + language in the emu, then persist everything at once.
+                if (s_bridge.SetUsername)      s_bridge.SetUsername(s_settings_username);
+                if (s_bridge.SetLanguageIndex) s_bridge.SetLanguageIndex(s_settings_language);
+                if (s_bridge.SaveSettings) {
+                    s_bridge.SaveSettings();
+                } else if (s_bridge.SetOption) {
+                    // Pre-v17 emu: any SetOption triggers its internal settings save
+                    s_bridge.SetOption(GSE_OPT_DISABLE_ALL_WARNINGS,
+                        s_bridge.GetOption(GSE_OPT_DISABLE_ALL_WARNINGS));
+                }
                 s_show_settings = false;
             }
         }
@@ -4165,12 +4260,25 @@ static void render_chat_windows()
                     ImGui::PushStyleColor(ImGuiCol_Tab, TC(ImVec4(0.6f, 0.4f, 0.1f, 1.0f)));
                 
                 bool tab_open = true;
-                if (ImGui::BeginTabItem(chat.friend_name, &tab_open)) {
+                // Stable ID via ###: friend names can collide and must not change the
+                // tab identity when a name changes. Same scheme as the native chat tab.
+                char tab_label[160];
+                snprintf(tab_label, sizeof(tab_label), "%s###chat_tab_%llu",
+                    chat.friend_name, (unsigned long long)chat.steam_id);
+                if (ImGui::BeginTabItem(tab_label, &tab_open)) {
                     s_active_chat_idx = (int)i;
 
                     // Clear attention when tab is active
                     if (needs_attn && s_bridge.GetChatState)
                         cs.needs_attention = 0; // local only, bridge clears on read
+
+                    // Friend entry for this chat. Used by the header lines AND by the
+                    // invite block below, which needs same_app to decide whether
+                    // accepting is even possible.
+                    const GSE_Friend *finfo = nullptr;
+                    for (auto &f : chat_friends_cache) {
+                        if (f.steam_id == chat.steam_id) { finfo = &f; break; }
+                    }
 
                     // ---- 64px friend avatar + 3 info lines ----
                     {
@@ -4186,12 +4294,6 @@ static void render_chat_windows()
                         ImGui::SameLine();
 
                         ImVec2 text_start = ImGui::GetCursorPos();
-
-                        // Look up friend info for header lines
-                        const GSE_Friend *finfo = nullptr;
-                        for (auto &f : chat_friends_cache) {
-                            if (f.steam_id == chat.steam_id) { finfo = &f; break; }
-                        }
 
                         // Line 1: Friend name (ID: steamid)
                         ImGui::SetCursorPos(text_start);
@@ -4233,20 +4335,51 @@ static void render_chat_windows()
                     }
                     ImGui::Separator();
 
-                    // Invite accept/refuse
+                    // Invite accept/refuse — mirrors the native chat window:
+                    // accepting only makes sense when the friend is in the SAME app,
+                    // so a cross-app invite offers Refuse alone plus a "(different game)"
+                    // note. Without this guard we would push window_state_join for a
+                    // lobby we cannot actually join.
                     if (got_state && cs.has_pending_invite) {
-                        ImGui::TextColored(TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)), "Pending invite from this friend!");
-                        ImGui::SameLine();
-                        if (ImGui::Button("Accept##accept_invite")) {
-                            if (s_bridge.FriendAction)
-                                s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_ACCEPT_INVITE);
-                            chat.scroll_to_bottom = true;
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Button("Refuse##refuse_invite")) {
-                            if (s_bridge.FriendAction)
-                                s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_REFUSE_INVITE);
-                            chat.scroll_to_bottom = true;
+                        const bool same_app = (finfo != nullptr) && (finfo->same_app != 0);
+
+                        ImGui::PushStyleColor(ImGuiCol_Text, TC(ImVec4(1.0f, 0.8f, 0.2f, 1.0f)));
+                        if (finfo)
+                            ImGui::LabelText("##invite_label",
+                                translationInvitedYouToJoinTheGame[s_current_language],
+                                chat.friend_name, (unsigned long long)finfo->appid);
+                        else
+                            ImGui::TextUnformatted("Pending invite");
+                        ImGui::PopStyleColor();
+
+                        char accept_id[64], refuse_id[64];
+                        snprintf(accept_id, sizeof(accept_id), "%s##accept_invite_%llu",
+                            translationAccept[s_current_language], (unsigned long long)chat.steam_id);
+                        snprintf(refuse_id, sizeof(refuse_id), "%s##refuse_invite_%llu",
+                            translationRefuse[s_current_language], (unsigned long long)chat.steam_id);
+
+                        if (same_app) {
+                            ImGui::SameLine();
+                            if (ImGui::Button(accept_id)) {
+                                if (s_bridge.FriendAction)
+                                    s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_ACCEPT_INVITE);
+                                chat.scroll_to_bottom = true;
+                            }
+                            ImGui::SameLine();
+                            if (ImGui::Button(refuse_id)) {
+                                if (s_bridge.FriendAction)
+                                    s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_REFUSE_INVITE);
+                                chat.scroll_to_bottom = true;
+                            }
+                        } else {
+                            ImGui::SameLine();
+                            ImGui::TextColored(TC(ImVec4(0.6f, 0.6f, 0.6f, 1.0f)), "(different game)");
+                            ImGui::SameLine();
+                            if (ImGui::Button(refuse_id)) {
+                                if (s_bridge.FriendAction)
+                                    s_bridge.FriendAction(chat.steam_id, GSE_FRIEND_ACTION_REFUSE_INVITE);
+                                chat.scroll_to_bottom = true;
+                            }
                         }
                     }
 

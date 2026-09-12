@@ -416,6 +416,56 @@ void Steam_Overlay::overlay_networking_callback(void* object, Common_Message* ms
     _this->networking_msg_received(msg);
 }
 
+// Windows VK code for an ingame_overlay toggle key. Mirrors ToggleKeyToNativeKey()
+// in the ingame_overlay dependency's WindowsHook.cpp, so the bridge reports the
+// exact keys the native hotkey listens for. Returns 0 for unknown keys.
+static int toggle_key_to_vk(InGameOverlay::ToggleKey key)
+{
+    switch (key) {
+        case InGameOverlay::ToggleKey::SHIFT: return VK_SHIFT;
+        case InGameOverlay::ToggleKey::CTRL:  return VK_CONTROL;
+        case InGameOverlay::ToggleKey::ALT:   return VK_MENU;
+        case InGameOverlay::ToggleKey::TAB:   return VK_TAB;
+        case InGameOverlay::ToggleKey::F1:    return VK_F1;
+        case InGameOverlay::ToggleKey::F2:    return VK_F2;
+        case InGameOverlay::ToggleKey::F3:    return VK_F3;
+        case InGameOverlay::ToggleKey::F4:    return VK_F4;
+        case InGameOverlay::ToggleKey::F5:    return VK_F5;
+        case InGameOverlay::ToggleKey::F6:    return VK_F6;
+        case InGameOverlay::ToggleKey::F7:    return VK_F7;
+        case InGameOverlay::ToggleKey::F8:    return VK_F8;
+        case InGameOverlay::ToggleKey::F9:    return VK_F9;
+        case InGameOverlay::ToggleKey::F10:   return VK_F10;
+        case InGameOverlay::ToggleKey::F11:   return VK_F11;
+        case InGameOverlay::ToggleKey::F12:   return VK_F12;
+        default: return 0;
+    }
+}
+
+// Display name for a toggle key, used to build the bridge's human-readable label.
+static const char *toggle_key_name(InGameOverlay::ToggleKey key)
+{
+    switch (key) {
+        case InGameOverlay::ToggleKey::SHIFT: return "SHIFT";
+        case InGameOverlay::ToggleKey::CTRL:  return "CTRL";
+        case InGameOverlay::ToggleKey::ALT:   return "ALT";
+        case InGameOverlay::ToggleKey::TAB:   return "TAB";
+        case InGameOverlay::ToggleKey::F1:    return "F1";
+        case InGameOverlay::ToggleKey::F2:    return "F2";
+        case InGameOverlay::ToggleKey::F3:    return "F3";
+        case InGameOverlay::ToggleKey::F4:    return "F4";
+        case InGameOverlay::ToggleKey::F5:    return "F5";
+        case InGameOverlay::ToggleKey::F6:    return "F6";
+        case InGameOverlay::ToggleKey::F7:    return "F7";
+        case InGameOverlay::ToggleKey::F8:    return "F8";
+        case InGameOverlay::ToggleKey::F9:    return "F9";
+        case InGameOverlay::ToggleKey::F10:   return "F10";
+        case InGameOverlay::ToggleKey::F11:   return "F11";
+        case InGameOverlay::ToggleKey::F12:   return "F12";
+        default: return "?";
+    }
+}
+
 void Steam_Overlay::parse_key_combo()
 {
     static const std::unordered_map<InGameOverlay::ToggleKey, std::string_view> KEYS_MAP {
@@ -3445,32 +3495,9 @@ void Steam_Overlay::overlay_render_proc()
         }
 
         if (screenshot_focused) {
-            // Map ToggleKey to Windows VK codes and check state
-            auto toggleKeyToVK = [](InGameOverlay::ToggleKey key) -> int {
-                switch (key) {
-                    case InGameOverlay::ToggleKey::SHIFT: return VK_SHIFT;
-                    case InGameOverlay::ToggleKey::CTRL:  return VK_CONTROL;
-                    case InGameOverlay::ToggleKey::ALT:   return VK_MENU;
-                    case InGameOverlay::ToggleKey::TAB:   return VK_TAB;
-                    case InGameOverlay::ToggleKey::F1:    return VK_F1;
-                    case InGameOverlay::ToggleKey::F2:    return VK_F2;
-                    case InGameOverlay::ToggleKey::F3:    return VK_F3;
-                    case InGameOverlay::ToggleKey::F4:    return VK_F4;
-                    case InGameOverlay::ToggleKey::F5:    return VK_F5;
-                    case InGameOverlay::ToggleKey::F6:    return VK_F6;
-                    case InGameOverlay::ToggleKey::F7:    return VK_F7;
-                    case InGameOverlay::ToggleKey::F8:    return VK_F8;
-                    case InGameOverlay::ToggleKey::F9:    return VK_F9;
-                    case InGameOverlay::ToggleKey::F10:   return VK_F10;
-                    case InGameOverlay::ToggleKey::F11:   return VK_F11;
-                    case InGameOverlay::ToggleKey::F12:   return VK_F12;
-                    default: return 0;
-                }
-            };
-
             bool all_pressed = true;
             for (auto k : screenshot_keys) {
-                int vk = toggleKeyToVK(k);
+                int vk = toggle_key_to_vk(k);
                 if (!vk || !(GetAsyncKeyState(vk) & 0x8000)) {
                     all_pressed = false;
                     break;
@@ -9501,6 +9528,83 @@ void Steam_Overlay::Bridge_ClearNotificationHistory()
     notification_history.clear();
     notification_history_cache.clear();
     notification_history_cache_dirty = false;
+}
+
+// ── Toggle hotkey (ABI v17) ─────────────────────────────────────────────
+
+int Steam_Overlay::Bridge_GetToggleKeys(GSE_ToggleKeyInfo *out) const
+{
+    if (!out) return 0;
+
+    std::lock_guard<std::recursive_mutex> lock(const_cast<std::recursive_mutex&>(overlay_mutex));
+
+    memset(out, 0, sizeof(*out));
+
+    std::string label;
+    for (auto key : toggle_keys) {
+        if (out->count >= GSE_MAX_TOGGLE_KEYS) break;
+
+        const int vk = toggle_key_to_vk(key);
+        if (!vk) continue;  // unknown key: skip rather than report a bogus code
+
+        out->vk[out->count++] = vk;
+        if (!label.empty()) label += " + ";
+        label += toggle_key_name(key);
+    }
+
+    // Nothing usable came through (misconfigured combo). Report the same default
+    // the native overlay falls back to so the client always has a working combo.
+    if (out->count == 0) {
+        out->vk[out->count++] = VK_SHIFT;
+        out->vk[out->count++] = VK_TAB;
+        label = "SHIFT + TAB";
+    }
+
+    bridge_safe_copy(out->label, sizeof(out->label), label);
+    return 1;
+}
+
+// ── Identity / localisation (ABI v17) ───────────────────────────────────
+
+int Steam_Overlay::Bridge_GetLanguageCount() const
+{
+    return (int)(sizeof(valid_languages) / sizeof(valid_languages[0]));
+}
+
+int Steam_Overlay::Bridge_GetLanguageName(int index, char *out, int out_size) const
+{
+    if (!out || out_size <= 0) return 0;
+    out[0] = '\0';
+
+    const int count = (int)(sizeof(valid_languages) / sizeof(valid_languages[0]));
+    if (index < 0 || index >= count) return 0;
+
+    bridge_safe_copy(out, (size_t)out_size, std::string(valid_languages[index]));
+    return 1;
+}
+
+int Steam_Overlay::Bridge_SetLanguageIndex(int index)
+{
+    const int count = (int)(sizeof(valid_languages) / sizeof(valid_languages[0]));
+    if (index < 0 || index >= count) return 0;
+
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    // Same field the native settings window's language ListBox writes.
+    // Persisted by Bridge_RequestSaveSettings().
+    current_language = index;
+    return 1;
+}
+
+int Steam_Overlay::Bridge_SetUsername(const char *name)
+{
+    if (!name) return 0;
+
+    std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
+    // Same buffer the native settings window's username InputText edits.
+    // Persisted by Bridge_RequestSaveSettings().
+    strncpy(username_text, name, sizeof(username_text) - 1);
+    username_text[sizeof(username_text) - 1] = '\0';
+    return 1;
 }
 
 #endif

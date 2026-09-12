@@ -792,6 +792,57 @@ __declspec(dllexport) void GSE_OverlayBridge_ClearNotificationHistory(void)
     client->steam_overlay->Bridge_ClearNotificationHistory();
 }
 
+// ── Toggle hotkey (ABI v17) ─────────────────────────────────────────────
+
+__declspec(dllexport) int GSE_OverlayBridge_GetToggleKeys(GSE_ToggleKeyInfo *out)
+{
+    if (!out) return 0;
+    memset(out, 0, sizeof(*out));
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetToggleKeys(out);
+}
+
+// ── Identity / localisation (ABI v17) ───────────────────────────────────
+
+__declspec(dllexport) int GSE_OverlayBridge_GetLanguageCount(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetLanguageCount();
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_GetLanguageName(int index, char *out, int out_size)
+{
+    if (!out || out_size <= 0) return 0;
+    out[0] = '\0';
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_GetLanguageName(index, out, out_size);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_SetLanguageIndex(int index)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_SetLanguageIndex(index);
+}
+
+__declspec(dllexport) int GSE_OverlayBridge_SetUsername(const char *name)
+{
+    if (!name) return 0;
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return 0;
+    return client->steam_overlay->Bridge_SetUsername(name);
+}
+
+__declspec(dllexport) void GSE_OverlayBridge_SaveSettings(void)
+{
+    auto *client = get_steam_client();
+    if (!client || !client->steam_overlay) return;
+    client->steam_overlay->Bridge_RequestSaveSettings();
+}
+
 } // extern "C"
 
 #endif // EMU_OVERLAY
