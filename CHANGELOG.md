@@ -1,4 +1,26 @@
-## 2026/09/12
+# Changelog
+
+Entries are grouped by the **upstream release** that shipped them, so every section
+can be diffed against https://github.com/Detanup01/gbe_fork/releases
+
+* **upstream** work is merged into `Detanup01/gbe_fork`. Its release notes are
+auto-generated from **merged PRs only**, while the entries here are individual
+**commits**, so a release section is always longer than its note count: one listed PR
+can account for many entries, and commits pushed straight to `dev` appear here but can
+never appear in the notes.
+* **fork** work exists only in this fork and ships in no upstream release.
+
+Names are GitHub handles where they differ from the git author name (`David` in history
+is `dasafe`, `Fatih Bakal` is `Twig6943`), written without `@` to match the existing style.
+
+Each release heading gives the upstream tag and the range of dates it covers; the
+`###` date headings below it all belong to that release.
+
+---
+
+## Unreleased (fork)
+
+### 2026/09/12
 
 * **[alex47exe]** overlay: ReShade addon brought to parity with the native overlay — bridge ABI **v16** (`GSE_WSTATE_*` window-state constants, notification types including screenshots, screenshot + notification-history APIs) and **v17** (configurable toggle hotkey, language list, username editing, `SaveSettings`)
 * **[alex47exe]** ReShade addon: screenshot gallery with thumbnails, preview, pinning and deletion; notification history panel; UI is hidden when the emu cannot capture (`Bridge_IsScreenshotSupported()`)
@@ -15,27 +37,30 @@
 
 ---
 
-## 2026/08/25
+### 2026/08/25
 
 * **[alex47exe]** fix ingame_overlay build errors
 * **[alex47exe]** update ingame_overlay, preserving the changes for nemirtingas overlay by using my own fork
 
 ---
 
-## 2026/08/19
+## release-2026_08_23  (2026/07/31 - 2026/08/19)
+upstream notes: https://github.com/Detanup01/gbe_fork/releases/tag/release-2026_08_23  — 4 note items
+
+### 2026/08/19
 
 * **[WowIsntThisInconvenient]** fix return in unable to fulfill api call result case
 * **[WowIsntThisInconvenient]** no need for re-casts as types of params already
 
 ---
 
-## 2026/08/13
+### 2026/08/13
 
 * **[TheKingFireS]** steam_overlay_translations.h: Add French translation
 
 ---
 
-## 2026/08/08
+### 2026/08/08
 
 * **[WowIsntThisInconvenient]** proton detection
 * **[universal963]** Flat APIs
@@ -44,13 +69,13 @@
 
 ---
 
-## 2026/08/05
+### 2026/08/05
 
 * **[rcyggdra]** Update Simplified Chinese translations in overlay
 
 ---
 
-## 2026/08/02
+### 2026/08/02
 
 * **[WowIsntThisInconvenient]** ensure gamesearch separation
 * **[WowIsntThisInconvenient]** finish utils bump to v11
@@ -58,7 +83,7 @@
 
 ---
 
-## 2026/08/01
+### 2026/08/01
 
 * **[WowIsntThisInconvenient]** new ugc ranked query enums and metadata max const limit
 * **[WowIsntThisInconvenient]** new anonymity respecting handling of networking enums
@@ -68,42 +93,45 @@
 
 ---
 
-## 2026/07/31
+### 2026/07/31
 
 * **[Vic-41148]** fix(steam_input): refresh input when the game did not request explicit RunFrame
 
 ---
 
-## 2026/07/14
+## release-2026_07_19  (2026/05/31 - 2026/07/14)
+upstream notes: https://github.com/Detanup01/gbe_fork/releases/tag/release-2026_07_19  — 12 note items
+
+### 2026/07/14
 
 * **[universal963]** Revert `run SteamAPI_ManualDispatch_Init() only once`
 * **[universal963]** Fix `GetLaunchCommandLine()`
 
 ---
 
-## 2026/07/13
+### 2026/07/13
 
 * **[universal963]** Fix `GetRelayNetworkStatus()`
 
 ---
 
-## 2026/07/12
+### 2026/07/12
 
 * **[Piezometric]** Change language setting to use overlay language
 * **[Piezometric]** Refactor language handling in settings_parser
 * **[Piezometric]** Implement overlay language settings
 * **[Piezometric]** Add overlay language support in settings.h
-* **[Fatih Bakal]** -Add cross compilation docs & workflow
+* **[Twig6943]** -Add cross compilation docs & workflow
 
 ---
 
-## 2026/07/09
+### 2026/07/09
 
 * **[milizteratha]** docs: update README architecture to x8
 
 ---
 
-## 2026/07/06
+### 2026/07/06
 
 * **[Piezometric]** Rename overlay configuration options for buttons and checkboxes
 * **[Piezometric]** Rename overlay button settings for clarity
@@ -116,7 +144,7 @@
 
 ---
 
-## 2026/07/05
+### 2026/07/05
 
 * **[Piezometric]** Add conditional display for overlay buttons
 * **[Piezometric]** Add overlay button settings to settings_parser
@@ -133,22 +161,22 @@
 
 ---
 
-## 2026/06/24
+### 2026/06/24
 
 * **[K0oRui]** fix(ColdClientLoader): restore all stale registry values on cleanup
 
 ---
 
-## 2026/06/22
+### 2026/06/22
 
 * **[alex47exe]** fix mixing of steady_clock and high_resolution_clock for playtime tarcking, causing error in linux build
 * **[alex47exe]** fix fonts atlas IsBuilt error
 * **[alex47exe]** add missing closing } for Steam_Overlay::render_main_window()
-* **[David]** fix: replace goto with bool flag to avoid MSVC C2362 error
+* **[dasafe]** fix: replace goto with bool flag to avoid MSVC C2362 error
 
 ---
 
-## 2026/06/21
+### 2026/06/21
 
 * **[Piezometric]** Add translations for total time in multiple languages
 * **[Piezometric]** Add translation support for total time display
@@ -156,53 +184,53 @@
 
 ---
 
-## 2026/06/20
+### 2026/06/20
 
-* **[David]** add enable_screenshot option
-
----
-
-## 2026/06/19
-
-* **[David]** Only trigger screenshot hotkey when game window is focused
+* **[dasafe]** add enable_screenshot option
 
 ---
 
-## 2026/06/16
+### 2026/06/19
 
-* **[David]** Fix UTF-8 path handling for _stat() and ShellExecuteW on Windows
-
----
-
-## 2026/06/15
-
-* **[David]** Clean up includes, use __WINDOWS__, fix uninitialized buffer
+* **[dasafe]** Only trigger screenshot hotkey when game window is focused
 
 ---
 
-## 2026/06/14
+### 2026/06/16
 
-* **[David]** Remove dead ternary in notification border color — both branches were identical black
-* **[David]** ISO 8601 screenshot filenames and Open Folder button
-* **[David]** fix: playtime tracking file creation and reliability bugs
-* **[David]** fix: screenshot color washing and needless screenshots folder creation
-* **[David]** fix: remove unused Windows-only #include <shellapi.h> for Linux build
+* **[dasafe]** Fix UTF-8 path handling for _stat() and ShellExecuteW on Windows
 
 ---
 
-## 2026/06/13
+### 2026/06/15
 
-* **[David]** Document screenshot settings in EXAMPLE config
+* **[dasafe]** Clean up includes, use __WINDOWS__, fix uninitialized buffer
 
 ---
 
-## 2026/06/11
+### 2026/06/14
+
+* **[dasafe]** Remove dead ternary in notification border color — both branches were identical black
+* **[dasafe]** ISO 8601 screenshot filenames and Open Folder button
+* **[dasafe]** fix: playtime tracking file creation and reliability bugs
+* **[dasafe]** fix: screenshot color washing and needless screenshots folder creation
+* **[dasafe]** fix: remove unused Windows-only #include <shellapi.h> for Linux build
+
+---
+
+### 2026/06/13
+
+* **[dasafe]** Document screenshot settings in EXAMPLE config
+
+---
+
+### 2026/06/11
 
 * **[universal963]** Update Simplified Chinese translations
 
 ---
 
-## 2026/06/09
+### 2026/06/09
 
 * **[Piezometric]** Update Turkish translation for achievements
 * **[Piezometric]** Change button styles for achievements display
@@ -210,50 +238,53 @@
 
 ---
 
-## 2026/06/08
+### 2026/06/08
 
-* **[David]** Add crop tool for pinned screenshots
-
----
-
-## 2026/06/06
-
-* **[David]** Add overlay screenshot system with gallery, pinned screenshots, and hotkey
+* **[dasafe]** Add crop tool for pinned screenshots
 
 ---
 
-## 2026/06/03
+### 2026/06/06
 
-* **[David]** Add Show_Achievement_List, Unlocked_Expanded, Locked_Expanded overlay settings
-* **[David]** Set default achievement window position on first use
-
----
-
-## 2026/06/02
-
-* **[David]** Add playtime tracking to player info with pause-on-blur
-* **[David]** Add Show_Notification_History setting for overlay appearance
+* **[dasafe]** Add overlay screenshot system with gallery, pinned screenshots, and hotkey
 
 ---
 
-## 2026/05/31
+### 2026/06/03
 
-* **[David]** Add rare achievement notification effect
-* **[David]** Add optional unlock_percentage field to achievement overlay display
+* **[dasafe]** Add Show_Achievement_List, Unlocked_Expanded, Locked_Expanded overlay settings
+* **[dasafe]** Set default achievement window position on first use
 
 ---
 
-## 2026/05/28
+### 2026/06/02
+
+* **[dasafe]** Add playtime tracking to player info with pause-on-blur
+* **[dasafe]** Add Show_Notification_History setting for overlay appearance
+
+---
+
+### 2026/05/31
+
+* **[dasafe]** Add rare achievement notification effect
+* **[dasafe]** Add optional unlock_percentage field to achievement overlay display
+
+---
+
+## release-2026_05_30  (2026/05/20 - 2026/05/28)
+upstream notes: https://github.com/Detanup01/gbe_fork/releases/tag/release-2026_05_30  — 6 note items
+
+### 2026/05/28
 
 * **[Detanup01]** remove imgui Update detours, simpleini, utfcpp, stb resize2
 
 ---
 
-## 2026/05/26
+### 2026/05/26
 
-* **[David]** Add persistent notification history panel to overlay
-* **[David]** Add Show button for hidden achievement descriptions
-* **[David]** Split achievement window into sorted unlocked/locked sections
+* **[dasafe]** Add persistent notification history panel to overlay
+* **[dasafe]** Add Show button for hidden achievement descriptions
+* **[dasafe]** Split achievement window into sorted unlocked/locked sections
 * **[alex47exe]** docs: improve README usability and organization
 * **[alex47exe]** docs: fix typos, heading style and grammar across all READMEs
 * **[alex47exe]** tools/steam_stats_converter: fix README and add run scripts
@@ -262,7 +293,7 @@
 
 ---
 
-## 2026/05/25
+### 2026/05/25
 
 * **[alex47exe]** stats/achievements: replace individual stat files with stats.json, complete achievement manifest
 * **[alex47exe]** write_ugs_bin: skip zero groups to match Steam behaviour
@@ -271,41 +302,44 @@
 
 ---
 
-## 2026/05/24
+### 2026/05/24
 
-* **[David]** Fix localtime_s -> localtime_r for Linux cross-compilation
-* **[David]** Remove redundant Achievement_Notification_Delay parse in parse_overlay_general_config
+* **[dasafe]** Fix localtime_s -> localtime_r for Linux cross-compilation
+* **[dasafe]** Remove redundant Achievement_Notification_Delay parse in parse_overlay_general_config
 
 ---
 
-## 2026/05/23
+### 2026/05/23
 
 * **[LuKeSt0rm]** ManualDispatchFix
 
 ---
 
-## 2026/05/22
+### 2026/05/22
 
-* **[David]** Fix 2 bugs in achievement list display
-
----
-
-## 2026/05/20
-
-* **[David]** Add debug output for achievement delay debugging
-* **[David]** Fix: parse Achievement_Notification_Delay in load_overlay_appearance
-* **[David]** Add sound for progress notifications
-* **[David]** Delay achievement sound to play when notification is shown
-* **[David]** Add rate-limiting queue for achievement notifications
-* **[David]** Add missing font override settings to overlay example config
-* **[David]** Add parsing for Font_Achievement_Title_Bold setting
+* **[dasafe]** Fix 2 bugs in achievement list display
 
 ---
 
-## 2026/05/19
+### 2026/05/20
 
-* **[David]** Fix achievement title/description to use their specific font override settings
-* **[David]** Add parser for Font_Override_Achievement_Title and Font_Override_Achievement_Description settings
+* **[dasafe]** Add debug output for achievement delay debugging
+* **[dasafe]** Fix: parse Achievement_Notification_Delay in load_overlay_appearance
+* **[dasafe]** Add sound for progress notifications
+* **[dasafe]** Delay achievement sound to play when notification is shown
+* **[dasafe]** Add rate-limiting queue for achievement notifications
+* **[dasafe]** Add missing font override settings to overlay example config
+* **[dasafe]** Add parsing for Font_Achievement_Title_Bold setting
+
+---
+
+## release-2026_05_19  (2026/05/19)
+upstream notes: https://github.com/Detanup01/gbe_fork/releases/tag/release-2026_05_19  — no note items (the release body has no "What's Changed")
+
+### 2026/05/19
+
+* **[dasafe]** Fix achievement title/description to use their specific font override settings
+* **[dasafe]** Add parser for Font_Override_Achievement_Title and Font_Override_Achievement_Description settings
 * **[dasafe]** Add font override options for achievement title and description
 * **[Detanup01]** Fix rename working dir
 * **[alex47exe]** fix: suppress GCC -Wformat-truncation for snprintf in steam_overlay.cpp
@@ -316,9 +350,12 @@
 
 ---
 
-## 2026/05/18
+## release-2026_05_18  (2026/05/17 - 2026/05/18)
+upstream notes: https://github.com/Detanup01/gbe_fork/releases/tag/release-2026_05_18  — 1 note item
 
-* **[David]** Restore overlay font sizing and achievement notification text
+### 2026/05/18
+
+* **[dasafe]** Restore overlay font sizing and achievement notification text
 * **[dasafe]** Add independent font size settings for overlay (FPS, achievement title, description)
 * **[dasafe]** Update render_stats() to properly use FPS font with PushFont/PopFont
 * **[dasafe]** Update create_fonts() to support independent font sizes for FPS, achievement title, and description
@@ -338,7 +375,7 @@
 
 ---
 
-## 2026/05/17
+### 2026/05/17
 
 * **[alex47exe]** overlay: per-notification-type configurable WAV sound files in `steam_settings/sounds/`; full load-time fallback chain (`<type>.wav` → `notification.wav` → silence); example WAV files and `sounds/README.md` included
 * **[alex47exe]** overlay: fixed 9 notification UX issues — non-intrusive when overlay open, no input stealing, interactive buttons still clickable, reduced flickering on friend status updates
@@ -351,12 +388,24 @@
 
 ---
 
-## 2026/05/16
+## release-2026_05_16  (2026/05/16)
+upstream notes: https://github.com/Detanup01/gbe_fork/releases/tag/release-2026_05_16  — 4 note items
+
+### 2026/05/16
 
 * **[NicknineTheEagle]** fixes for old interfaces
 * **[onthebed]** fix gamepad: stop polling HID devices every callback, reducing CPU usage
 * **[Detanup01]** update build toolchain to Visual Studio 2026
 * **[Detanup01]** fix appid detection
+
+---
+
+## Older entries
+
+Everything below this point predates the release-grouped restructure. Those entries are
+still grouped by commit date only: the upstream release tag that shipped each one has not
+been recorded yet, so they cannot be cross-checked against a release. The list is kept
+verbatim rather than dropped.
 
 ---
 
