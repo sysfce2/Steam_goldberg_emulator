@@ -418,9 +418,18 @@ void Steam_Overlay::overlay_networking_callback(void* object, Common_Message* ms
 
 // Windows VK code for an ingame_overlay toggle key. Mirrors ToggleKeyToNativeKey()
 // in the ingame_overlay dependency's WindowsHook.cpp, so the bridge reports the
-// exact keys the native hotkey listens for. Returns 0 for unknown keys.
+// exact keys the native hotkey listens for.
+//
+// This translation unit is also built on Linux, where the VK_* virtual-key codes do
+// not exist. The bridge field carrying them is read by the ReShade addon, which is
+// Windows-only, so elsewhere the mapping degrades to 0 rather than pulling in a table
+// of Windows constants that nothing on that platform would read.
 static int toggle_key_to_vk(InGameOverlay::ToggleKey key)
 {
+#ifndef __WINDOWS__
+    (void)key;
+    return 0;
+#else
     switch (key) {
         case InGameOverlay::ToggleKey::SHIFT: return VK_SHIFT;
         case InGameOverlay::ToggleKey::CTRL:  return VK_CONTROL;
@@ -440,6 +449,7 @@ static int toggle_key_to_vk(InGameOverlay::ToggleKey key)
         case InGameOverlay::ToggleKey::F12:   return VK_F12;
         default: return 0;
     }
+#endif
 }
 
 // Display name for a toggle key, used to build the bridge's human-readable label.
@@ -9540,14 +9550,17 @@ int Steam_Overlay::Bridge_GetToggleKeys(GSE_ToggleKeyInfo *out) const
 
     memset(out, 0, sizeof(*out));
 
+    // `vk` carries Windows virtual-key codes and is only meaningful there: the
+    // ReShade addon that reads it is Windows-only. `count` and `label` are
+    // platform-neutral, so the configured combo is reported correctly everywhere and
+    // only `vk` degrades to zero elsewhere. Deciding whether a key is usable must
+    // therefore not depend on `vk`, or Linux would always fall through to the default.
     std::string label;
     for (auto key : toggle_keys) {
         if (out->count >= GSE_MAX_TOGGLE_KEYS) break;
 
-        const int vk = toggle_key_to_vk(key);
-        if (!vk) continue;  // unknown key: skip rather than report a bogus code
+        out->vk[out->count++] = toggle_key_to_vk(key);
 
-        out->vk[out->count++] = vk;
         if (!label.empty()) label += " + ";
         label += toggle_key_name(key);
     }
@@ -9555,8 +9568,8 @@ int Steam_Overlay::Bridge_GetToggleKeys(GSE_ToggleKeyInfo *out) const
     // Nothing usable came through (misconfigured combo). Report the same default
     // the native overlay falls back to so the client always has a working combo.
     if (out->count == 0) {
-        out->vk[out->count++] = VK_SHIFT;
-        out->vk[out->count++] = VK_TAB;
+        out->vk[out->count++] = toggle_key_to_vk(InGameOverlay::ToggleKey::SHIFT);
+        out->vk[out->count++] = toggle_key_to_vk(InGameOverlay::ToggleKey::TAB);
         label = "SHIFT + TAB";
     }
 
