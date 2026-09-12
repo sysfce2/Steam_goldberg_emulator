@@ -474,6 +474,13 @@ local overlay_link = {
     "system", -- ingame_overlay dependency
     "mini_detour", -- ingame_overlay dependency
 }
+-- Windows system libraries required by ingame_overlay: its CMakeLists.txt links
+-- them PUBLIC, so every consumer of ingame_overlay.lib has to link them as well
+-- (e.g. imgui_impl_dx12.obj needs CreateDXGIFactory1 from dxgi).
+if os.target() == "windows" then
+    table.insert(overlay_link, "dxgi")
+    table.insert(overlay_link, "OpenGL32")
+end
 -- we add them later when needed
 
 

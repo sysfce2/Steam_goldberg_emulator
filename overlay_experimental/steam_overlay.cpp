@@ -595,7 +595,9 @@ void Steam_Overlay::request_renderer_detector()
 {
     PRINT_DEBUG_ENTRY();
     // request renderer detection
-    future_renderer = InGameOverlay::DetectRenderer();
+    // DetectRenderer() is a stateful poller: this starts the detection, and it has to be
+    // called again (see renderer_hook_proc()) until it reports that detection is done.
+    InGameOverlay::DetectRenderer();
 }
 
 void Steam_Overlay::set_renderer_hook_timeout()
@@ -611,16 +613,24 @@ void Steam_Overlay::cleanup_renderer_hook()
 
 bool Steam_Overlay::renderer_hook_proc()
 {
-    if (renderer_hook_timeout_ctr > 0 && future_renderer.wait_for(std::chrono::milliseconds(renderer_detector_polling_ms)) != std::future_status::ready) {
+    // Drive the detection. It returns false while it still needs to run, and true once it
+    // has finished, whether or not a renderer was found.
+    const bool detection_done = InGameOverlay::DetectRenderer(/*restart*/ false);
+
+    if (renderer_hook_timeout_ctr > 0 && !detection_done) {
         return false;
     }
+
+    // Fetch the hook before releasing the detector: FreeDetector() destroys the detector
+    // (and its hooks), so GetDetectedRenderer() has to be queried while it is still alive.
+    InGameOverlay::RendererHook_t* detected_renderer =
+        detection_done ? InGameOverlay::GetDetectedRenderer() : nullptr;
 
     // free detector resources and check for failure
     cleanup_renderer_hook();
     // exit on failure
-    bool final_chance = future_renderer.wait_for(std::chrono::milliseconds(1)) == std::future_status::ready;
     // again check for 'setup_overlay_called' to be extra sure that the overlay wasn't deinitialized
-    if (!setup_overlay_called || !final_chance || renderer_hook_timeout_ctr <= 0) {
+    if (!setup_overlay_called || !detection_done || renderer_hook_timeout_ctr <= 0) {
         PRINT_DEBUG("failed to detect renderer, ctr=%i, overlay was set up=%i",
             renderer_hook_timeout_ctr, (int)setup_overlay_called
         );
@@ -629,7 +639,7 @@ bool Steam_Overlay::renderer_hook_proc()
 
     // do a one time initialization
     // std::lock_guard<std::recursive_mutex> lock(overlay_mutex);
-    _renderer = future_renderer.get();
+    _renderer = detected_renderer;
     if (!_renderer) { // is this even possible?
         PRINT_DEBUG("renderer hook was null!");
         return true;
@@ -2370,7 +2380,7 @@ void Steam_Overlay::build_notifications(float width, float height)
                         const ImVec2 lo(border_min.x - expand, border_min.y - expand);
                         const ImVec2 hi(border_max.x + expand, border_max.y + expand);
                         const int a = (int)(180.0f * (1.0f - (float)(i - 1) / (float)steps) * settings_noti_alpha);
-                        dl->AddRect(lo, hi, IM_COL32(218, 165, 32, a), rounding + expand, 0, 2.0f);
+                        dl->AddRect(lo, hi, IM_COL32(218, 165, 32, a), rounding + expand, 2.0f, 0);
                     }
                     dl->PopClipRect();
 
@@ -2379,8 +2389,8 @@ void Steam_Overlay::build_notifications(float width, float height)
                         border_max,
                         IM_COL32(255, 215, 90, (int)(220.0f * settings_noti_alpha)),
                         rounding,
-                        0,
-                        2.0f);
+                        2.0f,
+                        0);
                 } else {
                     const float inset = 1.0f;
                     const ImVec2 inner_min(wnd_pos.x + inset, wnd_pos.y + inset);
@@ -2393,8 +2403,8 @@ void Steam_Overlay::build_notifications(float width, float height)
                         inner_max,
                         accent_color,
                         settings->overlay_appearance.notification_rounding,
-                        0,
-                        2.0f);
+                        2.0f,
+                        0);
                 }
             }
 
@@ -5425,7 +5435,7 @@ void Steam_Overlay::render_main_window()
                                                 ImVec2(p0.x + ox + dw, p0.y + oy + dh));
                                             // Hover highlight
                                             if (ImGui::IsItemHovered())
-                                                dl->AddRect(p0, p1, TC32(IM_COL32(200, 200, 255, 180)), 0.f, 0, 2.f);
+                                                dl->AddRect(p0, p1, TC32(IM_COL32(200, 200, 255, 180)), 0.f, 2.f, 0);
                                         } else if (!is_static) {
                                             // Animated/video: show extension badge centred
                                             const char *badge = ext.size() > 1 ? ext.c_str() + 1 : ext.c_str();
@@ -7569,7 +7579,7 @@ Steam_Overlay::CropAction Steam_Overlay::render_crop_editor(
         dl->AddRectFilled(s0, s1, IM_COL32(255, 255, 255, 30));
     }
     // Border
-    dl->AddRect(s0, s1, IM_COL32(255, 255, 255, 255), 0.0f, 0, 2.0f);
+    dl->AddRect(s0, s1, IM_COL32(255, 255, 255, 255), 0.0f, 2.0f, 0);
 
     // 3) 8 handles (4 corners + 4 edge midpoints)
     ImVec2 corners[8] = {
@@ -7590,7 +7600,7 @@ Steam_Overlay::CropAction Steam_Overlay::render_crop_editor(
         dl->AddRect(
             ImVec2(corners[i].x - kHandlePx * 0.5f, corners[i].y - kHandlePx * 0.5f),
             ImVec2(corners[i].x + kHandlePx * 0.5f, corners[i].y + kHandlePx * 0.5f),
-            IM_COL32(0, 0, 0, 255), 0.0f, 0, 1.0f);
+            IM_COL32(0, 0, 0, 255), 0.0f, 1.0f, 0);
     }
 
     // 4) Toolbar (Confirm/Cancel) — rendered directly in the parent window
